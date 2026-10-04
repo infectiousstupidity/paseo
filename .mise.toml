@@ -1,10 +1,12 @@
 [vars]
 android_sdk_version = '{{ read_file(path=".tool-versions") | split(pat="android-sdk") | last | trim | split(pat="\n") | first | trim }}'
+mise_installs_dir = '{{ get_env(name="MISE_INSTALLS_DIR", default=get_env(name="MISE_DATA_DIR", default=xdg_data_home ~ "/mise") ~ "/installs") }}'
+android_sdk_root = '{{ [vars.mise_installs_dir, "android-sdk", vars.android_sdk_version] | join_path }}'
 
 [env]
-ANDROID_HOME = "{{ env.HOME }}/.local/share/mise/installs/android-sdk/{{ vars.android_sdk_version }}"
+ANDROID_HOME = "{{ vars.android_sdk_root }}"
 _.path = [
-  "{{ env.HOME }}/.local/share/mise/installs/android-sdk/{{ vars.android_sdk_version }}/cmdline-tools/{{ vars.android_sdk_version }}/bin",
-  "{{ env.HOME }}/.local/share/mise/installs/android-sdk/{{ vars.android_sdk_version }}/platform-tools",
-  "{{ env.HOME }}/.local/share/mise/installs/android-sdk/{{ vars.android_sdk_version }}/emulator",
+  '{{ [vars.android_sdk_root, "cmdline-tools", vars.android_sdk_version, "bin"] | join_path }}',
+  '{{ [vars.android_sdk_root, "platform-tools"] | join_path }}',
+  '{{ [vars.android_sdk_root, "emulator"] | join_path }}',
 ]
