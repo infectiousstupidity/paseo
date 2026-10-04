@@ -39,10 +39,10 @@ interface CliOptions {
 }
 
 function parseArgs(argv: string[]): CliOptions {
-  let logPath =
-    process.env.PASEO_HOME?.trim() !== undefined && process.env.PASEO_HOME.trim().length > 0
-      ? path.join(process.env.PASEO_HOME.trim(), "daemon.log")
-      : path.join(homedir(), ".paseo", "daemon.log");
+  const paseoHome = process.env.PASEO_HOME?.trim();
+  let logPath = paseoHome
+    ? path.join(paseoHome, "daemon.log")
+    : path.join(homedir(), ".paseo", "daemon.log");
   let windows = 3;
 
   for (let index = 0; index < argv.length; index += 1) {
