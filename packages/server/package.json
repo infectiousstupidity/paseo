@@ -83,6 +83,7 @@
     "measure:git-observation": "tsx scripts/measure-git-observation.ts",
     "measure:file-observer": "tsx scripts/measure-file-observer.ts",
     "analyze:observer-metrics": "tsx scripts/analyze-observer-metrics.ts",
+    "analyze:git-runtime": "tsx scripts/analyze-git-runtime.ts",
     "repro:file-observer-teardown": "tsx scripts/reproduce-file-observer-teardown.ts",
     "speech:models": "tsx scripts/list-speech-models.ts",
     "speech:download": "tsx scripts/download-speech-models.ts",
