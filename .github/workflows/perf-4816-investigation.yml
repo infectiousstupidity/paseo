@@ -21,5 +21,7 @@ jobs:
           cache: "npm"
       - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
+      - name: Build app dependencies
+        run: npm run build:app-deps
       - name: Run #4816 investigation benchmark
         run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick.investigation.test.ts --reporter=verbose
