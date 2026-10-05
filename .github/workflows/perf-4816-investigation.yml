@@ -27,3 +27,7 @@ jobs:
         run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick.investigation.test.ts --reporter=verbose
       - name: Run focused model regression tests
         run: npm run test --workspace=@getpaseo/app -- src/agent-stream/model.test.ts --reporter=verbose
+      - name: Run full app unit tests
+        run: npm run test --workspace=@getpaseo/app
+      - name: Typecheck app
+        run: npm run typecheck --workspace=@getpaseo/app
