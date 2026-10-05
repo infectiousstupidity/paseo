@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
@@ -260,6 +260,10 @@ class ObservedPlacements {
     mkdirSync(path.join(this.absolute(root), ".git"), { recursive: true });
   }
 
+  createGitFileMarker(root: string): void {
+    writeFileSync(path.join(this.absolute(root), ".git"), "gitdir: ../.git/worktrees/example\n");
+  }
+
   removeGitMarker(root: string): void {
     rmSync(path.join(this.absolute(root), ".git"), { recursive: true, force: true });
   }
@@ -471,6 +475,24 @@ describe("observed workspace placement", () => {
       { kind: "remove", projectId: "project-duplicate" },
       { kind: "remove", projectId: "project-remove" },
     ]);
+    observed.dispose();
+  });
+
+  test("treats a worktree-style .git file as a Git marker", async () => {
+    const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
+    await observed.start();
+
+    observed.createGitFileMarker("repo");
+    observed.change("repo", ".git");
+    await observed.advanceBy(DEBOUNCE_MS);
+
+    expect(observed.gitReads).toBe(1);
+
+    observed.change("repo", ".git");
+    observed.change("repo", null);
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(1);
+
     observed.dispose();
   });
 

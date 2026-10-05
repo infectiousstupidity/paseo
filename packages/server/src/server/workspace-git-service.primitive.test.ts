@@ -518,6 +518,45 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     }
   });
 
+  test("attributes Git commands submitted by a fresh checkout read", async () => {
+    const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "workspace-checkout-provenance-")));
+    const repoDir = join(tempDir, "repo");
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
+    writeFileSync(join(repoDir, "tracked.txt"), "tracked\n");
+    execFileSync("git", ["add", "tracked.txt"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "user.name=Paseo Test",
+        "-c",
+        "user.email=paseo@example.test",
+        "commit",
+        "-m",
+        "initial",
+      ],
+      { cwd: repoDir, stdio: "pipe" },
+    );
+    snapshotGitCommandRuntimeMetrics();
+    const service = createService({
+      getCheckoutStatus: getCheckoutStatusUncached as never,
+    });
+
+    try {
+      await service.getCheckout(repoDir);
+
+      const metrics = snapshotGitCommandRuntimeMetrics();
+      expect(metrics.submitted).toBeGreaterThan(0);
+      expect(metrics.provenanceTop).toEqual([["workspace-checkout-read", metrics.submitted]]);
+    } finally {
+      service.dispose();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("getSnapshot cold-loads when no snapshot exists yet with one shell burst", async () => {
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
     const getCheckoutShortstat = vi.fn(async () => ({ additions: 1, deletions: 0 }));
