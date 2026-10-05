@@ -248,6 +248,10 @@ class ObservedPlacements {
     this.activeWatch(root)?.onChange("rename", filename);
   }
 
+  createGitMarker(root: string): void {
+    mkdirSync(path.join(this.absolute(root), ".git"), { recursive: true });
+  }
+
   makeProjectGit(projectId: string, branch = "main"): void {
     const rootPath = this.rootByProjectId.get(projectId);
     if (!rootPath) throw new Error(`Unknown project: ${projectId}`);
@@ -516,6 +520,10 @@ describe("observed workspace placement", () => {
     ]);
     await observed.start();
     const metadataRead = observed.holdNextReconciliation();
+    // The optimized root watcher only reconciles when the .git marker actually
+    // appears/disappears. Model that transition explicitly so this test still
+    // exercises a periodic full pass queued behind an in-flight metadata pass.
+    observed.createGitMarker("repo");
     observed.change("repo", ".git");
     const metadataPass = observed.advanceBy(DEBOUNCE_MS);
     await metadataRead.started;
