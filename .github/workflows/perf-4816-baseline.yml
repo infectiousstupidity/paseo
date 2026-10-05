@@ -1,0 +1,27 @@
+name: Perf 4816 baseline
+
+on:
+  push:
+    branches: [perf/4816-baseline]
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+      - name: Build app dependencies
+        run: npm run build:app-deps
+      - name: Run tool-heavy #4816 benchmark
+        run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick.toolheavy.investigation.test.ts --reporter=verbose
