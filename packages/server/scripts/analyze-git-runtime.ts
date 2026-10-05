@@ -50,7 +50,11 @@ function parseArgs(argv: string[]): CliOptions {
     if (arg === "--log") {
       const value = argv[index + 1];
       if (!value) throw new Error("--log requires a path");
-      logPath = path.resolve(value);
+      // npm changes cwd to the selected workspace before running its script.
+      // Resolve explicit relative paths from the directory where npm was invoked
+      // so repo-root paths behave the way the caller expects.
+      const invocationCwd = process.env.INIT_CWD?.trim() || process.cwd();
+      logPath = path.resolve(invocationCwd, value);
       index += 1;
       continue;
     }
@@ -69,7 +73,8 @@ function parseArgs(argv: string[]): CliOptions {
           "Usage: npm run analyze:git-runtime --workspace=@getpaseo/server -- [options]",
           "",
           "Options:",
-          "  --log <path>       daemon.log path (default: %PASEO_HOME%/daemon.log or ~/.paseo/daemon.log)",
+          "  --log <path>       daemon.log path; relative paths resolve from the npm invocation directory",
+          "                     (default: %PASEO_HOME%/daemon.log or ~/.paseo/daemon.log)",
           "  --windows <count>  number of 30s ws_runtime_metrics windows to aggregate (default: 3)",
           "",
         ].join("\n"),

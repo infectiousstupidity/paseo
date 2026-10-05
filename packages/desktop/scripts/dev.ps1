@@ -47,23 +47,27 @@ Remove-Item Env:\PASEO_DEV_RUNTIME_FALLBACK_ROOT -ErrorAction SilentlyContinue
 $env:PASEO_CORS_ORIGINS = "*"
 
 # Fully isolate the dev instance from a production Paseo install so `npm run dev`
-# works while the installed app is open. Without this the dev build loses the
-# Electron single-instance lock to the installed app and quits, and ends up
-# pointed at the production daemon, whose CORS allowlist rejects the Metro origin.
-# PASEO_HOME defaults to a script-managed dev home. If you override it (to point
-# dev at real data), we DON'T touch your config.json — only the managed home gets
-# its daemon config seeded below, so we never rewrite a production config.
+# works while the installed app is open. PASEO_HOME and PASEO_LISTEN are commonly
+# set globally for a user's real daemon, so never inherit them here: doing so can
+# make the dev desktop silently attach to production while claiming to be isolated.
+# Use the dev-specific variables below when an override is intentionally wanted.
 $DevStateDir = "$DesktopDir\.dev"
-if (-not $env:PASEO_HOME) {
-    $env:PASEO_HOME = "$DevStateDir\paseo-home"
-    $PaseoHomeManaged = $true
-} else {
-    $PaseoHomeManaged = $false
-}
-New-Item -ItemType Directory -Force -Path $env:PASEO_HOME, $env:PASEO_ELECTRON_USER_DATA_DIR | Out-Null
+$InheritedPaseoHome = $env:PASEO_HOME
+$InheritedPaseoListen = $env:PASEO_LISTEN
+$env:PASEO_HOME = if ($env:PASEO_DEV_HOME) { $env:PASEO_DEV_HOME } else { "$DevStateDir\paseo-home" }
 
 $DevDaemonPort = if ($env:PASEO_DEV_DAEMON_PORT) { $env:PASEO_DEV_DAEMON_PORT } else { "6788" }
-if (-not $env:PASEO_LISTEN) { $env:PASEO_LISTEN = "127.0.0.1:$DevDaemonPort" }
+$env:PASEO_LISTEN = "127.0.0.1:$DevDaemonPort"
+
+if ($InheritedPaseoHome -and -not $env:PASEO_DEV_HOME) {
+    Write-Host "  Ignoring inherited PASEO_HOME=$InheritedPaseoHome for dev isolation."
+    Write-Host "  Set PASEO_DEV_HOME explicitly if you want a different dev home."
+}
+if ($InheritedPaseoListen) {
+    Write-Host "  Ignoring inherited PASEO_LISTEN=$InheritedPaseoListen for dev isolation."
+}
+
+New-Item -ItemType Directory -Force -Path $env:PASEO_HOME, $env:PASEO_ELECTRON_USER_DATA_DIR | Out-Null
 
 # Seed the isolated daemon config. The desktop daemon-manager decides whether a
 # daemon is already running by reading `daemon.listen` from this config.json
@@ -71,13 +75,12 @@ if (-not $env:PASEO_LISTEN) { $env:PASEO_LISTEN = "127.0.0.1:$DevDaemonPort" }
 # this it reads the default 6767, finds a production daemon there, and connects
 # the dev app to prod — whose CORS allowlist then rejects the Metro origin. Pin
 # the dev port + wildcard CORS in the file so the dev app starts its OWN daemon.
-# ONLY seed the script-managed home: never rewrite a user-supplied PASEO_HOME
-# (that could clobber a production config.json with the dev port + wildcard CORS).
-if ($PaseoHomeManaged) {
-    $env:TMP_CFG_PATH = "$($env:PASEO_HOME)/config.json"
-    $env:TMP_CFG_PORT = $DevDaemonPort
-    $TmpScript = [System.IO.Path]::GetTempFileName() + ".js"
-    $ScriptContent = @"
+# Seed the dev home config. PASEO_HOME above is always dev-owned, including an
+# explicit PASEO_DEV_HOME override, so this never rewrites the production home.
+$env:TMP_CFG_PATH = "$($env:PASEO_HOME)/config.json"
+$env:TMP_CFG_PORT = $DevDaemonPort
+$TmpScript = [System.IO.Path]::GetTempFileName() + ".js"
+$ScriptContent = @"
 const fs = require('fs');
 const path = process.env.TMP_CFG_PATH;
 const port = process.env.TMP_CFG_PORT;
@@ -90,14 +93,11 @@ cfg.daemon.cors = cfg.daemon.cors || {};
 cfg.daemon.cors.allowedOrigins = ['*'];
 fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
 "@
-    Set-Content -Path $TmpScript -Value $ScriptContent
-    node $TmpScript
-    Remove-Item $TmpScript -ErrorAction SilentlyContinue
-    Remove-Item Env:\TMP_CFG_PATH -ErrorAction SilentlyContinue
-    Remove-Item Env:\TMP_CFG_PORT -ErrorAction SilentlyContinue
-} else {
-    Write-Host "  (custom PASEO_HOME - leaving its config.json untouched)"
-}
+Set-Content -Path $TmpScript -Value $ScriptContent
+node $TmpScript
+Remove-Item $TmpScript -ErrorAction SilentlyContinue
+Remove-Item Env:\TMP_CFG_PATH -ErrorAction SilentlyContinue
+Remove-Item Env:\TMP_CFG_PORT -ErrorAction SilentlyContinue
 
 Write-Host @"
 ======================================================
