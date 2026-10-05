@@ -680,6 +680,7 @@ function createPiPaseoExtensionFile({
 	    pi.registerMcpServer(name, config);
 	  }
 	  const submittedUserMessages = [];
+	  let pivolutionRevisionRecorded = false;
 	  ${piExtensionRuntimeBridge}
 
 	  function emitSubmittedUserEntries(ctx) {
@@ -704,13 +705,34 @@ function createPiPaseoExtensionFile({
 	    }
 	  }
 
-	  ${
-      systemPrompt
-        ? `pi.on("before_agent_start", async (event) => ({
-	    systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
-	  }));`
-        : ""
-    }
+	  pi.on("before_agent_start", async (event, ctx) => {
+	    const invocationId = process.env.SHIORI_INVOCATION_ID?.trim();
+	    if (!pivolutionRevisionRecorded && invocationId) {
+	      const optionalEnv = (name) => process.env[name]?.trim() || null;
+	      pi.appendEntry("pivolution-revision", {
+	        schema_version: 1,
+	        shiori_invocation_id: invocationId,
+	        harness_project: optionalEnv("SHIORI_HARNESS_PROJECT"),
+	        harness_revision: optionalEnv("SHIORI_HARNESS_REVISION"),
+	        harness_version: optionalEnv("SHIORI_HARNESS_VERSION"),
+	        pi_version: null,
+	        provider: ctx.model?.provider ?? null,
+	        model: ctx.model?.id ?? null,
+	        reasoning: ctx.thinkingLevel ?? null,
+	        config_fingerprint: optionalEnv("SHIORI_HARNESS_CONFIG_FINGERPRINT"),
+	        captured_at: new Date().toISOString(),
+	        source: "shiori-pi-extension",
+	      });
+	      pivolutionRevisionRecorded = true;
+	    }
+	    ${
+        systemPrompt
+          ? `return {
+	      systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
+	    };`
+          : ""
+      }
+	  });
 
 	  pi.on("session_start", async (_event, ctx) => {
 	    emitEntryCapture(ctx, "session_start");
