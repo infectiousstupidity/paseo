@@ -39,6 +39,15 @@ describe("desktop dev runtime isolation", () => {
     expect(runtime.electronFlags).toBe("--remote-debugging-port=0");
   });
 
+  test("desktop dev runtime marks the selected repo as the dev root", async () => {
+    const runtime = await resolveDevRuntime({
+      PASEO_DEV_ROOT: "/worktrees/feature-a",
+      PASEO_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",
+    });
+
+    expect(runtime.userDataDir).toBe(path.join("/worktrees/feature-a", ".dev", "user-data"));
+  });
+
   test("honors an explicit CDP port without silently changing it", async () => {
     const runtime = await resolveDevRuntime({
       PASEO_DEV_RUNTIME_FALLBACK_ROOT: "/checkouts/paseo",

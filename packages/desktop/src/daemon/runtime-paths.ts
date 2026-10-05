@@ -57,6 +57,21 @@ export function resolveDaemonRunnerEntrypoint(): NodeEntrypointSpec {
   }
 
   const serverPackage = resolveServerPackageInfo();
+  const sourceRunner = path.join(serverPackage.root, "scripts", "supervisor-entrypoint.ts");
+
+  // Desktop dev scripts set PASEO_DEV_ROOT. In that mode source must win over an
+  // existing dist build; otherwise editing packages/server can leave Electron
+  // launching stale compiled daemon code from a previous build.
+  if (process.env.PASEO_DEV_ROOT?.trim()) {
+    return {
+      entryPath: assertPathExists({
+        label: "Daemon runner source",
+        filePath: sourceRunner,
+      }),
+      execArgv: ["--import", "tsx"],
+    };
+  }
+
   const distRunner = path.join(serverPackage.root, "dist", "scripts", "supervisor-entrypoint.js");
   if (existsSync(distRunner)) {
     return {
@@ -68,7 +83,7 @@ export function resolveDaemonRunnerEntrypoint(): NodeEntrypointSpec {
   return {
     entryPath: assertPathExists({
       label: "Daemon runner source",
-      filePath: path.join(serverPackage.root, "scripts", "supervisor-entrypoint.ts"),
+      filePath: sourceRunner,
     }),
     execArgv: ["--import", "tsx"],
   };
