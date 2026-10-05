@@ -252,6 +252,10 @@ class ObservedPlacements {
     mkdirSync(path.join(this.absolute(root), ".git"), { recursive: true });
   }
 
+  removeGitMarker(root: string): void {
+    rmSync(path.join(this.absolute(root), ".git"), { recursive: true, force: true });
+  }
+
   makeProjectGit(projectId: string, branch = "main"): void {
     const rootPath = this.rootByProjectId.get(projectId);
     if (!rootPath) throw new Error(`Unknown project: ${projectId}`);
@@ -470,6 +474,11 @@ describe("observed workspace placement", () => {
     observed.change("repo", null);
     await observed.advanceBy(DEBOUNCE_MS);
     expect(observed.gitReads).toBe(1);
+
+    observed.removeGitMarker("repo");
+    observed.change("repo", ".git");
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(2);
 
     observed.dispose();
   });
