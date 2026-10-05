@@ -1,4 +1,5 @@
 import { statSync, watch as watchPath } from "node:fs";
+import { join } from "node:path";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import type pino from "pino";
 import type {
@@ -416,6 +417,15 @@ export class WorkspaceReconciliationService {
     );
   }
 
+  private hasGitMarker(rootPath: string): boolean {
+    try {
+      statSync(join(rootPath, ".git"));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async syncProjectRootWatches(): Promise<void> {
     if (this.disposed) return;
     const projects = await this.projectRegistry.list();
@@ -439,13 +449,27 @@ export class WorkspaceReconciliationService {
       if (alreadyWatching) continue;
       try {
         let watcher: ProjectRootWatcher;
+        let gitMarkerPresent = this.hasGitMarker(project.rootPath);
         watcher = this.watchProjectRoot(
           project.rootPath,
           { recursive: false },
           (_event, filename) => {
-            if (filename === null || filename.toString() === ".git") {
-              this.scheduleObservedReconciliation();
+            if (filename !== null && filename.toString() !== ".git") {
+              return;
             }
+
+            // On Windows, a root fs.watch frequently reports ".git" for ordinary
+            // metadata churn inside an existing repository. Re-reading every project
+            // on those events creates a Git -> watcher -> reconciliation -> Git loop.
+            // This root watcher only owns repository appearance/disappearance; normal
+            // Git metadata is observed by WorkspaceGitService, and the periodic full
+            // reconciliation remains the convergence fallback.
+            const nextGitMarkerPresent = this.hasGitMarker(project.rootPath);
+            if (nextGitMarkerPresent === gitMarkerPresent) {
+              return;
+            }
+            gitMarkerPresent = nextGitMarkerPresent;
+            this.scheduleObservedReconciliation();
           },
           (error) => {
             watcher.close();

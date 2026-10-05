@@ -251,6 +251,7 @@ class ObservedPlacements {
   makeProjectGit(projectId: string, branch = "main"): void {
     const rootPath = this.rootByProjectId.get(projectId);
     if (!rootPath) throw new Error(`Unknown project: ${projectId}`);
+    mkdirSync(path.join(rootPath, ".git"), { recursive: true });
     this.checkoutByCwd.set(rootPath, {
       cwd: rootPath,
       isGit: true,
@@ -446,7 +447,7 @@ describe("observed workspace placement", () => {
     observed.dispose();
   });
 
-  test("filters unrelated files and coalesces Git change bursts", async () => {
+  test("reconciles Git marker transitions but ignores ordinary .git churn", async () => {
     const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
     await observed.start();
 
@@ -454,11 +455,18 @@ describe("observed workspace placement", () => {
     await observed.advanceBy(DEBOUNCE_MS);
     expect(observed.gitReads).toBe(0);
 
+    observed.makeProjectGit("project-one");
     observed.change("repo", ".git");
     observed.change("repo", ".git");
     observed.change("repo", null);
     await observed.advanceBy(DEBOUNCE_MS);
     expect(observed.gitReads).toBe(1);
+
+    observed.change("repo", ".git");
+    observed.change("repo", null);
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(1);
+
     observed.dispose();
   });
 
