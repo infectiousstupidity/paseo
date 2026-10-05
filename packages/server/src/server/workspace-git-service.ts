@@ -759,10 +759,22 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
   async getCheckout(cwd: string): Promise<ProjectCheckoutLitePayload> {
     this.assertNotDisposed();
     const normalizedCwd = resolve(cwd);
+    const target = this.workspaceTargets.get(normalizedCwd);
+
+    // Reconciliation asks for lightweight checkout identity whenever project-root
+    // Git metadata changes. Active workspaces already have an authoritative
+    // watcher-backed snapshot, so do not launch another full Git inspection for
+    // the same state. Unobserved paths keep the fresh-read behavior because they
+    // do not have a watcher keeping a cached snapshot current.
+    if (target?.listeners.size && target.latestSnapshot) {
+      return checkoutLiteFromGitSnapshot(normalizedCwd, target.latestSnapshot.git);
+    }
+
     const status = await this.deps.getCheckoutStatus(normalizedCwd, {
       paseoHome: this.paseoHome,
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
+      runGitCommand: createRunGitCommand("workspace-checkout-read"),
     });
     if (!status.isGit) {
       return checkoutLiteFromGitSnapshot(normalizedCwd, {

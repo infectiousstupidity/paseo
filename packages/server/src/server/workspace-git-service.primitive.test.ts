@@ -434,6 +434,27 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     service.dispose();
   });
 
+  test("getCheckout reuses the watcher-backed snapshot for an observed workspace", async () => {
+    const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
+    const service = createService({ getCheckoutStatus });
+
+    await service.getSnapshot(REPO_CWD);
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+    getCheckoutStatus.mockClear();
+
+    await expect(service.getCheckout(REPO_CWD)).resolves.toMatchObject({
+      cwd: REPO_CWD,
+      isGit: true,
+      currentBranch: "main",
+      remoteUrl: "https://github.com/acme/repo.git",
+      worktreeRoot: REPO_CWD,
+    });
+    expect(getCheckoutStatus).not.toHaveBeenCalled();
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
   test("getSnapshot returns the current snapshot without shelling out", async () => {
     let nowMs = Date.parse("2026-04-12T00:00:00.000Z");
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
