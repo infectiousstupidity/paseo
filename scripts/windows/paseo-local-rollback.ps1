@@ -3,33 +3,44 @@ Set-StrictMode -Version Latest
 
 . "$PSScriptRoot\paseo-local-common.ps1"
 
-$repoRoot = Get-PaseoRepoRoot
-$buildRoot = Join-Path $repoRoot "packages\desktop\.local-build"
-$currentInstaller = Join-Path $buildRoot "current-installer.exe"
-$previousInstaller = Join-Path $buildRoot "previous-installer.exe"
-$tempInstaller = Join-Path $buildRoot "rollback-swap.exe"
+$runtimeRoot = Get-PaseoLocalRuntimeRoot
+$currentDir = Get-PaseoLocalCurrentDirectory
+$previousDir = Get-PaseoLocalPreviousDirectory
+$tempDir = Join-Path $runtimeRoot "rollback-temp"
+$verifyScript = Join-Path $PSScriptRoot "verify-paseo-local-build.mjs"
+$shortcutsScript = Join-Path $PSScriptRoot "install-paseo-shortcuts.ps1"
 
 try {
-    if (-not (Test-Path $previousInstaller)) {
-        throw "No previous Paseo Local installer is available yet."
+    if (-not (Test-Path $previousDir)) {
+        throw "No previous Paseo Local runtime is available yet."
     }
 
-    Write-Host "Rolling Paseo Local back to the previous successful installer..."
+    Write-Host "Rolling Paseo Local back to the previous verified runtime..."
     Stop-PaseoLocal
-    Install-PaseoLocalInstaller -InstallerPath $previousInstaller
 
-    if (Test-Path $currentInstaller) {
-        Copy-Item -Force $currentInstaller $tempInstaller
+    Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
+    if (Test-Path $currentDir) {
+        Move-Item -Path $currentDir -Destination $tempDir
     }
-    Copy-Item -Force $previousInstaller $currentInstaller
-    if (Test-Path $tempInstaller) {
-        Copy-Item -Force $tempInstaller $previousInstaller
-        Remove-Item -Force $tempInstaller
+    Move-Item -Path $previousDir -Destination $currentDir
+    if (Test-Path $tempDir) {
+        Move-Item -Path $tempDir -Destination $previousDir
     }
 
-    Start-PaseoLocal
+    $currentAsar = Join-Path $currentDir "resources\app.asar"
+    & node $verifyScript $currentAsar
+    if ($LASTEXITCODE -ne 0) {
+        throw "The rollback runtime did not pass Paseo Local verification."
+    }
+
+    & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $shortcutsScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Shortcut refresh failed with exit code $LASTEXITCODE."
+    }
+
+    Start-PaseoLocal | Out-Null
     Write-Host "Rollback complete."
-    Start-Sleep -Seconds 2
+    Read-Host "Press Enter to close"
 } catch {
     Write-Host ""
     Write-Error $_

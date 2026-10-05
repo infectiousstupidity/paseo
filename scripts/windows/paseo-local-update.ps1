@@ -4,39 +4,82 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\paseo-local-common.ps1"
 
 $repoRoot = Get-PaseoRepoRoot
-$desktopDir = Join-Path $repoRoot "packages\desktop"
-$buildRoot = Join-Path $desktopDir ".local-build"
-$releaseDir = Join-Path $buildRoot "release"
-$currentInstaller = Join-Path $buildRoot "current-installer.exe"
-$previousInstaller = Join-Path $buildRoot "previous-installer.exe"
+$buildRoot = Get-PaseoLocalBuildRoot
+$stagingRoot = Join-Path $buildRoot "staging"
+$stagedApp = Join-Path $stagingRoot "win-unpacked"
+$runtimeRoot = Get-PaseoLocalRuntimeRoot
+$currentDir = Get-PaseoLocalCurrentDirectory
+$previousDir = Get-PaseoLocalPreviousDirectory
+$failedDir = Join-Path $runtimeRoot "failed"
 $verifyScript = Join-Path $PSScriptRoot "verify-paseo-local-build.mjs"
-$localStopped = $false
+$shortcutsScript = Join-Path $PSScriptRoot "install-paseo-shortcuts.ps1"
+$swapped = $false
+
+function Assert-LastExitCode {
+    param([Parameter(Mandatory = $true)][string]$Step)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Step failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Restore-PreviousRuntime {
+    if (-not $swapped) {
+        return
+    }
+
+    Stop-PaseoLocal
+
+    Remove-Item -Recurse -Force $failedDir -ErrorAction SilentlyContinue
+    if (Test-Path $currentDir) {
+        Move-Item -Path $currentDir -Destination $failedDir
+    }
+    if (Test-Path $previousDir) {
+        Move-Item -Path $previousDir -Destination $currentDir
+    }
+
+    & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $shortcutsScript | Out-Null
+
+    if (Test-Path (Get-PaseoLocalCurrentExecutable)) {
+        Start-PaseoLocal | Out-Null
+    } elseif (Test-Path (Get-PaseoInstalledExecutable)) {
+        Start-Process -FilePath (Get-PaseoInstalledExecutable) | Out-Null
+    }
+}
 
 try {
-    New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
-    Remove-Item -Recurse -Force $releaseDir -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $buildRoot, $runtimeRoot | Out-Null
+    Remove-Item -Recurse -Force $stagingRoot -ErrorAction SilentlyContinue
+
+    # Clean up artifacts from the abandoned NSIS-based local workflow.
+    Remove-Item -Recurse -Force (Join-Path $buildRoot "release") -ErrorAction SilentlyContinue
+    Remove-Item -Force (Join-Path $buildRoot "current-installer.exe") -ErrorAction SilentlyContinue
+    Remove-Item -Force (Join-Path $buildRoot "previous-installer.exe") -ErrorAction SilentlyContinue
 
     $buildCommit = (& git -C $repoRoot rev-parse --short=12 HEAD).Trim()
+    Assert-LastExitCode "Reading Git commit"
     if (-not $buildCommit) {
         throw "Could not determine the current Git commit."
     }
+
     $dirty = (& git -C $repoRoot status --porcelain --untracked-files=no)
+    Assert-LastExitCode "Reading Git status"
     if ($dirty) {
         $buildCommit = "$buildCommit-dirty"
     }
 
-    Write-Host "Building Paseo Local from commit $buildCommit..."
-    Write-Host "Your installed Paseo remains running until this build succeeds."
+    Write-Host "Building a packaged Paseo Local runtime from $buildCommit..."
+    Write-Host "The currently running Paseo is not touched during the build."
     Write-Host ""
 
     $previousLocalBuildCommit = $env:PASEO_LOCAL_BUILD_COMMIT
     $env:PASEO_LOCAL_BUILD_COMMIT = $buildCommit
     Push-Location $repoRoot
     try {
-        & npm run build:desktop -- --win nsis --x64 --publish never "-c.directories.output=.local-build/release"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Paseo Local build failed with exit code $LASTEXITCODE. The installed app was not touched."
-        }
+        # --dir produces the real packaged Windows application without putting
+        # it through NSIS. This keeps production Electron/ASAR/daemon behavior
+        # while avoiding same-version installer replacement entirely.
+        & npm run build:desktop -- --dir --win --x64 "-c.directories.output=.local-build/staging"
+        Assert-LastExitCode "Paseo Local build"
     } finally {
         Pop-Location
         if ($null -eq $previousLocalBuildCommit) {
@@ -46,60 +89,76 @@ try {
         }
     }
 
-    $installer = Get-ChildItem -Path $releaseDir -Filter "Paseo-Setup-*-x64.exe" -File -Recurse |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if (-not $installer) {
-        throw "Build completed but no x64 NSIS installer was found in $releaseDir."
+    $stagedAsar = Join-Path $stagedApp "resources\app.asar"
+    if (-not (Test-Path $stagedAsar)) {
+        throw "Packaged app.asar was not produced: $stagedAsar"
     }
 
-    $packagedAsar = Join-Path $releaseDir "win-unpacked\resources\app.asar"
-    if (-not (Test-Path $packagedAsar)) {
-        throw "Build completed but the packaged app.asar was not found: $packagedAsar"
-    }
+    Write-Host "Verifying staged production build..."
+    & node $verifyScript $stagedAsar $buildCommit
+    Assert-LastExitCode "Staged build verification"
 
-    Write-Host "Verifying the packaged fork before touching the installed Paseo..."
-    & node $verifyScript $packagedAsar $buildCommit
-    if ($LASTEXITCODE -ne 0) {
-        throw "The newly built package is not a verified Paseo Local build. The installed app was not touched."
+    if (-not (Test-Path (Join-Path $stagedApp "Paseo.exe"))) {
+        throw "Packaged Paseo.exe was not produced in $stagedApp"
     }
 
     Write-Host ""
-    Write-Host "Build verified. Replacing the installed Paseo..."
+    Write-Host "Build verified. Switching Paseo Local to the new runtime..."
     Stop-PaseoLocal
-    $localStopped = $true
-    Install-PaseoLocalInstaller -InstallerPath $installer.FullName
 
-    $installedAsar = Join-Path (Split-Path -Parent (Get-PaseoInstalledExecutable)) "resources\app.asar"
-    Write-Host "Verifying the installed fork..."
-    & node $verifyScript $installedAsar $buildCommit
-    if ($LASTEXITCODE -ne 0) {
-        throw "Installation completed, but the installed app is not the expected Paseo Local build."
+    Remove-Item -Recurse -Force $failedDir -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $previousDir -ErrorAction SilentlyContinue
+
+    if (Test-Path $currentDir) {
+        Move-Item -Path $currentDir -Destination $previousDir
     }
 
-    if (Test-Path $currentInstaller) {
-        Copy-Item -Force $currentInstaller $previousInstaller
-    }
-    Copy-Item -Force $installer.FullName $currentInstaller
+    Move-Item -Path $stagedApp -Destination $currentDir
+    $swapped = $true
 
-    Start-PaseoLocal
-    $localStopped = $false
+    $currentAsar = Join-Path $currentDir "resources\app.asar"
+    & node $verifyScript $currentAsar $buildCommit
+    Assert-LastExitCode "Activated build verification"
+
+    # Recreate shortcuts after the swap so Paseo Local uses the current runtime
+    # icon but continues to launch through the stable launcher script.
+    & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $shortcutsScript
+    Assert-LastExitCode "Shortcut refresh"
+
+    $startedExe = Start-PaseoLocal
+    Start-Sleep -Seconds 2
+
+    $running = @(Get-PaseoProcessesForExecutable -ExecutablePath $startedExe)
+    if ($running.Count -eq 0) {
+        throw "Paseo Local exited immediately after launch."
+    }
+
+    $swapped = $false
+    Remove-Item -Recurse -Force $stagingRoot -ErrorAction SilentlyContinue
 
     Write-Host ""
     Write-Host "Paseo Local updated and verified successfully."
-    Write-Host "Running build: $buildCommit"
-    Write-Host "The Paseo window title should now show: Paseo Local · <version> · $buildCommit"
+    Write-Host "Runtime: $startedExe"
+    Write-Host "Build:   $buildCommit"
+    Write-Host "Window:  Paseo Local · <version> · $buildCommit"
     Write-Host ""
     Read-Host "Press Enter to close"
 } catch {
+    $failure = $_
     Write-Host ""
-    Write-Error $_
-    if ($localStopped -and (Test-Path (Get-PaseoInstalledExecutable))) {
-        Write-Host "Restarting the currently installed Paseo so you are not left without a working app."
-        Start-PaseoLocal
+    Write-Error $failure
+
+    try {
+        Restore-PreviousRuntime
+        if ($swapped) {
+            Write-Host "The previous Paseo Local runtime was restored."
+        }
+    } catch {
+        Write-Warning "Automatic rollback also failed: $($_.Exception.Message)"
     }
+
     Write-Host ""
-    Write-Host "No success was recorded. The terminal is staying open so the failure is visible."
+    Write-Host "No success was recorded. This window will stay open so the failure is visible."
     Read-Host "Press Enter to close"
     exit 1
 }

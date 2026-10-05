@@ -7,10 +7,27 @@ function Get-PaseoRepoRoot {
     return $script:PaseoRepoRoot
 }
 
+function Get-PaseoLocalBuildRoot {
+    return Join-Path $script:PaseoRepoRoot "packages\desktop\.local-build"
+}
+
+function Get-PaseoLocalRuntimeRoot {
+    return Join-Path (Get-PaseoLocalBuildRoot) "runtime"
+}
+
+function Get-PaseoLocalCurrentDirectory {
+    return Join-Path (Get-PaseoLocalRuntimeRoot) "current"
+}
+
+function Get-PaseoLocalPreviousDirectory {
+    return Join-Path (Get-PaseoLocalRuntimeRoot) "previous"
+}
+
+function Get-PaseoLocalCurrentExecutable {
+    return Join-Path (Get-PaseoLocalCurrentDirectory) "Paseo.exe"
+}
+
 function Get-PaseoInstalledExecutable {
-    if ($env:PASEO_LOCAL_EXE) {
-        return [System.IO.Path]::GetFullPath($env:PASEO_LOCAL_EXE)
-    }
     return Join-Path $env:LOCALAPPDATA "Programs\Paseo\Paseo.exe"
 }
 
@@ -21,8 +38,12 @@ function Get-PaseoProductionHome {
     return Join-Path $HOME ".paseo"
 }
 
-function Get-PaseoInstalledProcesses {
+function Get-PaseoProcessesForExecutable {
     param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    if (-not (Test-Path $ExecutablePath)) {
+        return @()
+    }
 
     $target = [System.IO.Path]::GetFullPath($ExecutablePath)
     return @(
@@ -37,69 +58,77 @@ function Get-PaseoInstalledProcesses {
     )
 }
 
-function Stop-PaseoLocal {
-    $repoRoot = Get-PaseoRepoRoot
-    $installedExe = Get-PaseoInstalledExecutable
-    $paseoHome = Get-PaseoProductionHome
+function Stop-PaseoExecutableMainProcess {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
 
-    if (Test-Path $installedExe) {
-        # Avoid running the currently installed upstream updater during replacement.
-        # Kill only the GUI main process first; the daemon is handled separately.
-        $guiProcesses = @(
-            Get-PaseoInstalledProcesses -ExecutablePath $installedExe |
-                Where-Object {
-                    $commandLine = [string]$_.CommandLine
-                    $commandLine -notmatch "--type=" -and
-                    $commandLine -notmatch "node-entrypoint-runner" -and
-                    $commandLine -notmatch "supervisor-entrypoint"
-                }
-        )
-        foreach ($processInfo in $guiProcesses) {
+    foreach ($processInfo in (Get-PaseoProcessesForExecutable -ExecutablePath $ExecutablePath)) {
+        $commandLine = [string]$processInfo.CommandLine
+        if (
+            $commandLine -notmatch "--type=" -and
+            $commandLine -notmatch "node-entrypoint-runner" -and
+            $commandLine -notmatch "supervisor-entrypoint"
+        ) {
             Stop-Process -Id $processInfo.ProcessId -Force -ErrorAction SilentlyContinue
         }
+    }
+}
+
+function Stop-AllPaseoProcessesForExecutable {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    foreach ($processInfo in (Get-PaseoProcessesForExecutable -ExecutablePath $ExecutablePath)) {
+        Stop-Process -Id $processInfo.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Stop-PaseoLocal {
+    $repoRoot = Get-PaseoRepoRoot
+    $paseoHome = Get-PaseoProductionHome
+    $targets = @(
+        (Get-PaseoLocalCurrentExecutable),
+        (Join-Path (Get-PaseoLocalPreviousDirectory) "Paseo.exe"),
+        (Get-PaseoInstalledExecutable)
+    ) | Select-Object -Unique
+
+    # Close GUI processes first. This lets the daemon-control command below stop
+    # the real production daemon cleanly rather than killing it mid-write.
+    foreach ($target in $targets) {
+        Stop-PaseoExecutableMainProcess -ExecutablePath $target
     }
 
     Start-Sleep -Milliseconds 500
 
-    # Stop the production daemon cleanly when possible. The explicit --home keeps
-    # this away from the isolated Dev daemon.
     $devCli = Join-Path $repoRoot "packages\cli\src\index.ts"
     Push-Location $repoRoot
     try {
-        try {
-            & npx tsx $devCli daemon stop --home $paseoHome --json --force *> $null
-        } catch {
-            Write-Warning "Could not stop the Paseo daemon through the source CLI; remaining packaged processes will be stopped."
-        }
+        & npx tsx $devCli daemon stop --home $paseoHome --json --force *> $null
+        # Native command failures do not reliably throw in Windows PowerShell.
+        # A nonzero exit is acceptable here because we kill only known Paseo
+        # executable paths below as a final cleanup.
     } finally {
         Pop-Location
     }
 
-    if (Test-Path $installedExe) {
-        Start-Sleep -Milliseconds 500
-        foreach ($processInfo in (Get-PaseoInstalledProcesses -ExecutablePath $installedExe)) {
-            Stop-Process -Id $processInfo.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
-function Install-PaseoLocalInstaller {
-    param([Parameter(Mandatory = $true)][string]$InstallerPath)
-
-    if (-not (Test-Path $InstallerPath)) {
-        throw "Paseo installer not found: $InstallerPath"
-    }
-
-    $installer = Start-Process -FilePath $InstallerPath -ArgumentList @("/S") -Wait -PassThru
-    if ($installer.ExitCode -ne 0) {
-        throw "Paseo installer exited with code $($installer.ExitCode)."
+    Start-Sleep -Milliseconds 500
+    foreach ($target in $targets) {
+        Stop-AllPaseoProcessesForExecutable -ExecutablePath $target
     }
 }
 
 function Start-PaseoLocal {
-    $installedExe = Get-PaseoInstalledExecutable
-    if (-not (Test-Path $installedExe)) {
-        throw "Installed Paseo executable not found: $installedExe"
+    $localExe = Get-PaseoLocalCurrentExecutable
+    if (Test-Path $localExe) {
+        Start-Process -FilePath $localExe | Out-Null
+        return $localExe
     }
-    Start-Process -FilePath $installedExe | Out-Null
+
+    # Before the first successful local build, keep the shortcut useful by
+    # falling back to the normal installed Paseo.
+    $installedExe = Get-PaseoInstalledExecutable
+    if (Test-Path $installedExe) {
+        Start-Process -FilePath $installedExe | Out-Null
+        return $installedExe
+    }
+
+    throw "Neither Paseo Local nor the normal installed Paseo was found."
 }

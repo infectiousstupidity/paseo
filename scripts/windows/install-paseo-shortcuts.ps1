@@ -25,6 +25,7 @@ function New-PaseoShortcut {
 
 try {
     $repoRoot = Get-PaseoRepoRoot
+    $localExe = Get-PaseoLocalCurrentExecutable
     $installedExe = Get-PaseoInstalledExecutable
     $desktop = [Environment]::GetFolderPath("Desktop")
     $programs = [Environment]::GetFolderPath("Programs")
@@ -39,26 +40,31 @@ try {
     }
 
     $repoIcon = Join-Path $repoRoot "packages\desktop\assets\icon.ico"
-    if (Test-Path $installedExe) {
+    if (Test-Path $localExe) {
+        $appIcon = $localExe
+    } elseif (Test-Path $installedExe) {
         $appIcon = $installedExe
     } else {
         $appIcon = $repoIcon
     }
 
+    $localScript = Join-Path $PSScriptRoot "paseo-local-launch.ps1"
     $devScript = Join-Path $PSScriptRoot "paseo-dev.ps1"
     $updateScript = Join-Path $PSScriptRoot "paseo-local-update.ps1"
     $rollbackScript = Join-Path $PSScriptRoot "paseo-local-rollback.ps1"
 
+    $localArgs = '-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $localScript
     $devArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $devScript
     $updateArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $updateScript
     $rollbackArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $rollbackScript
 
     $localParams = @{
         Path = Join-Path $desktop "Paseo Local.lnk"
-        Target = $installedExe
-        WorkingDirectory = Split-Path -Parent $installedExe
+        Target = $powershellExe
+        Arguments = $localArgs
+        WorkingDirectory = $repoRoot
         IconLocation = "$appIcon,0"
-        Description = "Paseo fork daily driver"
+        Description = "Verified packaged Paseo fork daily driver"
     }
     New-PaseoShortcut @localParams
 
@@ -78,7 +84,7 @@ try {
         Arguments = $updateArgs
         WorkingDirectory = $repoRoot
         IconLocation = "$repoIcon,0"
-        Description = "Build and install the current Paseo fork"
+        Description = "Build, verify, and switch Paseo Local to the current fork"
     }
     New-PaseoShortcut @updateParams
 
@@ -88,7 +94,7 @@ try {
         Arguments = $rollbackArgs
         WorkingDirectory = $repoRoot
         IconLocation = "$repoIcon,0"
-        Description = "Restore the previous Paseo Local installer"
+        Description = "Swap Paseo Local back to the previous verified runtime"
     }
     New-PaseoShortcut @rollbackParams
 
