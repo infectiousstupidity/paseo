@@ -207,7 +207,7 @@ describe("buildAgentStreamRenderModel", () => {
     expect(second.history.map((item) => item.id)).toEqual(first.history.map((item) => item.id));
   });
 
-  it("keeps distinct cached history windows for the same tail", () => {
+  it("invalidates a bounded history window when historyStart changes", () => {
     const tail = [
       userMessage("u1", 1),
       assistantMessage("a1", 2),
@@ -234,18 +234,10 @@ describe("buildAgentStreamRenderModel", () => {
       isMobileBreakpoint: false,
       historyStart: 2,
     });
-    const recentAgain = buildAgentStreamRenderModel({
-      isTurnActive: false,
-      activeTurnStartedAt: null,
-      tail,
-      head: [],
-      platform: "native",
-      isMobileBreakpoint: false,
-      historyStart: 4,
-    });
 
     expect(recent.history).not.toBe(revealed.history);
-    expect(recentAgain.history).toBe(recent.history);
+    expect(recent.history.map((item) => item.id)).toEqual(["a3", "u3"]);
+    expect(revealed.history.map((item) => item.id)).toEqual(["a3", "u3", "a2", "u2"]);
   });
 
   it("reuses ordered committed history when only the live head changes", () => {
