@@ -161,6 +161,7 @@ function parseEntryCapture(notification: string): unknown {
 async function loadPaseoExtensionListeners(
   extensionPath: string,
   registerMcpServer: (name: string, config: unknown) => void = () => undefined,
+  appendEntry: (customType: string, data: unknown) => void = () => undefined,
 ): Promise<Map<string, PaseoExtensionListener>> {
   const listeners = new Map<string, PaseoExtensionListener>();
   const extension = (await import(pathToFileURL(extensionPath).href)) as {
@@ -169,6 +170,7 @@ async function loadPaseoExtensionListeners(
       events: { on: () => void };
       registerCommand: () => void;
       registerMcpServer: (name: string, config: unknown) => void;
+      appendEntry: (customType: string, data: unknown) => void;
     }) => void;
   };
   extension.default({
@@ -176,6 +178,7 @@ async function loadPaseoExtensionListeners(
     events: { on: () => undefined },
     registerCommand: () => undefined,
     registerMcpServer,
+    appendEntry,
   });
   return listeners;
 }
@@ -1729,6 +1732,65 @@ describe("PiRpcAgentSession", () => {
         ],
       },
     ]);
+  });
+
+  test("records Pivolution revision attribution once at the first agent turn", async () => {
+    const pi = new FakePi();
+    const client = createClient(pi);
+    const previous = {
+      invocation: process.env.SHIORI_INVOCATION_ID,
+      project: process.env.SHIORI_HARNESS_PROJECT,
+      revision: process.env.SHIORI_HARNESS_REVISION,
+      fingerprint: process.env.SHIORI_HARNESS_CONFIG_FINGERPRINT,
+    };
+    process.env.SHIORI_INVOCATION_ID = "invocation-1";
+    process.env.SHIORI_HARNESS_PROJECT = "infectiousstupidity-labs/shiori";
+    process.env.SHIORI_HARNESS_REVISION = "abc123";
+    process.env.SHIORI_HARNESS_CONFIG_FINGERPRINT = "f".repeat(64);
+    try {
+      const session = await client.createSession(createConfig());
+      const extensionPath = pi.recordedLaunches[0]!.extensionPaths[0]!;
+      const entries: Array<{ customType: string; data: unknown }> = [];
+      const listeners = await loadPaseoExtensionListeners(
+        extensionPath,
+        () => undefined,
+        (customType, data) => entries.push({ customType, data }),
+      );
+      const context = {
+        model: { provider: "openrouter", id: "actual-model" },
+        thinkingLevel: "xhigh",
+      };
+      await listeners.get("before_agent_start")?.({ systemPrompt: "base" }, context);
+      await listeners.get("before_agent_start")?.({ systemPrompt: "base" }, context);
+
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({
+        customType: "pivolution-revision",
+        data: {
+          schema_version: 1,
+          shiori_invocation_id: "invocation-1",
+          harness_project: "infectiousstupidity-labs/shiori",
+          harness_revision: "abc123",
+          harness_version: null,
+          pi_version: null,
+          provider: "openrouter",
+          model: "actual-model",
+          reasoning: "xhigh",
+          config_fingerprint: "f".repeat(64),
+          source: "shiori-pi-extension",
+        },
+      });
+      await session.close();
+    } finally {
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+      restore("SHIORI_INVOCATION_ID", previous.invocation);
+      restore("SHIORI_HARNESS_PROJECT", previous.project);
+      restore("SHIORI_HARNESS_REVISION", previous.revision);
+      restore("SHIORI_HARNESS_CONFIG_FINGERPRINT", previous.fingerprint);
+    }
   });
 
   test("appends agent and daemon prompts after Pi's discovered system prompt", async () => {
