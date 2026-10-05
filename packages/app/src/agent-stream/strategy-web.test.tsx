@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RetainedPanelActivity } from "@/components/retained-panel";
 import type { StreamItem } from "@/types/stream";
 import type { StreamRenderInput, StreamSegmentRenderers, StreamViewportHandle } from "./strategy";
+import { buildAgentStreamRenderModel } from "./model";
 import { createWebStreamStrategy } from "./strategy-web";
 
 vi.hoisted(() => {
@@ -199,6 +200,77 @@ describe("createWebStreamStrategy", () => {
     );
     expect(scrollContainer?.style.scrollbarWidth).toBe("none");
     expect(scrollContainer?.dataset.overlayScrollbar).toBe("true");
+  });
+
+  it("does not rerender bounded committed history when only the live head grows", () => {
+    const tail = Array.from({ length: 40 }, (_, index) => userMessage(index));
+    const liveTimestamp = new Date("2026-04-20T00:01:00.000Z");
+    const liveAssistant = (text: string): StreamItem => ({
+      kind: "assistant_message",
+      id: "live",
+      text,
+      timestamp: liveTimestamp,
+    });
+    const firstModel = buildAgentStreamRenderModel({
+      isTurnActive: true,
+      activeTurnStartedAt: tail.at(-1)?.timestamp ?? null,
+      tail,
+      head: [liveAssistant("a")],
+      platform: "web",
+      isMobileBreakpoint: false,
+      historyStart: 20,
+    });
+    const secondModel = buildAgentStreamRenderModel({
+      isTurnActive: true,
+      activeTurnStartedAt: tail.at(-1)?.timestamp ?? null,
+      tail,
+      head: [liveAssistant("ab")],
+      platform: "web",
+      isMobileBreakpoint: false,
+      historyStart: 20,
+    });
+    const historyRowRender = vi.fn((item: StreamItem) => <div>{item.id}</div>);
+    const renderers: StreamSegmentRenderers = {
+      renderHistoryVirtualizedRow: historyRowRender,
+      renderHistoryMountedRow: historyRowRender,
+      renderLiveHeadRow: (item) => <div>{item.id}</div>,
+      renderLiveAuxiliary: () => null,
+    };
+    const strategy = createWebStreamStrategy({ isMobileBreakpoint: false });
+    const viewportRef = React.createRef<StreamViewportHandle>();
+    const renderModel = (model: typeof firstModel) =>
+      strategy.render({
+        agentId: "agent",
+        segments: model.segments,
+        boundary: model.boundary,
+        renderers,
+        listEmptyComponent: null,
+        viewportRef,
+        routeBottomAnchorRequest: null,
+        isAuthoritativeHistoryReady: true,
+        onNearBottomChange: vi.fn(),
+        onNearHistoryStart: vi.fn().mockReturnValue(true),
+        isLoadingOlderHistory: false,
+        hasOlderHistory: false,
+        olderHistoryProgressKey: null,
+        scrollEnabled: true,
+        listStyle: null,
+        baseListContentContainerStyle: null,
+        forwardListContentContainerStyle: null,
+        contentMaxWidth: DEFAULT_CONTENT_MAX_WIDTH,
+      });
+
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => root?.render(renderModel(firstModel)));
+    const firstRenderCount = historyRowRender.mock.calls.length;
+    expect(firstRenderCount).toBeGreaterThan(0);
+
+    act(() => root?.render(renderModel(secondModel)));
+
+    expect(historyRowRender).toHaveBeenCalledTimes(firstRenderCount);
   });
 
   it("rerenders a stable live-head row when its revision changes", () => {
