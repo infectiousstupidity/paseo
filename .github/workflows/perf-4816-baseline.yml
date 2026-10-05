@@ -25,3 +25,5 @@ jobs:
         run: npm run build:app-deps
       - name: Run tool-heavy #4816 benchmark
         run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick.toolheavy.investigation.test.ts --reporter=verbose
+      - name: Run bounded-history render regression
+        run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick-rendering.investigation.test.tsx --reporter=verbose
