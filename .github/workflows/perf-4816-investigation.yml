@@ -21,6 +21,9 @@ jobs:
           cache: "npm"
       - name: Install dependencies
         run: node scripts/npm-retry.mjs ci
+      - name: Install Playwright browsers
+        timeout-minutes: 10
+        run: npx playwright install chromium
       - name: Build app dependencies
         run: npm run build:app-deps
       - name: Run #4816 investigation benchmark
