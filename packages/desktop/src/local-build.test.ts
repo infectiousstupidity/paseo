@@ -2,33 +2,36 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
   app: {
-    getAppPath: vi.fn(() => "/unused"),
     isPackaged: false,
   },
 }));
 
-import { hasLocalDesktopBuildFlavor, readLocalDesktopBuildInfo } from "./local-build";
+import { readLocalDesktopBuildInfo } from "./local-build";
 
 describe("local desktop build", () => {
-  it("recognizes only the explicit local build flavor", () => {
-    expect(hasLocalDesktopBuildFlavor({ paseoBuildFlavor: "local" })).toBe(true);
-    expect(hasLocalDesktopBuildFlavor({ paseoBuildFlavor: "official" })).toBe(false);
-    expect(hasLocalDesktopBuildFlavor({})).toBe(false);
-    expect(hasLocalDesktopBuildFlavor(null)).toBe(false);
-  });
-
-  it("reads the stamped commit only for local builds", () => {
+  it("recognizes and reads only the explicit local build flavor", () => {
     expect(
       readLocalDesktopBuildInfo({
         paseoBuildFlavor: "local",
         paseoBuildCommit: "507d966c71bf",
       }),
     ).toEqual({ isLocal: true, commit: "507d966c71bf" });
+
     expect(
       readLocalDesktopBuildInfo({
         paseoBuildFlavor: "official",
         paseoBuildCommit: "507d966c71bf",
       }),
     ).toEqual({ isLocal: false, commit: null });
+
+    expect(readLocalDesktopBuildInfo({})).toEqual({ isLocal: false, commit: null });
+    expect(readLocalDesktopBuildInfo(null)).toEqual({ isLocal: false, commit: null });
+  });
+
+  it("allows a local marker without a commit while keeping it identifiable as local", () => {
+    expect(readLocalDesktopBuildInfo({ paseoBuildFlavor: "local" })).toEqual({
+      isLocal: true,
+      commit: null,
+    });
   });
 });

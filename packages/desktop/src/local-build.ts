@@ -22,8 +22,12 @@ export function readLocalDesktopBuildInfo(metadata: unknown): LocalDesktopBuildI
   return { isLocal, commit };
 }
 
-export function hasLocalDesktopBuildFlavor(metadata: unknown): boolean {
-  return readLocalDesktopBuildInfo(metadata).isLocal;
+function readLocalBuildInfoFile(filePath: string): LocalDesktopBuildInfo {
+  try {
+    return readLocalDesktopBuildInfo(JSON.parse(readFileSync(filePath, "utf8")) as unknown);
+  } catch {
+    return { isLocal: false, commit: null };
+  }
 }
 
 let cachedLocalBuildInfo: LocalDesktopBuildInfo | null = null;
@@ -32,15 +36,10 @@ export function getLocalDesktopBuildInfo(): LocalDesktopBuildInfo {
   if (!app.isPackaged) return { isLocal: false, commit: null };
   if (cachedLocalBuildInfo !== null) return cachedLocalBuildInfo;
 
-  try {
-    const packageJson = JSON.parse(
-      readFileSync(path.join(app.getAppPath(), "package.json"), "utf8"),
-    ) as unknown;
-    cachedLocalBuildInfo = readLocalDesktopBuildInfo(packageJson);
-  } catch {
-    cachedLocalBuildInfo = { isLocal: false, commit: null };
-  }
-
+  // The build script writes this beside dist/main.js before electron-builder
+  // packages dist/**. This avoids relying on package.json metadata injection
+  // surviving nested npm/electron-builder invocations.
+  cachedLocalBuildInfo = readLocalBuildInfoFile(path.join(__dirname, "local-build-info.json"));
   return cachedLocalBuildInfo;
 }
 
