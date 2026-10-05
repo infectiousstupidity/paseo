@@ -99,6 +99,19 @@ Remove-Item $TmpScript -ErrorAction SilentlyContinue
 Remove-Item Env:\TMP_CFG_PATH -ErrorAction SilentlyContinue
 Remove-Item Env:\TMP_CFG_PORT -ErrorAction SilentlyContinue
 
+# A previous desktop-dev run can leave its isolated daemon alive after Electron
+# exits. Reusing it is unsafe while developing server code because the package
+# version may be unchanged even though source has changed. Stop only the daemon
+# registered in this isolated dev home; production PASEO_HOME is never targeted.
+if ($env:PASEO_DEV_REUSE_DAEMON -ne "1") {
+    $DevCli = "$RootDir\packages\cli\src\index.ts"
+    try {
+        npx tsx $DevCli daemon stop --home $env:PASEO_HOME --json --force | Out-Null
+    } catch {
+        # "not running" / no lock is fine; Electron will start a fresh daemon.
+    }
+}
+
 Write-Host @"
 ======================================================
   Paseo Desktop Dev (Windows)
@@ -107,6 +120,7 @@ Write-Host @"
   Daemon:     $($env:PASEO_LISTEN) (isolated)
   PASEO_HOME: $($env:PASEO_HOME)
   userData:   $($env:PASEO_ELECTRON_USER_DATA_DIR)
+  daemonReuse:$($env:PASEO_DEV_REUSE_DAEMON -eq "1")
 ======================================================
 "@
 
