@@ -16,6 +16,26 @@ $verifyScript = Join-Path $PSScriptRoot "verify-paseo-local-build.mjs"
 $shortcutsScript = Join-Path $PSScriptRoot "install-paseo-shortcuts.ps1"
 $swapped = $false
 
+$logRoot = Join-Path $env:LOCALAPPDATA "PaseoLocal\logs"
+New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
+$logPath = Join-Path $logRoot ("update-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
+$transcriptStarted = $false
+try {
+    Start-Transcript -Path $logPath -Force | Out-Null
+    $transcriptStarted = $true
+} catch {
+    Write-Warning "Could not start transcript: $($_.Exception.Message)"
+}
+
+Write-Host "PASEO LOCAL UPDATE LOG"
+Write-Host "Log:         $logPath"
+Write-Host "Script:      $PSCommandPath"
+Write-Host "Repo:        $repoRoot"
+Write-Host "Runtime:     $runtimeRoot"
+Write-Host "PowerShell:  $($PSVersionTable.PSVersion)"
+Write-Host "Node:        $(& node --version)"
+Write-Host ""
+
 function Assert-LastExitCode {
     param([Parameter(Mandatory = $true)][string]$Step)
     if ($LASTEXITCODE -ne 0) {
@@ -150,7 +170,12 @@ try {
     Write-Host "Runtime: $startedExe"
     Write-Host "Build:   $buildCommit"
     Write-Host "Window:  Paseo Local · <version> · $buildCommit"
+    Write-Host "Log:     $logPath"
     Write-Host ""
+    if ($transcriptStarted) {
+        Stop-Transcript | Out-Null
+        $transcriptStarted = $false
+    }
     Read-Host "Press Enter to close"
 } catch {
     $failure = $_
@@ -168,6 +193,11 @@ try {
 
     Write-Host ""
     Write-Host "No success was recorded. This window will stay open so the failure is visible."
+    Write-Host "Log: $logPath"
+    if ($transcriptStarted) {
+        Stop-Transcript | Out-Null
+        $transcriptStarted = $false
+    }
     Read-Host "Press Enter to close"
     exit 1
 }

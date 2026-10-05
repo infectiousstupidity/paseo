@@ -119,18 +119,10 @@ function Stop-PaseoLocal {
 
 function Start-PaseoLocal {
     $localExe = Get-PaseoLocalCurrentExecutable
-    if (Test-Path $localExe) {
-        Start-Process -FilePath $localExe | Out-Null
-        return $localExe
+    if (-not (Test-Path $localExe)) {
+        throw "Paseo Local is not installed yet. Run 'Update Paseo Local' first. Expected runtime: $localExe"
     }
 
-    # Before the first successful local build, keep the shortcut useful by
-    # falling back to the normal installed Paseo.
-    $installedExe = Get-PaseoInstalledExecutable
-    if (Test-Path $installedExe) {
-        Start-Process -FilePath $installedExe | Out-Null
-        return $installedExe
-    }
-
-    throw "Neither Paseo Local nor the normal installed Paseo was found."
+    Start-Process -FilePath $localExe | Out-Null
+    return $localExe
 }
