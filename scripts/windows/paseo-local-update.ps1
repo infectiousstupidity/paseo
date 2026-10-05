@@ -14,13 +14,22 @@ try {
     New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
     Remove-Item -Recurse -Force $releaseDir -ErrorAction SilentlyContinue
 
-    Write-Host "Building Paseo Local from the current working tree..."
+    $buildCommit = (& git -C $repoRoot rev-parse --short=12 HEAD).Trim()
+    if (-not $buildCommit) {
+        throw "Could not determine the current Git commit."
+    }
+    $dirty = (& git -C $repoRoot status --porcelain --untracked-files=no)
+    if ($dirty) {
+        $buildCommit = "$buildCommit-dirty"
+    }
+
+    Write-Host "Building Paseo Local from commit $buildCommit..."
     Write-Host "Your installed Paseo remains running until this build succeeds."
     Write-Host ""
 
     Push-Location $repoRoot
     try {
-        & npm run build:desktop -- --win nsis --x64 --publish never "-c.directories.output=.local-build/release" "-c.extraMetadata.paseoBuildFlavor=local"
+        & npm run build:desktop -- --win nsis --x64 --publish never "-c.directories.output=.local-build/release" "-c.extraMetadata.paseoBuildFlavor=local" "-c.extraMetadata.paseoBuildCommit=$buildCommit"
         if ($LASTEXITCODE -ne 0) {
             throw "Paseo Local build failed with exit code $LASTEXITCODE. The installed app was not touched."
         }
@@ -49,7 +58,10 @@ try {
 
     Write-Host ""
     Write-Host "Paseo Local updated successfully."
-    Start-Sleep -Seconds 2
+    Write-Host "Running build: $buildCommit"
+    Write-Host "The Paseo window title should now show: Paseo Local · <version> · $buildCommit"
+    Write-Host ""
+    Read-Host "Press Enter to close"
 } catch {
     Write-Host ""
     Write-Error $_
