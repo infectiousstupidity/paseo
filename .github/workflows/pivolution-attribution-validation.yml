@@ -17,4 +17,8 @@ jobs:
       - run: npm ci
       - run: npm run build:server-deps
       - run: npm run typecheck --workspace=@getpaseo/server
-      - run: npx oxfmt --check packages/server/src/server/agent/providers/pi/agent.ts
+      - name: Show formatter diff
+        run: |
+          npx oxfmt packages/server/src/server/agent/providers/pi/agent.ts
+          git diff -- packages/server/src/server/agent/providers/pi/agent.ts
+          exit 1
