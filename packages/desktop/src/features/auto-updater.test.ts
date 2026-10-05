@@ -25,6 +25,14 @@ const { autoUpdaterMock } = vi.hoisted(() => {
   };
 });
 
+const { localDesktopBuildMock } = vi.hoisted(() => ({
+  localDesktopBuildMock: vi.fn(() => false),
+}));
+
+vi.mock("../local-build", () => ({
+  isLocalDesktopBuild: localDesktopBuildMock,
+}));
+
 vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(),
@@ -47,6 +55,28 @@ import {
 } from "./auto-updater";
 
 describe("checkForAppUpdate", () => {
+  it("does not contact the upstream updater for a local desktop build", async () => {
+    localDesktopBuildMock.mockReturnValueOnce(true);
+    autoUpdaterMock.checkForUpdates.mockClear();
+
+    const result = await checkForAppUpdate({
+      currentVersion: "1.2.3",
+      releaseChannel: "stable",
+      intent: "manual",
+    });
+
+    expect(result).toEqual({
+      hasUpdate: false,
+      readyToInstall: false,
+      currentVersion: "1.2.3",
+      latestVersion: "1.2.3",
+      body: null,
+      date: null,
+      errorMessage: null,
+    });
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+  });
+
   it("treats an unpublished channel manifest as an unavailable update", async () => {
     const error = Object.assign(new Error("Cannot find latest-mac.yml"), {
       code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
