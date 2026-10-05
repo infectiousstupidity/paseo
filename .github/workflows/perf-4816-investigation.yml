@@ -25,3 +25,5 @@ jobs:
         run: npm run build:app-deps
       - name: Run #4816 investigation benchmark
         run: npm run test --workspace=@getpaseo/app -- src/agent-stream/stream-tick.investigation.test.ts --reporter=verbose
+      - name: Run focused model regression tests
+        run: npm run test --workspace=@getpaseo/app -- src/agent-stream/model.test.ts --reporter=verbose
