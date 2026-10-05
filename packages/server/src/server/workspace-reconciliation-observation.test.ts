@@ -168,6 +168,7 @@ class ObservedPlacements {
   private readonly checkoutByCwd = new Map<string, ProjectCheckoutLitePayload>();
   private readonly rootByProjectId = new Map<string, string>();
   private readonly failedWatchRoots = new Set<string>();
+  private readonly createGitMarkerDuringWatchRoots = new Set<string>();
   private readonly projectEvents: ProjectUpdate[] = [];
   private readonly workspaceEvents: string[][] = [];
   private readonly workspaceEventWaiters: Array<() => void> = [];
@@ -186,6 +187,9 @@ class ObservedPlacements {
     );
     const watchProjectRoot: ProjectRootWatch = (rootPath, _options, onChange, onError) => {
       if (this.failedWatchRoots.delete(rootPath)) throw new Error("root unavailable");
+      if (this.createGitMarkerDuringWatchRoots.delete(rootPath)) {
+        mkdirSync(path.join(rootPath, ".git"), { recursive: true });
+      }
       const watch = { rootPath, onChange, onError, closed: false };
       this.watches.push(watch);
       this.lifecycleEvents.push(`watch installed:${path.relative(this.home, rootPath)}`);
@@ -238,6 +242,10 @@ class ObservedPlacements {
 
   failNextWatch(root: string): void {
     this.failedWatchRoots.add(this.absolute(root));
+  }
+
+  createGitMarkerDuringNextWatch(root: string): void {
+    this.createGitMarkerDuringWatchRoots.add(this.absolute(root));
   }
 
   watcherFailed(root: string): void {
@@ -425,6 +433,17 @@ describe("observed workspace placement", () => {
       "registry mutation resolved:project-new",
     ]);
     expect(observed.gitReads).toBe(0);
+    observed.dispose();
+  });
+
+  test("reconciles when .git appears during root watch installation", async () => {
+    const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
+    observed.createGitMarkerDuringNextWatch("repo");
+
+    await observed.start();
+    await observed.advanceBy(DEBOUNCE_MS);
+
+    expect(observed.gitReads).toBe(1);
     observed.dispose();
   });
 

@@ -490,12 +490,21 @@ export class WorkspaceReconciliationService {
             );
           },
         );
+        const installedGitMarkerPresent = this.hasGitMarker(project.rootPath);
         watchTarget = {
           rootPath: project.rootPath,
           watcher,
-          gitMarkerPresent: initialGitMarkerPresent,
+          gitMarkerPresent: installedGitMarkerPresent,
         };
         this.watchers.push(watchTarget);
+
+        // Close the stat -> watch installation race: if the .git marker changed
+        // after the initial read but before the watcher became active, no fs.watch
+        // event is guaranteed. Reconcile once now rather than waiting for the
+        // periodic full pass.
+        if (installedGitMarkerPresent !== initialGitMarkerPresent) {
+          this.scheduleObservedReconciliation();
+        }
       } catch (error) {
         // The periodic reconciliation is the convergence path for roots that
         // are temporarily missing or unwatchable.
