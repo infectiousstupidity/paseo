@@ -121,8 +121,6 @@ const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
   isPackaged: app.isPackaged,
-  localBuild: LOCAL_BUILD.isLocal,
-  localBuildCommit: LOCAL_BUILD.commit,
 });
 const UPDATE_QUIT_DEADLINE_MS = 5_000;
 const pendingBrowserWindowOpenRequests = new PendingBrowserWindowOpenRequests();
@@ -143,6 +141,8 @@ log.info("[desktop] app startup", {
   platform: process.platform,
   arch: process.arch,
   isPackaged: app.isPackaged,
+  localBuild: LOCAL_BUILD.isLocal,
+  localBuildCommit: LOCAL_BUILD.commit,
 });
 
 interface AttachedBrowserInput {
