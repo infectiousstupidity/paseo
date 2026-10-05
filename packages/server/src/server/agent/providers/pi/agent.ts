@@ -728,12 +728,12 @@ function createPiPaseoExtensionFile({
 	      }
 	    }
 	    ${
-      systemPrompt
-        ? `return {
+        systemPrompt
+          ? `return {
 	      systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
 	    };`
-        : ""
-    }
+          : ""
+      }
 	  });
 
 	  pi.on("session_start", async (_event, ctx) => {
