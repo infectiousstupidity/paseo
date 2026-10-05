@@ -5,6 +5,7 @@ import { buildAgentStreamRenderModel } from "./model";
 import { layoutStream } from "./layout";
 import { findMountedWindowStart, getMountedRecentStreamItems } from "./history-window";
 import { resolveStreamRenderStrategy } from "./strategy-resolver";
+import { getStreamItemMessageId } from "./presentation";
 
 const BASE_TIME = Date.UTC(2026, 0, 1);
 const EPOCH = "perf-4816";
@@ -60,6 +61,7 @@ function runCase(input: { name: string; tail: StreamItem[]; historyStart: number
   const modelSamples: number[] = [];
   const pipelineSamples: number[] = [];
   const timingSamples: number[] = [];
+  const visibleSetSamples: number[] = [];
   const outlineSamples: number[] = [];
   const boundarySamples: number[] = [];
   let previousHistory: StreamItem[] | null = null;
@@ -103,6 +105,12 @@ function runCase(input: { name: string; tail: StreamItem[]; historyStart: number
     });
     const timingEnd = performance.now();
 
+    const visibleSetStart = performance.now();
+    new Set(
+      [...model.history, ...model.segments.liveHead].map((item) => getStreamItemMessageId(item)),
+    );
+    const visibleSetEnd = performance.now();
+
     const outlineStart = performance.now();
     const loadedItems = [...input.tail, ...head];
     loadedItems.reduce(
@@ -123,6 +131,7 @@ function runCase(input: { name: string; tail: StreamItem[]; historyStart: number
       modelSamples.push(modelEnd - modelStart);
       pipelineSamples.push(pipelineEnd - modelStart);
       timingSamples.push(timingEnd - timingStart);
+      visibleSetSamples.push(visibleSetEnd - visibleSetStart);
       outlineSamples.push(outlineEnd - outlineStart);
       boundarySamples.push(boundaryEnd - boundaryStart);
       if (previousHistory === model.history) historyIdentityHits += 1;
@@ -148,6 +157,7 @@ function runCase(input: { name: string; tail: StreamItem[]; historyStart: number
     model: stats(modelSamples),
     modelPlusLayout: stats(pipelineSamples),
     turnTimingOnly: stats(timingSamples),
+    visibleMessageSetOnly: stats(visibleSetSamples),
     outlineScanOnly: stats(outlineSamples),
     boundaryFindIndexOnly: stats(boundarySamples),
   };
