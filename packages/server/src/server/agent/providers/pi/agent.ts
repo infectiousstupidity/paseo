@@ -704,13 +704,37 @@ function createPiPaseoExtensionFile({
 	    }
 	  }
 
-	  ${
-      systemPrompt
-        ? `pi.on("before_agent_start", async (event) => ({
-	    systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
-	  }));`
-        : ""
-    }
+	  let pivolutionAttributionWritten = false;
+	  pi.on("before_agent_start", async (event, ctx) => {
+	    if (!pivolutionAttributionWritten) {
+	      const invocationId = process.env.SHIORI_INVOCATION_ID?.trim();
+	      if (invocationId) {
+	        const model = ctx.model ?? null;
+	        pi.appendEntry("pivolution-revision", {
+	          schema_version: 1,
+	          shiori_invocation_id: invocationId,
+	          harness_project: process.env.PIVOLUTION_HARNESS_PROJECT?.trim() || null,
+	          harness_revision: process.env.PIVOLUTION_HARNESS_REVISION?.trim() || null,
+	          harness_version: null,
+	          pi_version: null,
+	          provider: model?.provider ?? null,
+	          model: model?.id ?? null,
+	          reasoning: ctx.thinkingLevel ?? null,
+	          config_fingerprint: null,
+	          captured_at: new Date().toISOString(),
+	          source: "shiori-pi-extension",
+	        });
+	        pivolutionAttributionWritten = true;
+	      }
+	    }
+	    ${
+        systemPrompt
+          ? `return {
+	      systemPrompt: event.systemPrompt + "\\n\\n" + ${JSON.stringify(systemPrompt)},
+	    };`
+          : ""
+      }
+	  });
 
 	  pi.on("session_start", async (_event, ctx) => {
 	    emitEntryCapture(ctx, "session_start");
