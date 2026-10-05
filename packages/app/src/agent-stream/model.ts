@@ -47,7 +47,10 @@ const EMPTY_AUXILIARY: StreamRenderAuxiliary = {
   turnFooter: null,
 };
 
-const renderedTailCache = new WeakMap<StreamItem[], Map<number, StreamItem[]>>();
+const renderedTailCache = new WeakMap<
+  StreamItem[],
+  { historyStart: number; rendered: StreamItem[] }
+>();
 const orderedTailCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const orderedHeadCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const splitHistoryCache = new WeakMap<
@@ -63,17 +66,12 @@ function getRenderedTail(tail: StreamItem[], historyStart: number | undefined): 
   if (!historyStart) {
     return tail;
   }
-  let cachedByStart = renderedTailCache.get(tail);
-  if (!cachedByStart) {
-    cachedByStart = new Map();
-    renderedTailCache.set(tail, cachedByStart);
-  }
-  const cached = cachedByStart.get(historyStart);
-  if (cached) {
-    return cached;
+  const cached = renderedTailCache.get(tail);
+  if (cached?.historyStart === historyStart) {
+    return cached.rendered;
   }
   const rendered = tail.slice(historyStart);
-  cachedByStart.set(historyStart, rendered);
+  renderedTailCache.set(tail, { historyStart, rendered });
   return rendered;
 }
 
