@@ -48,25 +48,27 @@ try {
         $appIcon = $repoIcon
     }
 
-    $localScript = Join-Path $PSScriptRoot "paseo-local-launch.ps1"
     $devScript = Join-Path $PSScriptRoot "paseo-dev.ps1"
     $updateScript = Join-Path $PSScriptRoot "paseo-local-update.ps1"
     $rollbackScript = Join-Path $PSScriptRoot "paseo-local-rollback.ps1"
 
-    $localArgs = '-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $localScript
     $devArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $devScript
     $updateArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $updateScript
     $rollbackArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $rollbackScript
 
-    $localParams = @{
-        Path = Join-Path $desktop "Paseo Local.lnk"
-        Target = $powershellExe
-        Arguments = $localArgs
-        WorkingDirectory = $repoRoot
-        IconLocation = "$appIcon,0"
-        Description = "Verified packaged Paseo fork daily driver"
+    $localShortcut = Join-Path $desktop "Paseo Local.lnk"
+    if (Test-Path $localExe) {
+        $localParams = @{
+            Path = $localShortcut
+            Target = $localExe
+            WorkingDirectory = Split-Path -Parent $localExe
+            IconLocation = "$appIcon,0"
+            Description = "Verified packaged Paseo fork daily driver"
+        }
+        New-PaseoShortcut @localParams
+    } else {
+        Remove-Item -Force $localShortcut -ErrorAction SilentlyContinue
     }
-    New-PaseoShortcut @localParams
 
     $devParams = @{
         Path = Join-Path $desktop "Paseo Dev.lnk"
@@ -99,7 +101,11 @@ try {
     New-PaseoShortcut @rollbackParams
 
     Write-Host "Created desktop shortcuts:"
-    Write-Host "  Paseo Local"
+    if (Test-Path $localExe) {
+        Write-Host "  Paseo Local -> $localExe"
+    } else {
+        Write-Host "  Paseo Local (not created yet; run Update Paseo Local first)"
+    }
     Write-Host "  Paseo Dev"
     Write-Host "  Update Paseo Local"
     Write-Host ""

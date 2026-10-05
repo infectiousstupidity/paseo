@@ -38,7 +38,11 @@ try {
         throw "Shortcut refresh failed with exit code $LASTEXITCODE."
     }
 
-    Start-PaseoLocal | Out-Null
+    $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Paseo Local.lnk"
+    if (-not (Test-Path $desktopShortcut)) {
+        throw "Paseo Local shortcut was not created: $desktopShortcut"
+    }
+    Start-Process -FilePath $desktopShortcut | Out-Null
     Write-Host "Rollback complete."
     Read-Host "Press Enter to close"
 } catch {

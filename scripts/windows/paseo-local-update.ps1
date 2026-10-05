@@ -154,7 +154,15 @@ try {
     & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $shortcutsScript
     Assert-LastExitCode "Shortcut refresh"
 
-    $startedExe = Start-PaseoLocal
+    $startedExe = Get-PaseoLocalCurrentExecutable
+    $desktopShortcut = Join-Path ([Environment]::GetFolderPath("Desktop")) "Paseo Local.lnk"
+    if (-not (Test-Path $desktopShortcut)) {
+        throw "Paseo Local shortcut was not created: $desktopShortcut"
+    }
+
+    # Launch through the direct .lnk target so Explorer owns the GUI launch,
+    # rather than leaving Paseo attached to this updater console.
+    Start-Process -FilePath $desktopShortcut | Out-Null
     Start-Sleep -Seconds 2
 
     $running = @(Get-PaseoProcessesForExecutable -ExecutablePath $startedExe)
