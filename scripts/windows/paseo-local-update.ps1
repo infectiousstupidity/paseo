@@ -8,6 +8,7 @@ $buildRoot = Get-PaseoLocalBuildRoot
 $stagingRoot = Join-Path $buildRoot "staging"
 $stagedApp = Join-Path $stagingRoot "win-unpacked"
 $runtimeRoot = Get-PaseoLocalRuntimeRoot
+$incomingDir = Join-Path $runtimeRoot "incoming"
 $currentDir = Get-PaseoLocalCurrentDirectory
 $previousDir = Get-PaseoLocalPreviousDirectory
 $failedDir = Join-Path $runtimeRoot "failed"
@@ -102,6 +103,14 @@ try {
         throw "Packaged Paseo.exe was not produced in $stagedApp"
     }
 
+    Write-Host "Copying the verified build into the local runtime area..."
+    Remove-Item -Recurse -Force $incomingDir -ErrorAction SilentlyContinue
+    Copy-Item -Path $stagedApp -Destination $incomingDir -Recurse
+
+    $incomingAsar = Join-Path $incomingDir "resources\app.asar"
+    & node $verifyScript $incomingAsar $buildCommit
+    Assert-LastExitCode "Incoming runtime verification"
+
     Write-Host ""
     Write-Host "Build verified. Switching Paseo Local to the new runtime..."
     Stop-PaseoLocal
@@ -113,7 +122,7 @@ try {
         Move-Item -Path $currentDir -Destination $previousDir
     }
 
-    Move-Item -Path $stagedApp -Destination $currentDir
+    Move-Item -Path $incomingDir -Destination $currentDir
     $swapped = $true
 
     $currentAsar = Join-Path $currentDir "resources\app.asar"

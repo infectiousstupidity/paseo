@@ -12,7 +12,7 @@ function Get-PaseoLocalBuildRoot {
 }
 
 function Get-PaseoLocalRuntimeRoot {
-    return Join-Path (Get-PaseoLocalBuildRoot) "runtime"
+    return Join-Path $env:LOCALAPPDATA "PaseoLocal\runtime"
 }
 
 function Get-PaseoLocalCurrentDirectory {
@@ -101,10 +101,12 @@ function Stop-PaseoLocal {
     $devCli = Join-Path $repoRoot "packages\cli\src\index.ts"
     Push-Location $repoRoot
     try {
-        & npx tsx $devCli daemon stop --home $paseoHome --json --force *> $null
-        # Native command failures do not reliably throw in Windows PowerShell.
-        # A nonzero exit is acceptable here because we kill only known Paseo
-        # executable paths below as a final cleanup.
+        try {
+            & npx tsx $devCli daemon stop --home $paseoHome --json --force *> $null
+        } catch {
+            # The final executable-path cleanup below is authoritative. A stale
+            # or already-stopped daemon should not abort the runtime swap.
+        }
     } finally {
         Pop-Location
     }
