@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+import { resolveNpmInvocation } from "./build-package-runtime.mjs";
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -13,8 +12,14 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-run(npm, ["--prefix", "../..", "run", "build:server:clean"]);
-run(npm, ["run", "build:main"]);
+const npmInvocation = resolveNpmInvocation();
+
+function runNpm(args) {
+  run(npmInvocation.command, [...npmInvocation.argsPrefix, ...args]);
+}
+
+runNpm(["--prefix", "../..", "run", "build:server:clean"]);
+runNpm(["run", "build:main"]);
 run(process.execPath, ["scripts/write-local-build-info.mjs"]);
 
 const builderArgs = ["exec", "--", "electron-builder", "--config", "electron-builder.yml"];
@@ -23,4 +28,4 @@ if (process.env.PASEO_LOCAL_BUILD_COMMIT?.trim()) {
 }
 builderArgs.push(...process.argv.slice(2));
 
-run(npm, builderArgs);
+runNpm(builderArgs);
