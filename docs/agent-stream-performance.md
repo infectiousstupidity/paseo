@@ -59,6 +59,27 @@ So arrival sets a _target_ and the reveal rate is derived from the backlog inste
   stale. A new field on `StreamLayoutItem` must be added to `areLayoutItemsEquivalent`, or sharing
   silently stops.
 
+## 2026-10 bounded-history identity investigation
+
+Issue #4816 reported work proportional to loaded history on every live-head update. On current code, the
+broad claim no longer reproduces: fully revealed history already preserves committed-history and layout
+identity across head-only updates. The remaining identity bug was narrower: when `historyStart > 0`,
+`buildAgentStreamRenderModel` created a fresh `tail.slice(historyStart)` on every tick, which invalidated
+the existing identity-keyed ordering and layout caches.
+
+A temporary Node 22 microbenchmark on a GitHub-hosted runner ran 200 head-only updates against the real
+stream model and layout helpers. Before the fix, both a 20-item recent window in a 2,000-item timeline and
+a 1,000-item partially revealed window reused history/layout identity on 0/200 ticks. After caching the
+rendered tail by source-tail identity plus `historyStart`, both reused identity on 200/200 ticks. Median
+model+layout time fell from 0.056ms to 0.009ms for the 20-item window and from 0.292ms to 0.058ms for the
+1,000-item window. These are helper-level timings, not React commit or end-to-end UI latency measurements.
+
+After that fix, the remaining measured pure-JS scans are small on the normal recent-history window. On a
+2,000-item loaded timeline with 20 mounted items, the full-history Chat outline scan and history-boundary
+lookup were about 0.023ms and 0.020ms median respectively. With all 2,000 items revealed, turn timing and
+visible-message Set construction were about 0.102ms and 0.106ms median. Treat those as separate follow-up
+targets only if React/browser profiling shows they are material.
+
 ## Measuring
 
 - **Smoothness (user-perceived):** `packages/app/e2e/browser/agent-stream-smoothness.spec.ts`, gated behind `PASEO_AGENT_STREAM_PERF_E2E=1`. Drives the mock provider's `bursty-stream` model and reports coefficient of variation of characters painted per frame (smoothness) plus p95 gap between visible updates (stalls). Both numbers are needed: a stalled stream is perfectly smooth.
