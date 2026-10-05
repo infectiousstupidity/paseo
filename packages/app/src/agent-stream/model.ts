@@ -47,6 +47,7 @@ const EMPTY_AUXILIARY: StreamRenderAuxiliary = {
   turnFooter: null,
 };
 
+const renderedTailCache = new WeakMap<StreamItem[], Map<number, StreamItem[]>>();
 const orderedTailCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const orderedHeadCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const splitHistoryCache = new WeakMap<
@@ -57,6 +58,24 @@ const turnTimingCache = new WeakMap<
   StreamItem[],
   WeakMap<StreamItem[], Map<string, StreamTurnTiming>>
 >();
+
+function getRenderedTail(tail: StreamItem[], historyStart: number | undefined): StreamItem[] {
+  if (!historyStart) {
+    return tail;
+  }
+  let cachedByStart = renderedTailCache.get(tail);
+  if (!cachedByStart) {
+    cachedByStart = new Map();
+    renderedTailCache.set(tail, cachedByStart);
+  }
+  const cached = cachedByStart.get(historyStart);
+  if (cached) {
+    return cached;
+  }
+  const rendered = tail.slice(historyStart);
+  cachedByStart.set(historyStart, rendered);
+  return rendered;
+}
 
 function getOrderedItems(params: {
   cache: WeakMap<StreamItem[], Map<string, StreamItem[]>>;
@@ -163,7 +182,7 @@ export function buildAgentStreamRenderModel(
     isMobileBreakpoint: input.isMobileBreakpoint,
   });
   const orderingCacheKey = `${input.platform}:${input.isMobileBreakpoint}`;
-  const renderedTail = input.historyStart ? input.tail.slice(input.historyStart) : input.tail;
+  const renderedTail = getRenderedTail(input.tail, input.historyStart);
   const orderedTail = getOrderedItems({
     cache: orderedTailCache,
     source: renderedTail,
