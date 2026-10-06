@@ -880,7 +880,7 @@ function directoryEntityForRow(row: ReplicaRow): keyof DirectoryCheckpoint | und
 
 export class ReplicaCache {
   private readonly activeServerIds = new Set<string>();
-  private readonly hostRevisions = new Map<string, number>();
+  private readonly hostGenerations = new Map<string, number>();
   private readonly storedRows = new Map<string, Map<string, ReplicaRow>>();
   private readonly hostBytes = new Map<string, number>();
   private readonly hostWriteOrder = new Map<string, true>();
@@ -891,7 +891,7 @@ export class ReplicaCache {
   private readonly maxBytes: number;
   private totalBytes = 0;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
-  private writeQueue: Promise<void> = Promise.resolve();
+  private storeQueue: Promise<void> = Promise.resolve();
   private preparePromise: Promise<void> | null = null;
   private storedIndexPromise: Promise<void> | null = null;
 
@@ -994,20 +994,16 @@ export class ReplicaCache {
     kinds: readonly ReplicaRowKind[],
     ids?: readonly string[],
   ): Promise<ReplicaRow[]> {
+    const generation = this.hostGenerations.get(serverId) ?? 0;
     if (!this.activeServerIds.has(serverId)) return [];
     try {
-      await this.prepareStore();
-      while (this.activeServerIds.has(serverId)) {
-        // A read may only answer from rows the store already holds, so it waits for this host's
-        // accepted commits to land. A store that rejects them will keep rejecting them: fail closed
-        // rather than re-attempt the write on every pass. A write rejected for another host leaves
-        // this host's stored rows readable.
-        if (!(await this.syncPending()) && this.hasPendingHostChanges(serverId)) return [];
-        const revision = this.hostRevisions.get(serverId) ?? 0;
-        const rows = await this.rowStore.read(serverId, kinds, ids);
-        if (this.canReadHostRevision(serverId, revision)) return rows;
-      }
-      return [];
+      const rows = await this.queueStoreOperation(async () => {
+        await this.prepareStore();
+        if (!this.activeServerIds.has(serverId)) return [];
+        const storedRows = await this.rowStore.read(serverId, kinds, ids);
+        return this.overlayPendingRows(serverId, kinds, ids, storedRows);
+      });
+      return this.isCurrentHostGeneration(serverId, generation) ? rows : [];
     } catch {
       return [];
     }
@@ -1090,7 +1086,6 @@ export class ReplicaCache {
   ): void {
     if (!this.activeServerIds.has(serverId)) return;
     if (this.invalidatedHosts.has(serverId)) return;
-    this.advanceHostRevision(serverId);
     for (const mutation of mutations) {
       if (mutation.type === "delete") {
         this.queueEntityDelete(serverId, mutation.kind, mutation.id);
@@ -1116,7 +1111,6 @@ export class ReplicaCache {
 
   replaceDirectoryBaseline(serverId: string, directory: CachedDirectory): void {
     if (!this.activeServerIds.has(serverId)) return;
-    this.advanceHostRevision(serverId);
     // Replacing the directory must not discard independently accepted timeline changes.
     for (const [key, row] of this.pendingUpserts) {
       if (row.serverId === serverId && row.kind !== "timeline") this.pendingUpserts.delete(key);
@@ -1148,7 +1142,6 @@ export class ReplicaCache {
   commitTimeline(serverId: string, agentId: string, timeline: CachedTimeline): void {
     if (!this.activeServerIds.has(serverId)) return;
     if (timeline.agentId !== agentId) throw new Error("Timeline cache key does not match payload");
-    this.advanceHostRevision(serverId);
     this.queueUpsert({ serverId, kind: "timeline", id: agentId, value: timeline });
     this.schedulePersist();
   }
@@ -1157,7 +1150,7 @@ export class ReplicaCache {
     const next = new Set(serverIds);
     const removed = [...this.activeServerIds].filter((serverId) => !next.has(serverId));
     const added = [...next].filter((serverId) => !this.activeServerIds.has(serverId));
-    for (const serverId of [...removed, ...added]) this.advanceHostRevision(serverId);
+    for (const serverId of [...removed, ...added]) this.advanceHostGeneration(serverId);
     this.activeServerIds.clear();
     for (const serverId of next) this.activeServerIds.add(serverId);
     for (const serverId of removed) {
@@ -1169,8 +1162,9 @@ export class ReplicaCache {
   }
 
   reconcileServerId(oldServerId: string, newServerId: string): void {
-    this.advanceHostRevision(oldServerId);
-    this.advanceHostRevision(newServerId);
+    for (const serverId of new Set([oldServerId, newServerId])) {
+      this.advanceHostGeneration(serverId);
+    }
     const rows = this.storedRows.get(oldServerId);
     if (rows) {
       const newRows = this.storedRows.get(newServerId) ?? new Map<string, ReplicaRow>();
@@ -1198,7 +1192,7 @@ export class ReplicaCache {
   /** Resolves to whether every pending change reached the store. */
   private async syncPending(): Promise<boolean> {
     const persisted = await this.persist();
-    await this.writeQueue.catch(() => undefined);
+    await this.storeQueue.catch(() => undefined);
     return persisted;
   }
 
@@ -1212,34 +1206,27 @@ export class ReplicaCache {
       this.persistTimer = null;
     }
     if (!this.hasPendingChanges()) return true;
-    const write = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        const pending = this.drainPendingChanges();
-        try {
-          await this.prepareStore();
-          await this.ensureStoredIndex();
-          const changes = this.materializePendingChanges(pending);
-          const { changes: boundedChanges, evicted } = await this.fitChangesToBudget(changes);
-          if (boundedChanges.upserts.length > 0 || boundedChanges.deletes.length > 0) {
-            await this.rowStore.apply(boundedChanges);
-            this.applyStoredChanges(boundedChanges);
-          }
-          for (const serverId of pending.baselines) {
-            if (!evicted.has(serverId)) this.invalidatedHosts.delete(serverId);
-          }
-        } catch {
-          this.restorePendingChanges(pending);
-          if (this.hasPendingChanges()) this.schedulePersist();
-          return false;
+    const write = this.queueStoreOperation(async () => {
+      const pending = this.drainPendingChanges();
+      try {
+        await this.prepareStore();
+        await this.ensureStoredIndex();
+        const changes = this.materializePendingChanges(pending);
+        const { changes: boundedChanges, evicted } = await this.fitChangesToBudget(changes);
+        if (boundedChanges.upserts.length > 0 || boundedChanges.deletes.length > 0) {
+          await this.rowStore.apply(boundedChanges);
+          this.applyStoredChanges(boundedChanges);
         }
-        return true;
-      });
-    // The queue only sequences writes; every consumer decides for itself what a failure means.
-    this.writeQueue = write.then(
-      () => undefined,
-      () => undefined,
-    );
+        for (const serverId of pending.baselines) {
+          if (!evicted.has(serverId)) this.invalidatedHosts.delete(serverId);
+        }
+      } catch {
+        this.restorePendingChanges(pending);
+        if (this.hasPendingChanges()) this.schedulePersist();
+        return false;
+      }
+      return true;
+    });
     return write;
   }
 
@@ -1265,27 +1252,47 @@ export class ReplicaCache {
     );
   }
 
-  private canReadHostRevision(serverId: string, revision: number): boolean {
+  private overlayPendingRows(
+    serverId: string,
+    kinds: readonly ReplicaRowKind[],
+    ids: readonly string[] | undefined,
+    storedRows: ReplicaRow[],
+  ): ReplicaRow[] {
+    const acceptedKinds = new Set(kinds);
+    const acceptedIds = ids ? new Set(ids) : null;
+    const matchesRequest = (row: ReplicaRowKey): boolean =>
+      row.serverId === serverId &&
+      acceptedKinds.has(row.kind) &&
+      (acceptedIds === null || acceptedIds.has(row.id));
+    const visibleRows = new Map<string, ReplicaRow>();
+    for (const row of storedRows) {
+      if (matchesRequest(row)) visibleRows.set(rowKey(row), row);
+    }
+    if (this.pendingBaselines.has(serverId)) {
+      for (const [key, row] of visibleRows) {
+        if (row.kind !== "timeline") visibleRows.delete(key);
+      }
+    }
+    for (const row of this.pendingDeletes.values()) {
+      if (matchesRequest(row)) visibleRows.delete(rowKey(row));
+    }
+    for (const upsert of this.pendingUpserts.values()) {
+      if (!matchesRequest(upsert)) continue;
+      const row = this.materializeUpsert(upsert);
+      if (row) visibleRows.set(rowKey(row), row);
+      else visibleRows.delete(rowKey(upsert));
+    }
+    return [...visibleRows.values()];
+  }
+
+  private isCurrentHostGeneration(serverId: string, generation: number): boolean {
     return (
-      this.activeServerIds.has(serverId) &&
-      (this.hostRevisions.get(serverId) ?? 0) === revision &&
-      !this.hasPendingHostChanges(serverId)
+      this.activeServerIds.has(serverId) && (this.hostGenerations.get(serverId) ?? 0) === generation
     );
   }
 
-  private hasPendingHostChanges(serverId: string): boolean {
-    if (this.pendingBaselines.has(serverId)) return true;
-    for (const row of this.pendingUpserts.values()) {
-      if (row.serverId === serverId) return true;
-    }
-    for (const row of this.pendingDeletes.values()) {
-      if (row.serverId === serverId) return true;
-    }
-    return false;
-  }
-
-  private advanceHostRevision(serverId: string): void {
-    this.hostRevisions.set(serverId, (this.hostRevisions.get(serverId) ?? 0) + 1);
+  private advanceHostGeneration(serverId: string): void {
+    this.hostGenerations.set(serverId, (this.hostGenerations.get(serverId) ?? 0) + 1);
   }
 
   private drainPendingChanges(): PendingReplicaChanges {
@@ -1529,16 +1536,21 @@ export class ReplicaCache {
     return this.storedIndexPromise;
   }
 
+  private queueStoreOperation<Result>(operation: () => Promise<Result>): Promise<Result> {
+    // Reads join the same sequence as writes so they cannot observe a store transaction mid-flight.
+    const queued = this.storeQueue.catch(() => undefined).then(operation);
+    this.storeQueue = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  }
+
   private queueOperation(operation: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await this.prepareStore();
-        await operation();
-        return undefined;
-      })
-      .catch(() => undefined);
-    return this.writeQueue;
+    return this.queueStoreOperation(async () => {
+      await this.prepareStore();
+      await operation();
+    }).catch(() => undefined);
   }
 
   private schedulePersist(): void {
