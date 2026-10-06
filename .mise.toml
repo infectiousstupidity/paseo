@@ -10,3 +10,6 @@ _.path = [
   '{{ [vars.android_sdk_root, "platform-tools"] | join_path }}',
   '{{ [vars.android_sdk_root, "emulator"] | join_path }}',
 ]
+
+[tools]
+node = "24.20.0"
