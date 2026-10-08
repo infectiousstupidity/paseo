@@ -804,19 +804,21 @@ describe("ImportSessionSheet", () => {
   });
 
   it("only requests the selected provider after changing the search", async () => {
-    const fetchRecentProviderSessions = vi.fn(async (options: { providers?: string[] } | undefined) => {
-      const provider = options?.providers?.[0] ?? "claude";
-      return {
-        requestId: `recent-${provider}`,
-        entries: [
-          createProviderSessionEntry({
-            providerId: provider,
-            providerHandleId: `${provider}-session`,
-            title: `Session ${provider}`,
-          }),
-        ],
-      };
-    });
+    const fetchRecentProviderSessions = vi.fn(
+      async (options: { providers?: string[] } | undefined) => {
+        const provider = options?.providers?.[0] ?? "claude";
+        return {
+          requestId: `recent-${provider}`,
+          entries: [
+            createProviderSessionEntry({
+              providerId: provider,
+              providerHandleId: `${provider}-session`,
+              title: `Session ${provider}`,
+            }),
+          ],
+        };
+      },
+    );
     renderSheet(
       createRecentSessionsClient(fetchRecentProviderSessions, vi.fn()),
       {

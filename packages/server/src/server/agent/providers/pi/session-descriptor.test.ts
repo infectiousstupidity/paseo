@@ -279,7 +279,13 @@ test("Pi search matches title, prompt previews and cwd names during scanning", a
   const records = [
     { id: "title", cwd: path.join(root, "plain"), title: "Needle title", prompt: "other" },
     { id: "first", cwd: path.join(root, "plain"), title: null, prompt: "Needle first prompt" },
-    { id: "last", cwd: path.join(root, "plain"), title: null, prompt: "other", last: "Needle final" },
+    {
+      id: "last",
+      cwd: path.join(root, "plain"),
+      title: null,
+      prompt: "other",
+      last: "Needle final",
+    },
     { id: "cwd", cwd: path.join(root, "needle-project"), title: null, prompt: "other" },
     { id: "unrelated", cwd: path.join(root, "plain"), title: "Unrelated", prompt: "other" },
   ];
@@ -293,7 +299,13 @@ test("Pi search matches title, prompt previews and cwd names during scanning", a
         message: { role: "user", content: record.prompt },
       },
       ...(record.last
-        ? [{ type: "message", timestamp: "2026-06-01T00:00:02Z", message: { role: "user", content: record.last } }]
+        ? [
+            {
+              type: "message",
+              timestamp: "2026-06-01T00:00:02Z",
+              message: { role: "user", content: record.last },
+            },
+          ]
         : []),
     ];
     const file = path.join(sessionDir, `${record.id}.jsonl`);
@@ -317,18 +329,25 @@ test("Pi search finds an older match beyond 500 newer unrelated sessions", async
   const sessionDir = path.join(root, "sessions");
   await mkdir(sessionDir);
   const matchingFile = path.join(sessionDir, "older-match.jsonl");
+  const olderRecords = [
+    { type: "session", id: "older", cwd: root, timestamp: "2026-01-01T00:00:00Z" },
+    { type: "session_info", name: "Important needle" },
+  ];
   await writeFile(
     matchingFile,
-    `${JSON.stringify({ type: "session", id: "older", cwd: root, timestamp: "2026-01-01T00:00:00Z" })}\n${JSON.stringify({ type: "session_info", name: "Important needle" })}\n`,
+    `${olderRecords.map((record) => JSON.stringify(record)).join("\n")}\n`,
   );
   await utimes(matchingFile, new Date("2026-01-01"), new Date("2026-01-01"));
   await Promise.all(
     Array.from({ length: 510 }, async (_, index) => {
       const file = path.join(sessionDir, `recent-${index}.jsonl`);
-      await writeFile(
-        file,
-        `${JSON.stringify({ type: "session", id: `recent-${index}`, cwd: root, timestamp: "2026-06-01T00:00:00Z" })}\n`,
-      );
+      const header = {
+        type: "session",
+        id: `recent-${index}`,
+        cwd: root,
+        timestamp: "2026-06-01T00:00:00Z",
+      };
+      await writeFile(file, `${JSON.stringify(header)}\n`);
       await utimes(file, new Date("2026-06-01"), new Date("2026-06-01"));
     }),
   );
