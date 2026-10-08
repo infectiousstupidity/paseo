@@ -66,4 +66,4 @@ Opening or searching **Import session** asks for only the useful sessions/provid
 - [Task 03](./pi-import-03-descriptor-cache.md)
 - [Overview](../plans/pi-import-session-performance.md)
 
-Depends on Tasks 01–02. Task 03 is optional if its performance measurement does not justify caching. Do not broaden these Pi-specific fixes into a provider-wide API redesign.
+Task 04 has landed independently of the proposed Tasks 01–02, with focused CI/user-corpus timing acceptance still open. Task 03 remains optional if measured repeat scans justify caching. Do not rerun this slice as though unimplemented or broaden these Pi-specific fixes into a provider-wide API redesign.
