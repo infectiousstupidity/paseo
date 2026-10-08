@@ -803,6 +803,106 @@ describe("ImportSessionSheet", () => {
     screen.getByText("Session codex");
   });
 
+  it("only requests the selected provider after changing the search", async () => {
+    const fetchRecentProviderSessions = vi.fn(async (options: { providers?: string[] } | undefined) => {
+      const provider = options?.providers?.[0] ?? "claude";
+      return {
+        requestId: `recent-${provider}`,
+        entries: [
+          createProviderSessionEntry({
+            providerId: provider,
+            providerHandleId: `${provider}-session`,
+            title: `Session ${provider}`,
+          }),
+        ],
+      };
+    });
+    renderSheet(
+      createRecentSessionsClient(fetchRecentProviderSessions, vi.fn()),
+      {
+        snapshot: {
+          supportsSnapshot: true,
+          entries: [createSnapshotEntry("pi"), createSnapshotEntry("claude")],
+        },
+      },
+    );
+    await screen.findByText("Session pi");
+    await screen.findByText("Session claude");
+
+    fireEvent.click(screen.getByTestId("import-session-filter-trigger"));
+    fireEvent.click(screen.getByTestId("import-session-filter-pi"));
+    fetchRecentProviderSessions.mockClear();
+    fireEvent.change(screen.getByTestId("import-session-search"), {
+      target: { value: "new search" },
+    });
+
+    await waitFor(() =>
+      expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
+        cwd: "/repo/paseo",
+        providers: ["pi"],
+        limit: 15,
+        query: "new search",
+      }),
+    );
+    expect(
+      fetchRecentProviderSessions.mock.calls.every(([request]) =>
+        request?.providers?.includes("pi"),
+      ),
+    ).toBe(true);
+    expect(screen.queryByText("Session claude")).toBeNull();
+
+    fetchRecentProviderSessions.mockClear();
+    fireEvent.click(screen.getByTestId("import-session-filter-trigger"));
+    fireEvent.click(screen.getByTestId("import-session-filter-all"));
+    await waitFor(() =>
+      expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
+        cwd: "/repo/paseo",
+        providers: ["claude"],
+        limit: 15,
+        query: "new search",
+      }),
+    );
+    screen.getByText("Session claude");
+  });
+
+  it("keeps session queries and refreshes isolated per daemon host", async () => {
+    applyHostMocks({
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const fetchHostOne = vi.fn(async () => ({
+      requestId: "host-one",
+      entries: [createProviderSessionEntry({ providerId: "pi", title: "Host one session" })],
+    }));
+    const fetchHostTwo = vi.fn(async () => ({
+      requestId: "host-two",
+      entries: [createProviderSessionEntry({ providerId: "pi", title: "Host two session" })],
+    }));
+    const importAgent = vi.fn();
+    const sheet = (serverId: string, fetchSessions: typeof fetchHostOne) => (
+      <QueryClientProvider client={queryClient}>
+        <ImportSessionSheet
+          visible
+          serverId={serverId}
+          client={createRecentSessionsClient(fetchSessions, importAgent)}
+          cwd="/repo/paseo"
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+
+    const view = render(sheet("host-one", fetchHostOne));
+    await screen.findByText("Host one session");
+    view.rerender(sheet("host-two", fetchHostTwo));
+    await screen.findByText("Host two session");
+    expect(fetchHostTwo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Host one session")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("import-session-refresh"));
+    await waitFor(() => expect(fetchHostTwo).toHaveBeenCalledTimes(2));
+    expect(fetchHostOne).toHaveBeenCalledTimes(1);
+  });
+
   it("does not render filter badges when only one importable provider is enabled", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-codex",

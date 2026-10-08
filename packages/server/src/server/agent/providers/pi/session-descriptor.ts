@@ -88,18 +88,24 @@ export async function listPiImportableSessions(
       }
     : null;
   const limit = options.limit ?? 20;
+  const query = options.query?.trim().toLowerCase();
   const ranked = await rankSessionFilesByMtime(files);
   const candidateLimit = Math.min(
     options.scanLimit ?? Math.max(limit * IMPORT_CANDIDATE_OVERSCAN, IMPORT_CANDIDATE_MIN),
     500,
   );
+  // Pi applies search to each descriptor as it scans. A fixed 500-file window
+  // can silently hide older matching sessions, so search continues until the
+  // requested number of matches is found or all candidates are inspected.
   const candidates =
-    options.scanLimit === undefined && matchesCwd ? ranked : ranked.slice(0, candidateLimit);
+    query || (options.scanLimit === undefined && matchesCwd)
+      ? ranked
+      : ranked.slice(0, candidateLimit);
   const sessions: ImportableProviderSession[] = [];
 
   for (const entry of candidates) {
     const session = await readPiImportableSession(entry, matchesCwd);
-    if (!session) continue;
+    if (!session || (query && !matchesPiSessionQuery(session, query))) continue;
     sessions.push(session);
     if (sessions.length >= limit) {
       break;
@@ -109,6 +115,16 @@ export async function listPiImportableSessions(
   return sessions.sort(
     (left, right) => right.lastActivityAt.getTime() - left.lastActivityAt.getTime(),
   );
+}
+
+function matchesPiSessionQuery(session: ImportableProviderSession, query: string): boolean {
+  const cwdBasename = path.posix.basename(session.cwd.replaceAll("\\", "/"));
+  return [
+    session.title,
+    session.firstPromptPreview,
+    session.lastPromptPreview,
+    cwdBasename,
+  ].some((value) => value?.toLowerCase().includes(query));
 }
 
 export async function readPiImportSessionConfig(filePath: string): Promise<PiImportSessionConfig> {

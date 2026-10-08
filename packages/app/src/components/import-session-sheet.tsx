@@ -74,6 +74,7 @@ type RecentSessionsResponse = Awaited<
 type SessionsQueryKey = ReadonlyArray<string | number | null>;
 
 function buildSessionsQueryKey(input: {
+  serverId: string | null;
   cwd: string | null;
   query: string;
   limit: number;
@@ -81,6 +82,7 @@ function buildSessionsQueryKey(input: {
 }): SessionsQueryKey {
   return [
     "recent-provider-sessions",
+    input.serverId,
     input.cwd,
     input.query,
     input.limit,
@@ -102,17 +104,19 @@ interface SessionsQueryConfig {
 function buildSessionsQueriesConfig(args: {
   providersToFetch: AgentProvider[] | null;
   visible: boolean;
+  serverId: string | null;
   client: RecentProviderSessionsClient | null;
   cwd: string | null;
   query: string;
   limit: number;
   hostDisconnectedMessage?: string;
 }): SessionsQueryConfig[] {
-  const { providersToFetch, visible, client, cwd, query, limit, hostDisconnectedMessage } = args;
+  const { providersToFetch, visible, serverId, client, cwd, query, limit, hostDisconnectedMessage } =
+    args;
   if (providersToFetch === null) return [];
   const enabled = visible && Boolean(client);
   return providersToFetch.map((provider) => ({
-    queryKey: buildSessionsQueryKey({ cwd, query, limit, provider }),
+    queryKey: buildSessionsQueryKey({ serverId, cwd, query, limit, provider }),
     enabled,
     retry: false as const,
     placeholderData: keepPreviousData,
@@ -462,20 +466,31 @@ export function ImportSessionSheet({
     [snapshotEntries],
   );
 
-  const sessionsQueryRoot = useMemo(() => ["recent-provider-sessions", scopeCwd], [scopeCwd]);
+  const sessionsQueryRoot = useMemo(
+    () => ["recent-provider-sessions", serverId, scopeCwd],
+    [serverId, scopeCwd],
+  );
+  const activeProvidersToFetch = useMemo(
+    () =>
+      selectedProvider === ALL_FILTER_VALUE || !providersToFetch?.includes(selectedProvider)
+        ? providersToFetch
+        : providersToFetch.filter((provider) => provider === selectedProvider),
+    [providersToFetch, selectedProvider],
+  );
 
   const queriesConfig = useMemo(
     () =>
       buildSessionsQueriesConfig({
-        providersToFetch,
+        providersToFetch: activeProvidersToFetch,
         visible,
+        serverId,
         client,
         cwd: scopeCwd,
         query,
         limit: pageLimit,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
       }),
-    [providersToFetch, visible, client, scopeCwd, query, pageLimit, t],
+    [activeProvidersToFetch, visible, serverId, client, scopeCwd, query, pageLimit, t],
   );
 
   const queries = useQueries({ queries: queriesConfig });
@@ -643,8 +658,8 @@ export function ImportSessionSheet({
   );
 
   const providerErrorRows = useMemo(
-    () => collectProviderErrorRows(providersToFetch, queries, providerLabelById),
-    [queries, providersToFetch, providerLabelById],
+    () => collectProviderErrorRows(activeProvidersToFetch, queries, providerLabelById),
+    [queries, activeProvidersToFetch, providerLabelById],
   );
 
   // Every query settles, errors included, so this stops turning (#2512).
@@ -657,10 +672,16 @@ export function ImportSessionSheet({
   const handleRetryProvider = useCallback(
     (provider: string) => {
       void queryClient.refetchQueries({
-        queryKey: buildSessionsQueryKey({ cwd: scopeCwd, query, limit: pageLimit, provider }),
+        queryKey: buildSessionsQueryKey({
+          serverId,
+          cwd: scopeCwd,
+          query,
+          limit: pageLimit,
+          provider,
+        }),
       });
     },
-    [pageLimit, query, queryClient, scopeCwd],
+    [pageLimit, query, queryClient, scopeCwd, serverId],
   );
 
   const handleShowAll = useCallback(() => setIsShowingAllDirectories(true), []);

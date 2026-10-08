@@ -257,6 +257,8 @@ export type ImportablePersistedAgentQueryOptions = ListImportableSessionsOptions
    * built-in importable allowlist + enabled + non-derived rules.
    */
   providerFilter?: Set<string>;
+  /** Pi filters during scanning; cap only the number of Pi matches, not the files searched. */
+  piSearchLimit?: number;
 };
 
 export interface ManagedImportableProviderSession extends ImportableProviderSession {
@@ -1004,7 +1006,10 @@ export class AgentManager {
         try {
           const sessions = await withTimeout(
             client.listImportableSessions!({
-              limit: options?.limit,
+              limit:
+                provider === "pi" && options?.query
+                  ? (options.piSearchLimit ?? options.limit)
+                  : options?.limit,
               query: options?.query,
               scanLimit: options?.scanLimit,
               cwd: options?.cwd,

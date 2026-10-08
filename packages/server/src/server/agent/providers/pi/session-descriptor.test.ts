@@ -272,6 +272,76 @@ test("Pi directory discovery keeps concurrent readdir operations bounded", async
   expect(observedScan.peakStats).toBeLessThanOrEqual(32);
 });
 
+test("Pi search matches title, prompt previews and cwd names during scanning", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-search-fields-"));
+  const sessionDir = path.join(root, "sessions");
+  await mkdir(sessionDir);
+  const records = [
+    { id: "title", cwd: path.join(root, "plain"), title: "Needle title", prompt: "other" },
+    { id: "first", cwd: path.join(root, "plain"), title: null, prompt: "Needle first prompt" },
+    { id: "last", cwd: path.join(root, "plain"), title: null, prompt: "other", last: "Needle final" },
+    { id: "cwd", cwd: path.join(root, "needle-project"), title: null, prompt: "other" },
+    { id: "unrelated", cwd: path.join(root, "plain"), title: "Unrelated", prompt: "other" },
+  ];
+  for (const [index, record] of records.entries()) {
+    const messages = [
+      { type: "session", id: record.id, cwd: record.cwd, timestamp: "2026-06-01T00:00:00Z" },
+      ...(record.title ? [{ type: "session_info", name: record.title }] : []),
+      {
+        type: "message",
+        timestamp: "2026-06-01T00:00:01Z",
+        message: { role: "user", content: record.prompt },
+      },
+      ...(record.last
+        ? [{ type: "message", timestamp: "2026-06-01T00:00:02Z", message: { role: "user", content: record.last } }]
+        : []),
+    ];
+    const file = path.join(sessionDir, `${record.id}.jsonl`);
+    await writeFile(file, `${messages.map((message) => JSON.stringify(message)).join("\n")}\n`);
+    await utimes(file, new Date(2026, 5, index + 1), new Date(2026, 5, index + 1));
+  }
+
+  const matches = await listPiImportableSessions({
+    sessionDir,
+    query: "NEEDLE",
+    limit: 10,
+    scanLimit: 2,
+  });
+  expect(matches.map((session) => path.basename(session.providerHandleId)).sort()).toEqual([
+    "cwd.jsonl", "first.jsonl", "last.jsonl", "title.jsonl",
+  ]);
+});
+
+test("Pi search finds an older match beyond 500 newer unrelated sessions", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-search-older-"));
+  const sessionDir = path.join(root, "sessions");
+  await mkdir(sessionDir);
+  const matchingFile = path.join(sessionDir, "older-match.jsonl");
+  await writeFile(
+    matchingFile,
+    `${JSON.stringify({ type: "session", id: "older", cwd: root, timestamp: "2026-01-01T00:00:00Z" })}\n${JSON.stringify({ type: "session_info", name: "Important needle" })}\n`,
+  );
+  await utimes(matchingFile, new Date("2026-01-01"), new Date("2026-01-01"));
+  await Promise.all(
+    Array.from({ length: 510 }, async (_, index) => {
+      const file = path.join(sessionDir, `recent-${index}.jsonl`);
+      await writeFile(
+        file,
+        `${JSON.stringify({ type: "session", id: `recent-${index}`, cwd: root, timestamp: "2026-06-01T00:00:00Z" })}\n`,
+      );
+      await utimes(file, new Date("2026-06-01"), new Date("2026-06-01"));
+    }),
+  );
+
+  const sessions = await listPiImportableSessions({
+    sessionDir,
+    query: "needle",
+    limit: 1,
+    scanLimit: 500,
+  });
+  expect(sessions.map((session) => session.providerHandleId)).toEqual([matchingFile]);
+});
+
 test("Pi import config preserves the latest recorded model and thinking level", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-model-"));
   const cwd = path.join(root, "repo");

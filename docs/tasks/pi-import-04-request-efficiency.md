@@ -1,5 +1,27 @@
 # Pi import 04: Make search, overfetch, and client requests efficient
 
+Status: implemented in Paseo, subject to focused CI validation. Task 03 caching is not required.
+
+## Implementation notes
+
+- Scoped import overfetch counts only active imported sessions belonging to the
+  requested working directory. Imported handles from other directories remain
+  excluded when returned, but no longer inflate the requested page size.
+- For search, other providers retain their existing 500-candidate manager-side
+  behavior. Pi receives its own matching-result limit (page limit plus Pi imports
+  in scope) and searches title, first/last prompt preview, and cwd basename
+  **during** descriptor scanning.
+- Pi search inspects ranked candidates until it finds enough matching results or
+  exhausts the history; the old 500-candidate cutoff is not used for Pi search.
+  This preserves older matches instead of misleadingly reporting none. Rare
+  uncached searches can still be slow; use Task 03 only if real measurements
+  show that repeated reads remain a significant cost.
+- The selected provider determines which daemon queries are active. **All**
+  still fetches enabled providers and reports their individual errors.
+- React Query keys now include `serverId`; Refresh, retry, and post-import
+  invalidation target the corresponding host and directory.
+- No new dependencies, database, background crawler, or protocol changes.
+
 ## Outcome
 
 Opening or searching **Import session** asks for only the useful sessions/providers, returns relevant older Pi sessions reliably, and doesn't repeat expensive work due to unrelated imported history.

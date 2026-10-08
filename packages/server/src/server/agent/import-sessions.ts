@@ -127,15 +127,20 @@ export async function listImportableProviderSessions(
     agentManager,
     agentStorage,
     providerFilter,
+    request.cwd,
   );
   const importedHandles = importedSessions.handles;
   const query = normalizeImportSessionQuery(request.query);
-  const listingLimit = query ? IMPORT_SESSION_SEARCH_SCAN_LIMIT : limit + importedSessions.count;
+  const scopedLimit = limit + importedSessions.count;
+  const piSearchLimit = limit + importedSessions.piCount;
+  // Other providers still rely on manager-side query filtering. Pi searches while
+  // scanning, so it only needs enough matches to fill the requested page.
+  const listingLimit = query ? IMPORT_SESSION_SEARCH_SCAN_LIMIT : scopedLimit;
 
   const listing = await agentManager.listImportableSessions({
     limit: listingLimit,
     ...(query ? { query } : {}),
-    ...(query ? { scanLimit: IMPORT_SESSION_SEARCH_SCAN_LIMIT } : {}),
+    ...(query ? { scanLimit: IMPORT_SESSION_SEARCH_SCAN_LIMIT, piSearchLimit } : {}),
     providerFilter,
     cwd: request.cwd,
   });
@@ -344,18 +349,37 @@ async function collectImportedProviderSessions(
   agentManager: Pick<AgentManager, "listAgents">,
   agentStorage: Pick<AgentStorage, "list">,
   providerFilter: Set<string> | undefined,
-): Promise<{ handles: Set<string>; count: number }> {
+  requestedCwd: string | undefined,
+): Promise<{ handles: Set<string>; count: number; piCount: number }> {
   const handles = new Set<string>();
   const sessions = new Set<string>();
+  const piSessions = new Set<string>();
+  const matchesCwd = requestedCwd ? createRealpathAwarePathMatcher(requestedCwd) : null;
+  const cwdMatches = new Map<string, boolean>();
+  const isInScope = (cwd: string | undefined): boolean => {
+    if (!matchesCwd || !cwd) return true;
+    let matches = cwdMatches.get(cwd);
+    if (matches === undefined) {
+      matches = matchesCwd(cwd);
+      cwdMatches.set(cwd, matches);
+    }
+    return matches;
+  };
   const records = await agentStorage.list();
   const storedRecordsById = new Map(records.map((record) => [record.id, record]));
 
   const collect = (
     provider: AgentProvider | StoredAgentRecord["provider"] | string,
     persistence: AgentPersistenceHandle | null | undefined,
+    cwd: string | undefined,
   ) => {
     if (!persistence || (providerFilter && !providerFilter.has(provider))) return;
-    sessions.add(toProviderSessionHandleKey(provider, persistence.sessionId));
+    if (isInScope(cwd)) {
+      const key = toProviderSessionHandleKey(provider, persistence.sessionId);
+      sessions.add(key);
+      if (provider === "pi") piSessions.add(key);
+    }
+    // Keep all handles for exclusion, including agents whose cwd has changed.
     collectProviderSessionHandleKeys(handles, provider, persistence);
   };
 
@@ -363,17 +387,17 @@ async function collectImportedProviderSessions(
     if (storedRecordsById.get(agent.id)?.archivedAt) {
       continue;
     }
-    collect(agent.provider, agent.persistence);
+    collect(agent.provider, agent.persistence, agent.cwd);
   }
 
   for (const record of records) {
     if (record.archivedAt) {
       continue;
     }
-    collect(record.provider, record.persistence);
+    collect(record.provider, record.persistence, record.cwd);
   }
 
-  return { handles, count: sessions.size };
+  return { handles, count: sessions.size, piCount: piSessions.size };
 }
 
 function toProviderSessionHandleKey(provider: string, providerHandleId: string): string {
