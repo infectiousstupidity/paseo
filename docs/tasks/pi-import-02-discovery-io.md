@@ -1,5 +1,26 @@
 # Pi import 02: Reduce directory and metadata I/O
 
+Status: implemented in Paseo. Focused regression coverage added. Runtime measurements
+on the user's actual Windows Pi history have not been collected.
+
+## Implementation notes
+
+- The default Pi project directory is an encoded working directory, but **the header cwd
+  remains authoritative**. Moved, imported, nested, aliased, or custom-root sessions can
+  live outside the directory suggested by their cwd. Directory pruning would silently
+  omit valid imports, so this slice keeps full discovery; it only bounds the I/O.
+- Directory enumerations run at most 16 concurrently; file stats at most 32 concurrently.
+- Ranked file metadata now includes size and modification time. A selected descriptor
+  reuses it when reading its tail and computing its fallback activity timestamp, instead
+  of statting the file again. Independent import/resume config reads remain unchanged.
+- Candidate descriptor reads remain serial and ranked. The optional concurrent read
+  change was deliberately omitted because no representative benchmark demonstrates
+  that its complexity would help. Caching/search improvements remain Tasks 03–04.
+- Tests cover a file stored under a misleading project folder, nested sessions, custom
+  roots and environment overrides, unscoped results, fallback timestamps, bounded
+  concurrent scans, and one-stat-per-file behavior. These are correctness/work-count
+  assertions, not elapsed-time performance claims.
+
 ## Outcome
 
 A Pi listing does not overwhelm the filesystem with unbounded stats or repeat the same stat for each parsed candidate. It discovers only the directories necessary where Pi's **actual** storage layout provides a safe scoped shortcut.

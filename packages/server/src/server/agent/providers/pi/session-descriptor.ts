@@ -1,4 +1,3 @@
-import type { Dirent } from "node:fs";
 import { open, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -21,6 +20,8 @@ const FULL_SCAN_LINE_LIMIT = 2_000;
 // Rank all discovered files cheaply, then parse only a bounded recent window.
 const IMPORT_CANDIDATE_OVERSCAN = 40;
 const IMPORT_CANDIDATE_MIN = 400;
+const DIRECTORY_READ_CONCURRENCY = 16;
+const FILE_STAT_CONCURRENCY = 32;
 
 interface PiSessionDescriptorOptions extends ListImportableSessionsOptions {
   sessionDir?: string;
@@ -62,6 +63,7 @@ interface PiSessionDescriptor {
 interface RankedSessionFile {
   file: string;
   mtime: Date;
+  size: number;
 }
 
 export interface PiImportSessionConfig {
@@ -96,7 +98,7 @@ export async function listPiImportableSessions(
   const sessions: ImportableProviderSession[] = [];
 
   for (const entry of candidates) {
-    const session = await readPiImportableSession(entry.file, matchesCwd);
+    const session = await readPiImportableSession(entry, matchesCwd);
     if (!session) continue;
     sessions.push(session);
     if (sessions.length >= limit) {
@@ -192,46 +194,71 @@ function resolveConfigPath(value: string, options: { baseDir: string; homeDir: s
 }
 
 async function walkJsonlFiles(root: string): Promise<string[]> {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch {
-    return [];
+  const pendingDirectories = [root];
+  const files: string[] = [];
+
+  // Bound concurrent readdir calls across the entire walk, including nested directories.
+  for (let index = 0; index < pendingDirectories.length; index += DIRECTORY_READ_CONCURRENCY) {
+    const directories = pendingDirectories.slice(index, index + DIRECTORY_READ_CONCURRENCY);
+    const batches = await Promise.all(
+      directories.map(async (directory) => {
+        try {
+          return await readdir(directory, { withFileTypes: true });
+        } catch {
+          return [];
+        }
+      }),
+    );
+
+    for (let offset = 0; offset < directories.length; offset += 1) {
+      const directory = directories[offset];
+      if (!directory) continue;
+      for (const entry of batches[offset] ?? []) {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          pendingDirectories.push(entryPath);
+        } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+          files.push(entryPath);
+        }
+      }
+    }
   }
 
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = path.join(root, entry.name);
-      if (entry.isDirectory()) {
-        return await walkJsonlFiles(entryPath);
-      }
-      return entry.isFile() && entry.name.endsWith(".jsonl") ? [entryPath] : [];
-    }),
-  );
-  return files.flat();
+  return files;
 }
 
 async function rankSessionFilesByMtime(files: string[]): Promise<RankedSessionFile[]> {
-  const ranked = await Promise.all(
-    files.map(async (file) => {
-      const mtime = await readFileMtime(file);
-      return mtime ? { file, mtime } : null;
-    }),
-  );
-  return ranked
-    .filter((entry): entry is RankedSessionFile => entry !== null)
-    .sort((left, right) => right.mtime.getTime() - left.mtime.getTime());
+  const ranked: RankedSessionFile[] = [];
+
+  // Batches bound filesystem pressure without changing the ranked-file result set.
+  for (let index = 0; index < files.length; index += FILE_STAT_CONCURRENCY) {
+    const batch = await Promise.all(
+      files.slice(index, index + FILE_STAT_CONCURRENCY).map(async (file) => {
+        try {
+          const stats = await stat(file);
+          return { file, mtime: stats.mtime, size: stats.size };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const entry of batch) {
+      if (entry) ranked.push(entry);
+    }
+  }
+
+  return ranked.sort((left, right) => right.mtime.getTime() - left.mtime.getTime());
 }
 
 async function readPiImportableSession(
-  filePath: string,
+  entry: RankedSessionFile,
   matchesCwd: ((candidate: string) => boolean) | null,
 ): Promise<ImportableProviderSession | null> {
-  const descriptor = await readPiSessionDescriptor(filePath, matchesCwd);
+  const descriptor = await readPiSessionDescriptor(entry.file, matchesCwd, entry);
   if (!descriptor) return null;
 
   return {
-    providerHandleId: filePath,
+    providerHandleId: entry.file,
     cwd: descriptor.cwd,
     title: descriptor.title,
     firstPromptPreview: normalizePromptPreview(descriptor.firstUserMessage),
@@ -245,6 +272,7 @@ async function readPiImportableSession(
 async function readPiSessionDescriptor(
   filePath: string,
   matchesCwd?: ((candidate: string) => boolean) | null,
+  rankedFile?: RankedSessionFile,
 ): Promise<PiSessionDescriptor | null> {
   const headChunk = await readHeadChunk(filePath);
   if (!headChunk) return null;
@@ -252,14 +280,18 @@ async function readPiSessionDescriptor(
   // Scoped listings can discard unrelated sessions without reading their tails.
   if (!header || (matchesCwd && !matchesCwd(header.cwd))) return null;
 
-  const tail = await readTail(filePath).catch(() => "");
+  const tail = await readTail(filePath, rankedFile?.size).catch(() => "");
   const tailInfo = parseSessionTail(tail);
   const headInfo = parseSessionHeadFromChunk(headChunk);
   const title = tailInfo.title ?? headInfo.title ?? headInfo.firstUserMessage;
   const model = tailInfo.model ?? headInfo.model;
   const thinkingOptionId = tailInfo.thinkingOptionId ?? headInfo.thinkingOptionId;
   const lastActivityAt =
-    tailInfo.lastActivityAt ?? (await readFileMtime(filePath)) ?? header.createdAt ?? new Date(0);
+    tailInfo.lastActivityAt ??
+    rankedFile?.mtime ??
+    (await readFileMtime(filePath)) ??
+    header.createdAt ??
+    new Date(0);
 
   return {
     cwd: header.cwd,
@@ -327,10 +359,10 @@ function parseSessionHeadFromChunk(chunk: string): PiSessionHead {
   return { title, firstUserMessage, model, thinkingOptionId };
 }
 
-async function readTail(filePath: string): Promise<string> {
-  const fileStats = await stat(filePath);
-  const start = Math.max(0, fileStats.size - TAIL_BYTES);
-  const length = fileStats.size - start;
+async function readTail(filePath: string, fileSize?: number): Promise<string> {
+  const size = fileSize ?? (await stat(filePath)).size;
+  const start = Math.max(0, size - TAIL_BYTES);
+  const length = size - start;
   const handle = await open(filePath, "r");
   try {
     const buffer = Buffer.alloc(length);

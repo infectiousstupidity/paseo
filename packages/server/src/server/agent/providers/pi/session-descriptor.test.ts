@@ -6,6 +6,13 @@ import { expect, test, vi } from "vitest";
 import { listPiImportableSessions, readPiImportSessionConfig } from "./session-descriptor.js";
 
 const openedSessionFiles = vi.hoisted(() => new Map<string, number>());
+const observedScan = vi.hoisted(() => ({
+  fileStats: new Map<string, number>(),
+  activeStats: 0,
+  peakStats: 0,
+  activeDirectories: 0,
+  peakDirectories: 0,
+}));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
@@ -17,6 +24,31 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         openedSessionFiles.set(file, (openedSessionFiles.get(file) ?? 0) + 1);
       }
       return fs.open(...args);
+    },
+    stat: async (...args: Parameters<typeof fs.stat>) => {
+      const file = args[0];
+      if (typeof file === "string" && file.endsWith(".jsonl")) {
+        observedScan.fileStats.set(file, (observedScan.fileStats.get(file) ?? 0) + 1);
+      }
+      observedScan.activeStats += 1;
+      observedScan.peakStats = Math.max(observedScan.peakStats, observedScan.activeStats);
+      try {
+        return await fs.stat(...args);
+      } finally {
+        observedScan.activeStats -= 1;
+      }
+    },
+    readdir: async (...args: Parameters<typeof fs.readdir>) => {
+      observedScan.activeDirectories += 1;
+      observedScan.peakDirectories = Math.max(
+        observedScan.peakDirectories,
+        observedScan.activeDirectories,
+      );
+      try {
+        return await fs.readdir(...args);
+      } finally {
+        observedScan.activeDirectories -= 1;
+      }
     },
   };
 });
@@ -60,6 +92,7 @@ test("Pi scoped listing skips transcript tails for unrelated sessions", async ()
   await writeFile(unrelatedFile, `${JSON.stringify(unrelatedHeader)}\n${" ".repeat(300_000)}\n`);
 
   openedSessionFiles.clear();
+  observedScan.fileStats.clear();
   const sessions = await listPiImportableSessions({
     sessionDir: sessionsDir,
     cwd: requestedCwd,
@@ -78,6 +111,8 @@ test("Pi scoped listing skips transcript tails for unrelated sessions", async ()
   ]);
   expect(openedSessionFiles.get(unrelatedFile)).toBe(1);
   expect(openedSessionFiles.get(requestedFile)).toBe(2);
+  expect(observedScan.fileStats.get(unrelatedFile)).toBe(1);
+  expect(observedScan.fileStats.get(requestedFile)).toBe(1);
 });
 
 test("Pi scoped listing accepts a symlink-equivalent session cwd", async () => {
@@ -146,11 +181,96 @@ test("Pi cwd filtering continues past the global candidate overscan", async () =
     }),
   );
 
+  observedScan.peakStats = 0;
   await expect(
     listPiImportableSessions({ sessionDir: sessionsDir, cwd: requestedCwd, limit: 1 }),
   ).resolves.toEqual([
     expect.objectContaining({ providerHandleId: requestedFile, cwd: requestedCwd }),
   ]);
+  expect(observedScan.peakStats).toBeLessThanOrEqual(32);
+});
+
+test("Pi scans nested and mismatched project folders in custom session roots", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-layout-"));
+  const sessionsDir = path.join(root, "custom-sessions");
+  const requestedCwd = path.join(root, "requested");
+  const otherCwd = path.join(root, "other");
+  const requestedFiles = [
+    path.join(sessionsDir, "--requested--", "requested.jsonl"),
+    path.join(sessionsDir, "--other--", "nested", "relocated.jsonl"),
+  ];
+  const otherFile = path.join(sessionsDir, "--other--", "unrelated.jsonl");
+  const files = [...requestedFiles, otherFile];
+  const cwds = [requestedCwd, requestedCwd, otherCwd];
+  for (const [index, file] of files.entries()) {
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      `${JSON.stringify({
+        type: "session",
+        id: `session-${index}`,
+        timestamp: "2026-06-01T00:00:00.000Z",
+        cwd: cwds[index],
+      })}\n`,
+    );
+    const time = new Date(2026, 5, index + 1);
+    await utimes(file, time, time);
+  }
+
+  const scoped = await listPiImportableSessions({
+    sessionDir: sessionsDir,
+    cwd: requestedCwd,
+    limit: 2,
+  });
+  expect(scoped.map((session) => session.providerHandleId)).toEqual([
+    requestedFiles[1],
+    requestedFiles[0],
+  ]);
+  expect(scoped[0]?.lastActivityAt).toEqual(new Date(2026, 5, 2));
+
+  const hostWide = await listPiImportableSessions({ sessionDir: sessionsDir, limit: 3 });
+  expect(hostWide.map((session) => session.providerHandleId)).toEqual([
+    otherFile,
+    requestedFiles[1],
+    requestedFiles[0],
+  ]);
+
+  const configured = await listPiImportableSessions({
+    cwd: requestedCwd,
+    homeDir: root,
+    env: { PI_CODING_AGENT_SESSION_DIR: sessionsDir },
+    limit: 2,
+  });
+  expect(configured.map((session) => session.providerHandleId)).toEqual([
+    requestedFiles[1],
+    requestedFiles[0],
+  ]);
+});
+
+test("Pi directory discovery keeps concurrent readdir operations bounded", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-directories-"));
+  const sessionsDir = path.join(root, "sessions");
+  const cwd = path.join(root, "repo");
+  for (let index = 0; index < 40; index += 1) {
+    const directory = path.join(sessionsDir, `project-${index}`);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, `session-${index}.jsonl`),
+      `${JSON.stringify({
+        type: "session",
+        id: `session-${index}`,
+        timestamp: "2026-06-01T00:00:00.000Z",
+        cwd,
+      })}\n`,
+    );
+  }
+
+  observedScan.peakDirectories = 0;
+  observedScan.peakStats = 0;
+  const sessions = await listPiImportableSessions({ sessionDir: sessionsDir, limit: 1 });
+  expect(sessions).toHaveLength(1);
+  expect(observedScan.peakDirectories).toBeLessThanOrEqual(16);
+  expect(observedScan.peakStats).toBeLessThanOrEqual(32);
 });
 
 test("Pi import config preserves the latest recorded model and thinking level", async () => {
