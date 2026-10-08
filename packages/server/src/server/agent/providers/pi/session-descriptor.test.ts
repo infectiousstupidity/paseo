@@ -1,9 +1,25 @@
-import { mkdtemp, mkdir, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { listPiImportableSessions, readPiImportSessionConfig } from "./session-descriptor.js";
+
+const openedSessionFiles = vi.hoisted(() => new Map<string, number>());
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...fs,
+    open: async (...args: Parameters<typeof fs.open>) => {
+      const file = args[0];
+      if (typeof file === "string" && file.endsWith(".jsonl")) {
+        openedSessionFiles.set(file, (openedSessionFiles.get(file) ?? 0) + 1);
+      }
+      return fs.open(...args);
+    },
+  };
+});
 
 async function writeSession(root: string, lines: unknown[]): Promise<string> {
   const sessionsDir = path.join(root, "sessions", "project");
@@ -12,6 +28,87 @@ async function writeSession(root: string, lines: unknown[]): Promise<string> {
   await writeFile(filePath, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf8");
   return filePath;
 }
+
+test("Pi scoped listing skips transcript tails for unrelated sessions", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-prefilter-"));
+  const sessionsDir = path.join(root, "sessions");
+  const requestedCwd = path.join(root, "requested");
+  const otherCwd = path.join(root, "other");
+  const requestedFile = path.join(sessionsDir, "requested.jsonl");
+  const unrelatedFile = path.join(sessionsDir, "unrelated.jsonl");
+  await mkdir(sessionsDir, { recursive: true });
+
+  const requestedLines = [
+    { type: "session", id: "requested", timestamp: "2026-06-01T00:00:00.000Z", cwd: requestedCwd },
+    { type: "session_info", name: "Requested session" },
+    {
+      type: "message",
+      timestamp: "2026-06-01T00:00:01.000Z",
+      message: { role: "user", content: "First prompt" },
+    },
+  ];
+  await writeFile(
+    requestedFile,
+    `${requestedLines.map((line) => JSON.stringify(line)).join("\n")}\n`,
+  );
+  const unrelatedHeader = {
+    type: "session",
+    id: "unrelated",
+    timestamp: "2026-06-02T00:00:00.000Z",
+    cwd: otherCwd,
+  };
+  await writeFile(
+    unrelatedFile,
+    `${JSON.stringify(unrelatedHeader)}\n${" ".repeat(300_000)}\n`,
+  );
+
+  openedSessionFiles.clear();
+  const sessions = await listPiImportableSessions({
+    sessionDir: sessionsDir,
+    cwd: requestedCwd,
+    limit: 1,
+  });
+
+  expect(sessions).toMatchObject([
+    {
+      providerHandleId: requestedFile,
+      cwd: requestedCwd,
+      title: "Requested session",
+      firstPromptPreview: "First prompt",
+      lastPromptPreview: "First prompt",
+      lastActivityAt: new Date("2026-06-01T00:00:01.000Z"),
+    },
+  ]);
+  expect(openedSessionFiles.get(unrelatedFile)).toBe(1);
+  expect(openedSessionFiles.get(requestedFile)).toBe(2);
+});
+
+test("Pi scoped listing accepts a symlink-equivalent session cwd", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-path-alias-"));
+  const realCwd = path.join(root, "real-cwd");
+  const aliasCwd = path.join(root, "alias-cwd");
+  const sessionsDir = path.join(root, "sessions");
+  const sessionFile = path.join(sessionsDir, "alias.jsonl");
+  await mkdir(realCwd, { recursive: true });
+  await symlink(realCwd, aliasCwd, process.platform === "win32" ? "junction" : "dir");
+  await mkdir(sessionsDir, { recursive: true });
+  await writeFile(
+    sessionFile,
+    `${JSON.stringify({
+      type: "session",
+      id: "alias",
+      timestamp: "2026-06-01T00:00:00.000Z",
+      cwd: aliasCwd,
+    })}\n`,
+  );
+
+  const sessions = await listPiImportableSessions({
+    sessionDir: sessionsDir,
+    cwd: realCwd,
+    limit: 1,
+  });
+  expect(sessions).toMatchObject([{ providerHandleId: sessionFile, cwd: aliasCwd }]);
+});
 
 test("Pi cwd filtering continues past the global candidate overscan", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-cwd-limit-"));

@@ -74,7 +74,17 @@ export async function listPiImportableSessions(
 ): Promise<ImportableProviderSession[]> {
   const sessionsDir = await resolvePiSessionsDir(options);
   const files = await walkJsonlFiles(sessionsDir);
-  const matchesCwd = options.cwd ? createRealpathAwarePathMatcher(options.cwd) : null;
+  const pathMatches = options.cwd ? createRealpathAwarePathMatcher(options.cwd) : null;
+  const cwdMatches = new Map<string, boolean>();
+  const matchesCwd = pathMatches
+    ? (candidate: string): boolean => {
+        const cached = cwdMatches.get(candidate);
+        if (cached !== undefined) return cached;
+        const matches = pathMatches(candidate);
+        cwdMatches.set(candidate, matches);
+        return matches;
+      }
+    : null;
   const limit = options.limit ?? 20;
   const ranked = await rankSessionFilesByMtime(files);
   const candidateLimit = Math.min(
@@ -86,9 +96,8 @@ export async function listPiImportableSessions(
   const sessions: ImportableProviderSession[] = [];
 
   for (const entry of candidates) {
-    const session = await readPiImportableSession(entry.file);
+    const session = await readPiImportableSession(entry.file, matchesCwd);
     if (!session) continue;
-    if (matchesCwd && !matchesCwd(session.cwd)) continue;
     sessions.push(session);
     if (sessions.length >= limit) {
       break;
@@ -216,8 +225,9 @@ async function rankSessionFilesByMtime(files: string[]): Promise<RankedSessionFi
 
 async function readPiImportableSession(
   filePath: string,
+  matchesCwd: ((candidate: string) => boolean) | null,
 ): Promise<ImportableProviderSession | null> {
-  const descriptor = await readPiSessionDescriptor(filePath);
+  const descriptor = await readPiSessionDescriptor(filePath, matchesCwd);
   if (!descriptor) return null;
 
   return {
@@ -232,11 +242,15 @@ async function readPiImportableSession(
   };
 }
 
-async function readPiSessionDescriptor(filePath: string): Promise<PiSessionDescriptor | null> {
+async function readPiSessionDescriptor(
+  filePath: string,
+  matchesCwd?: ((candidate: string) => boolean) | null,
+): Promise<PiSessionDescriptor | null> {
   const headChunk = await readHeadChunk(filePath);
   if (!headChunk) return null;
   const header = parseSessionHeader(headChunk.split(/\r?\n/u, 1)[0]?.trim() ?? "");
-  if (!header) return null;
+  // Scoped listings can discard unrelated sessions without reading their tails.
+  if (!header || (matchesCwd && !matchesCwd(header.cwd))) return null;
 
   const tail = await readTail(filePath).catch(() => "");
   const tailInfo = parseSessionTail(tail);
