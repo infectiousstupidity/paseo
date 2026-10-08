@@ -1,6 +1,6 @@
 # Pi import-session listing performance
 
-Status: planned. Reviewed against this fork on 2026-10-08. The code paths below are verified; actual latency on the user's Pi session directory has **not** been profiled.
+Status: scoped support-lane work, **not implemented**. Reviewed against this fork on 2026-10-08. The code paths below are verified, but the user's actual Pi-session-directory latency and work counts have **not** been profiled. Reproduce and measure the Pi-only workflow before selecting a slice; do not turn this into a general Paseo performance or refactoring program while Shiori's real execution reliability is the priority.
 
 ## Problem and ownership
 
