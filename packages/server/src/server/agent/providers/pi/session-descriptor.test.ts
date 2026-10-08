@@ -209,7 +209,6 @@ test("Pi scans nested and mismatched project folders in custom session roots", a
       `${JSON.stringify({
         type: "session",
         id: `session-${index}`,
-        timestamp: "2026-06-01T00:00:00.000Z",
         cwd: cwds[index],
       })}\n`,
     );
