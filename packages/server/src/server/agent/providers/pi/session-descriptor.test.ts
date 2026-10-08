@@ -57,10 +57,7 @@ test("Pi scoped listing skips transcript tails for unrelated sessions", async ()
     timestamp: "2026-06-02T00:00:00.000Z",
     cwd: otherCwd,
   };
-  await writeFile(
-    unrelatedFile,
-    `${JSON.stringify(unrelatedHeader)}\n${" ".repeat(300_000)}\n`,
-  );
+  await writeFile(unrelatedFile, `${JSON.stringify(unrelatedHeader)}\n${" ".repeat(300_000)}\n`);
 
   openedSessionFiles.clear();
   const sessions = await listPiImportableSessions({
