@@ -29,8 +29,7 @@ import {
   computeEmptyState,
   type DirectoryProject,
   formatDirectoryLabel,
-  getPromptPreview,
-  getSessionTitle,
+  getSessionRowPresentation,
   hasMoreSessions,
   resolveDirectoryLabel,
   nextPageLimit,
@@ -319,8 +318,7 @@ function ImportSessionSheetRow({
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const title = getSessionTitle(entry);
-  const promptPreview = getPromptPreview(entry);
+  const presentation = getSessionRowPresentation(entry);
   const ProviderIcon = useProviderIcon(entry.providerId, serverId);
   const accessibilityState = useMemo(
     () => (disabled ? DISABLED_ACCESSIBILITY_STATE : undefined),
@@ -352,18 +350,32 @@ function ImportSessionSheetRow({
       </View>
       <View style={styles.rowContent}>
         <View style={styles.rowHeader}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.rowTitleGroup}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {presentation.title}
+            </Text>
+            {presentation.isPiSubagent ? (
+              <Text style={styles.rowSubagent} numberOfLines={1}>
+                {t("subagents.pillLabelOne")}
+              </Text>
+            ) : null}
+          </View>
           {importing ? (
             <Text style={styles.rowMeta}>{t("importSession.row.importing")}</Text>
           ) : (
             <ImportSessionActivityTime date={entry.lastActivityAt} />
           )}
         </View>
-        <Text style={styles.rowPreview} numberOfLines={2}>
-          {promptPreview}
-        </Text>
+        {presentation.promptPreview ? (
+          <Text style={styles.rowPreview} numberOfLines={2}>
+            {presentation.promptPreview}
+          </Text>
+        ) : null}
+        {presentation.firstPromptPreview ? (
+          <Text style={styles.rowPreviewSecondary} numberOfLines={1}>
+            {presentation.firstPromptPreview}
+          </Text>
+        ) : null}
         {folder ? (
           <Text
             style={styles.rowFolder}
@@ -762,7 +774,7 @@ export function ImportSessionSheet({
       onClose={onClose}
       header={header}
       testID="import-session-sheet"
-      desktopMaxWidth={560}
+      desktopMaxWidth={820}
       snapPoints={IMPORT_SHEET_SNAP_POINTS}
     >
       {showFilter ? (
@@ -921,6 +933,13 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     gap: theme.spacing[2],
   },
+  rowTitleGroup: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: theme.spacing[1],
+    flex: 1,
+    minWidth: 0,
+  },
   rowTitle: {
     flex: 1,
     minWidth: 0,
@@ -931,10 +950,19 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
+  rowSubagent: {
+    flexShrink: 0,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   rowPreview: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     lineHeight: 20,
+  },
+  rowPreviewSecondary: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   rowFolder: {
     color: theme.colors.foregroundMuted,

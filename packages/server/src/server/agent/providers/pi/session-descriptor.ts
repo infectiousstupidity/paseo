@@ -16,6 +16,8 @@ const PI_SESSION_DIR_ENV = "PI_CODING_AGENT_SESSION_DIR";
 // with unusually large preambles may omit their first-prompt preview.
 const HEAD_BYTES = 64 * 1024;
 const TAIL_BYTES = 256 * 1024;
+const PROMPT_PREVIEW_MAX_LENGTH = 160;
+const SESSION_TITLE_FALLBACK_MAX_LENGTH = 80;
 const FULL_SCAN_LINE_LIMIT = 2_000;
 // Rank all discovered files cheaply, then parse only a bounded recent window.
 const IMPORT_CANDIDATE_OVERSCAN = 40;
@@ -119,12 +121,9 @@ export async function listPiImportableSessions(
 
 function matchesPiSessionQuery(session: ImportableProviderSession, query: string): boolean {
   const cwdBasename = path.posix.basename(session.cwd.replaceAll("\\", "/"));
-  return [
-    session.title,
-    session.firstPromptPreview,
-    session.lastPromptPreview,
-    cwdBasename,
-  ].some((value) => value?.toLowerCase().includes(query));
+  return [session.title, session.firstPromptPreview, session.lastPromptPreview, cwdBasename].some(
+    (value) => value?.toLowerCase().includes(query),
+  );
 }
 
 export async function readPiImportSessionConfig(filePath: string): Promise<PiImportSessionConfig> {
@@ -299,7 +298,8 @@ async function readPiSessionDescriptor(
   const tail = await readTail(filePath, rankedFile?.size).catch(() => "");
   const tailInfo = parseSessionTail(tail);
   const headInfo = parseSessionHeadFromChunk(headChunk);
-  const title = tailInfo.title ?? headInfo.title ?? headInfo.firstUserMessage;
+  const title =
+    tailInfo.title ?? headInfo.title ?? normalizeSessionTitleFallback(headInfo.firstUserMessage);
   const model = tailInfo.model ?? headInfo.model;
   const thinkingOptionId = tailInfo.thinkingOptionId ?? headInfo.thinkingOptionId;
   const lastActivityAt =
@@ -500,9 +500,17 @@ function readNonEmptyString(value: unknown): string | null {
 }
 
 function normalizePromptPreview(text: string | null): string | null {
+  return normalizeExcerpt(text, PROMPT_PREVIEW_MAX_LENGTH);
+}
+
+function normalizeSessionTitleFallback(text: string | null): string | null {
+  return normalizeExcerpt(text, SESSION_TITLE_FALLBACK_MAX_LENGTH);
+}
+
+function normalizeExcerpt(text: string | null, maxLength: number): string | null {
   const normalized = text?.trim().replace(/\s+/g, " ") ?? "";
   if (!normalized) return null;
-  return normalized.length > 160 ? normalized.slice(0, 160) : normalized;
+  return normalized.length > maxLength ? normalized.slice(0, maxLength) : normalized;
 }
 
 function parseDate(value: unknown): Date | null {

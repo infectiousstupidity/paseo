@@ -115,6 +115,47 @@ test("Pi scoped listing skips transcript tails for unrelated sessions", async ()
   expect(observedScan.fileStats.get(requestedFile)).toBe(1);
 });
 
+test("Pi listing bounds the normalized title fallback for an unnamed session", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-title-fallback-"));
+  const cwd = path.join(root, "repo");
+  const sessionDir = path.join(root, "sessions");
+  const sessionFile = path.join(sessionDir, "unnamed-session.jsonl");
+  const prompt = `  Keep   this saved session recognizable. ${"Review the related task details. ".repeat(12)}`;
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(
+    sessionFile,
+    `${[
+      {
+        type: "session",
+        version: 3,
+        id: "unnamed-session",
+        timestamp: "2026-06-09T00:00:00.000Z",
+        cwd,
+      },
+      {
+        type: "message",
+        id: "user-1",
+        timestamp: "2026-06-09T00:00:01.000Z",
+        message: { role: "user", content: prompt },
+      },
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n")}\n`,
+    "utf8",
+  );
+
+  const [session] = await listPiImportableSessions({ sessionDir, limit: 1 });
+  const normalizedPrompt = prompt.trim().replace(/\s+/g, " ");
+
+  expect(session).toMatchObject({
+    providerHandleId: sessionFile,
+    title: normalizedPrompt.slice(0, 80),
+    firstPromptPreview: normalizedPrompt.slice(0, 160),
+    lastPromptPreview: normalizedPrompt.slice(0, 160),
+  });
+  expect(session?.title).toHaveLength(80);
+});
+
 test("Pi scoped listing accepts a symlink-equivalent session cwd", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "paseo-pi-session-path-alias-"));
   const realCwd = path.join(root, "real-cwd");
@@ -320,7 +361,10 @@ test("Pi search matches title, prompt previews and cwd names during scanning", a
     scanLimit: 2,
   });
   expect(matches.map((session) => path.basename(session.providerHandleId)).sort()).toEqual([
-    "cwd.jsonl", "first.jsonl", "last.jsonl", "title.jsonl",
+    "cwd.jsonl",
+    "first.jsonl",
+    "last.jsonl",
+    "title.jsonl",
   ]);
 });
 

@@ -1,6 +1,6 @@
 # Pi import 05 — Make session rows identifiable
 
-Status: **ready**. Run before [06](./pi-import-06-inspect-session.md). Read the single authoritative [implementation plan](../plans/pi-import-session-identification.md) for the verified code path, trade-offs and exclusions.
+Status: **blocked** pending required manual desktop and narrow-width review. Do not start [06](./pi-import-06-inspect-session.md) yet. Read the single authoritative [implementation plan](../plans/pi-import-session-identification.md) for the verified code path, trade-offs and exclusions.
 
 Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Use its overall width, row hierarchy and typography as a target, **not** its custom CSS/JS or fictitious data. The [implementation plan](../plans/pi-import-session-identification.md) governs real behavior.
 
@@ -19,4 +19,11 @@ Visual reference: [interactive Import session HTML mock](../mockups/import-sessi
 - Reuse existing import-sheet interaction coverage for the same `providerHandleId`; typecheck affected app/server packages and check changed-file formatting.
 - Manually inspect several real Shiori reviewer/worker rows at desktop and narrow width; opening/listing must not cause new RPCs or file reads.
 
-**Done:** sessions are more recognizable; ordinary titles/imports are unchanged; no new dependencies, summary generation, grouping, or backend reads. Do not start 06 until the row layout is reviewed.
+## Implementation and verification status
+
+The UI/server changes are implemented. Automated checks passed except for the pre-existing nested-directory discovery failures in the full Pi descriptor suite. The required visual review of real Shiori reviewer/worker rows is still outstanding.
+
+- Passed: app view-model tests (56), import-sheet tests (28), targeted Pi fallback/model-restoration tests (3), app/server typechecks (after `npm run build:client`), changed-file lint, and LSP diagnostics (0 findings).
+- The full `session-descriptor.test.ts` run fails in existing nested-session-listing cases. `walkJsonlFiles()` advances by the concurrency batch size, so recursively queued directories are skipped; this is outside task 05 scope.
+- Manual review was blocked: Paseo workspace scripts ran under Windows `cmd.exe` and failed on the POSIX environment assignments. Starting Expo directly served the app, but its bootstrap probe to `localhost:6767` failed, so no Shiori rows were available to inspect at desktop or narrow width. The Expo process was stopped.
+- No new RPCs or session-file reads were added. No task commit was made because the required visual acceptance check remains blocked.
