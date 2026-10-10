@@ -2,6 +2,8 @@
 
 Status: **ready after 05**. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
 
+Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Compare its Details expansion and narrow layout, but reuse the real sheet's focus/scroll/import semantics. Its example data and simulation controls are not requirements.
+
 ## Change
 
 1. In `packages/app/src/components/import-session-sheet.tsx`, put a focusable, accessible `Details` control **beside**, never inside, the row's existing import `Pressable`. Use an expanded-state accessibility property and a stable details test ID. The row still imports with one press/Enter; Details expands/collapses without importing.
