@@ -419,6 +419,16 @@ export const ko: TranslationResources = {
       showAll: "전체 표시",
       loadMore: "더 보기",
     },
+    details: {
+      label: "세부 정보",
+      savedTitle: "저장된 제목",
+      provider: "제공자",
+      workingDirectory: "작업 디렉터리",
+      lastActivity: "마지막 활동",
+      firstUserPrompt: "첫 번째 사용자 프롬프트",
+      lastUserPrompt: "마지막 사용자 프롬프트",
+      unavailable: "사용할 수 없음",
+    },
     preview: {
       untitledSession: "제목 없는 세션",
       noPrompt: "프롬프트 미리보기 없음",

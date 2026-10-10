@@ -1,6 +1,6 @@
 # Pi import 06 — Inspect without importing
 
-Status: **ready after 05**. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
+Status: **implemented; manual desktop/narrow-width review pending**. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
 
 Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Compare its Details expansion and narrow layout, but reuse the real sheet's focus/scroll/import semantics. Its example data and simulation controls are not requirements.
 
@@ -19,3 +19,11 @@ Visual reference: [interactive Import session HTML mock](../mockups/import-sessi
 - Run affected existing Vitest files, relevant app/server typechecks, changed-file formatting, and a manual desktop/narrow-width check with two similar sessions.
 
 **Done:** the user can compare real task clues and exact metadata before importing without extra RPCs or reads. If 512 bounded characters still give indistinguishable sessions, stop and investigate child-session naming at creation time instead of building a transcript browser.
+
+## Implementation and verification status
+
+- Added a sibling `Details` control with an expanded accessibility state and stable test ID. It toggles one locally expanded session keyed by provider and handle; closing, changing host/scope/provider/query, or importing clears it.
+- Inline details show the saved title, provider label, full working directory, local date/time, and non-duplicated first/last user-prompt excerpts. No RPC, import-listing change, or session-file read was added.
+- Kept Pi prompt caps unchanged at 160 characters because no real-session evidence showed that cap was inadequate.
+- Passed: focused import-sheet suite (29), i18n resource suite (39), app typecheck, changed-file lint, and formatting.
+- Manual desktop/narrow-width review with real Pi sessions remains pending. Task 05 is still marked blocked on the same visual review, so the visual acceptance check is not claimed complete.

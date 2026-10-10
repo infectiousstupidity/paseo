@@ -618,6 +618,54 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
   });
 
+  it("inspects session details without importing and keeps row import identity", async () => {
+    const entry = createProviderSessionEntry({
+      providerId: "pi",
+      providerLabel: "Pi",
+      providerHandleId: "pi-handle-123",
+      cwd: "/repo/paseo-with-a-long-path/worker-session",
+      title: "Saved Pi session title",
+      firstPromptPreview: "First user prompt excerpt",
+      lastPromptPreview: "Last user prompt excerpt",
+    });
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-pi-sessions",
+      entries: [entry],
+    }));
+    const importAgent = vi.fn(async () => createImportedAgentSnapshot("agent-imported"));
+
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, importAgent), {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+
+    const row = await screen.findByTestId("import-session-session-pi-pi-handle-123");
+    const details = screen.getByTestId("import-session-details-pi-pi-handle-123");
+    expect(details.parentElement).toBe(row.parentElement);
+    expect(details.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(details);
+
+    expect(details.getAttribute("aria-expanded")).toBe("true");
+    screen.getByText("Saved title");
+    expect(screen.getAllByText("Saved Pi session title")).toHaveLength(2);
+    screen.getByText("Pi");
+    screen.getByText(entry.cwd);
+    screen.getAllByText("First user prompt excerpt");
+    screen.getAllByText("Last user prompt excerpt");
+    expect(importAgent).not.toHaveBeenCalled();
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(row);
+    await waitFor(() => {
+      expect(importAgent).toHaveBeenCalledTimes(1);
+      expect(importAgent).toHaveBeenCalledWith({
+        providerId: "pi",
+        providerHandleId: "pi-handle-123",
+        cwd: entry.cwd,
+      });
+    });
+  });
+
   it("shows an import error state without closing when selected session import fails", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
@@ -819,15 +867,12 @@ describe("ImportSessionSheet", () => {
         };
       },
     );
-    renderSheet(
-      createRecentSessionsClient(fetchRecentProviderSessions, vi.fn()),
-      {
-        snapshot: {
-          supportsSnapshot: true,
-          entries: [createSnapshotEntry("pi"), createSnapshotEntry("claude")],
-        },
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, vi.fn()), {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("pi"), createSnapshotEntry("claude")],
       },
-    );
+    });
     await screen.findByText("Session pi");
     await screen.findByText("Session claude");
 

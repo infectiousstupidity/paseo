@@ -422,6 +422,16 @@ export const ru: TranslationResources = {
       showAll: "Показать все",
       loadMore: "Загрузить ещё",
     },
+    details: {
+      label: "Подробности",
+      savedTitle: "Сохранённое название",
+      provider: "Провайдер",
+      workingDirectory: "Рабочая директория",
+      lastActivity: "Последняя активность",
+      firstUserPrompt: "Первый запрос пользователя",
+      lastUserPrompt: "Последний запрос пользователя",
+      unavailable: "Недоступно",
+    },
     preview: {
       untitledSession: "Сессия без названия",
       noPrompt: "Нет промпта для предварительного просмотра",

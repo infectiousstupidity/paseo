@@ -418,6 +418,16 @@ export const ar: TranslationResources = {
       showAll: "عرض الكل",
       loadMore: "تحميل المزيد",
     },
+    details: {
+      label: "التفاصيل",
+      savedTitle: "العنوان المحفوظ",
+      provider: "المزوّد",
+      workingDirectory: "دليل العمل",
+      lastActivity: "آخر نشاط",
+      firstUserPrompt: "أول مطالبة من المستخدم",
+      lastUserPrompt: "آخر مطالبة من المستخدم",
+      unavailable: "غير متاح",
+    },
     preview: {
       untitledSession: "جلسة بلا عنوان",
       noPrompt: "لا توجد معاينة سريعة",

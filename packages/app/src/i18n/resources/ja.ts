@@ -423,6 +423,16 @@ export const ja: TranslationResources = {
       showAll: "すべて表示",
       loadMore: "さらに読み込む",
     },
+    details: {
+      label: "詳細",
+      savedTitle: "保存されたタイトル",
+      provider: "プロバイダー",
+      workingDirectory: "作業ディレクトリ",
+      lastActivity: "最終アクティビティ",
+      firstUserPrompt: "最初のユーザープロンプト",
+      lastUserPrompt: "最後のユーザープロンプト",
+      unavailable: "利用できません",
+    },
     preview: {
       untitledSession: "無題のセッション",
       noPrompt: "プロンプトのプレビューなし",

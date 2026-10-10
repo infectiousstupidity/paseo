@@ -423,6 +423,16 @@ export const es: TranslationResources = {
       showAll: "Mostrar todo",
       loadMore: "Cargar más",
     },
+    details: {
+      label: "Detalles",
+      savedTitle: "Título guardado",
+      provider: "Proveedor",
+      workingDirectory: "Directorio de trabajo",
+      lastActivity: "Última actividad",
+      firstUserPrompt: "Primer prompt del usuario",
+      lastUserPrompt: "Último prompt del usuario",
+      unavailable: "No disponible",
+    },
     preview: {
       untitledSession: "Sesión sin título",
       noPrompt: "Sin vista previa inmediata",

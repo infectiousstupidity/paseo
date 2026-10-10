@@ -422,6 +422,16 @@ export const ptBR: TranslationResources = {
       showAll: "Mostrar tudo",
       loadMore: "Carregar mais",
     },
+    details: {
+      label: "Detalhes",
+      savedTitle: "Título salvo",
+      provider: "Provedor",
+      workingDirectory: "Diretório de trabalho",
+      lastActivity: "Última atividade",
+      firstUserPrompt: "Primeiro prompt do usuário",
+      lastUserPrompt: "Último prompt do usuário",
+      unavailable: "Indisponível",
+    },
     preview: {
       untitledSession: "Sessão sem título",
       noPrompt: "Nenhuma prévia de prompt",

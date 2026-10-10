@@ -415,6 +415,16 @@ export const en = {
       showAll: "Show all",
       loadMore: "Load more",
     },
+    details: {
+      label: "Details",
+      savedTitle: "Saved title",
+      provider: "Provider",
+      workingDirectory: "Working directory",
+      lastActivity: "Last activity",
+      firstUserPrompt: "First user prompt",
+      lastUserPrompt: "Last user prompt",
+      unavailable: "Unavailable",
+    },
     preview: {
       untitledSession: "Untitled session",
       noPrompt: "No prompt preview",

@@ -418,6 +418,16 @@ export const zhCN: TranslationResources = {
       showAll: "显示全部",
       loadMore: "加载更多",
     },
+    details: {
+      label: "详情",
+      savedTitle: "已保存标题",
+      provider: "提供方",
+      workingDirectory: "工作目录",
+      lastActivity: "最近活动",
+      firstUserPrompt: "用户的首条提示",
+      lastUserPrompt: "用户的最后一条提示",
+      unavailable: "不可用",
+    },
     preview: {
       untitledSession: "未命名会话",
       noPrompt: "没有 prompt 预览",
