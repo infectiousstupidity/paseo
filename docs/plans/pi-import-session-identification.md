@@ -2,6 +2,10 @@
 
 Status: **ready to implement**, 2026-10-10. Scope: [05 — identifiable rows](../tasks/pi-import-05-identifiable-sessions.md), followed by [06 — inline inspection](../tasks/pi-import-06-inspect-session.md). This updates the earlier proposal after comparing the interactive HTML mock with **the current fork**, not merely upstream. No app code is implemented by this document.
 
+## Visual reference
+
+The [interactive HTML mock](../mockups/import-session.html) is committed as a **visual/interaction reference**. Open the file in a browser when implementing or reviewing the row hierarchy, wider dialog, Details disclosure, spacing and responsive behavior. It uses **illustrative sessions and standalone HTML/CSS/JavaScript**, not the production component tree or API. The verified code paths and explicit exclusions in this plan take precedence: do not copy the mock's full-text search, reversible scope toggle, fabricated counts, fake status/data, custom shortcuts, or import simulation.
+
 ## Outcome and boundary
 
 Make the right Pi session recognizable among many similar `subagent-reviewer-<uuid>-1` / `subagent-worker-<uuid>-1` sessions. Preserve **single-press import**; a separately focusable control reveals exact metadata and longer **first/last user prompt excerpts** before importing. Favor existing React Native/Unistyles primitives and the current request path. The mock is a **visual reference**, not a pixel-perfect or functional contract.
