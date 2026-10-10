@@ -2,6 +2,8 @@
 
 Status: **ready**. Run before [06](./pi-import-06-inspect-session.md). Read the single authoritative [implementation plan](../plans/pi-import-session-identification.md) for the verified code path, trade-offs and exclusions.
 
+Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Use its overall width, row hierarchy and typography as a target, **not** its custom CSS/JS or fictitious data. The [implementation plan](../plans/pi-import-session-identification.md) governs real behavior.
+
 ## Change
 
 1. In `packages/app/src/components/import-session-sheet.tsx`, change this sheet's `desktopMaxWidth={560}` to approximately `820`, without editing the shared `AdaptiveModalSheet` or changing compact-sheet scrolling.
