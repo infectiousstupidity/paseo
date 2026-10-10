@@ -1,34 +1,19 @@
-# Pi import 06: Inspect a session without importing it
+# Pi import 06 — Inspect without importing
 
-Status: **planned**. Depends on [05 — recognizable rows](./pi-import-05-identifiable-sessions.md). Avoid building a full transcript viewer.
+Status: **ready after 05**. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
 
-## Problem
+## Change
 
-Two sessions can still share a similar first 160 characters (for example, reviewer instructions) and last activity age. The user needs more **actual text and exact metadata** before choosing, without a second listing pass or accidental import.
+1. In `packages/app/src/components/import-session-sheet.tsx`, put a focusable, accessible `Details` control **beside**, never inside, the row's existing import `Pressable`. Use an expanded-state accessibility property and a stable details test ID. The row still imports with one press/Enter; Details expands/collapses without importing.
+2. Keep at most one `expandedKey` local to the sheet, keyed by `providerId:providerHandleId`. Reset on close, host, scope, provider or query change and after import. Render inline content within the existing scroll view; no nested sheet, new component framework or second data store.
+3. Show original saved title (or unavailable), actual provider, full cwd, local absolute last-activity date/time, and distinct **first/last user-prompt excerpts**. These are not agent outputs or full transcripts. Handle long paths, unavailable text/dates and compact-width wrapping. If a separate `Import session` control within details is useful, reuse `handleImportSession(entry)` unchanged.
+4. If the current 160-character Pi excerpts remain inadequate on real sessions, increase **only Pi's** `normalizePromptPreview` cap to at most **512** using the same 64KiB head / 256KiB tail reads. Do not change the shared protocol, read full JSONL, add an RPC, infer metadata, or add another cache. This also widens Pi's existing bounded excerpt search, not full-text search.
+5. Use the existing `importSession` i18n namespace and themed components. Preserve multi-provider behavior, search, paging, manual refresh, import errors, cross-workspace placement and compact/mobile presentation.
 
-## Implement
+## Verify, minimally
 
-1. Add a compact **user-activated** detail disclosure to each import row (or one local selection panel if it is demonstrably simpler). On desktop, reveal bounded first/last user-prompt excerpts, original persisted title / machine name, exact `lastActivityAt`, provider and working directory. Never imply the excerpts are complete prompts or a summary. Hide duplicate/missing information. Reuse existing strings and date formatting where possible.
-2. Leave the row's existing press/Enter behavior as **import**. The detail control must be separately focusable and accessible; expanding/collapsing must **not** import the session or issue a network request. Verify event propagation on both React Native web and compact layout; if nested pressables are brittle, use a separate sibling control instead.
-3. If 160-character Pi excerpts still obscure the distinguishing task, raise `normalizePromptPreview`'s **Pi-only** length to one modest fixed cap (for example 512 characters). The reader already has the prompt text from bounded 64KiB head/256KiB tail reads; do not add extra reads or lift those file limits. Preserve normalized whitespace and hard payload bounds. Make clear a title/prompt can remain unavailable for unusual oversized preambles.
-4. Keep the shared descriptor schema unchanged, so other providers and older daemon clients remain compatible. Check that Pi server-side search (which matches descriptor previews) still works and can now find words within the longer cap. Never expose the full raw transcript, summarize with a model, add an on-demand endpoint, or prefetch details for each row.
-5. Keep state local to the sheet and reset it appropriately on scope/provider/search changes or import. No persistence, cache tier, parent-child linkage, task scanner, rescan timer, or new dependency.
+- One focused interaction test: Details does **not** call `importAgent`; the original row still imports exactly once with unchanged handle/cwd (and optional detail import if implemented).
+- If preview cap changes, one Pi JSONL assertion for capped excerpts and matching a term past old 160 characters; no new test harness.
+- Run affected existing Vitest files, relevant app/server typechecks, changed-file formatting, and a manual desktop/narrow-width check with two similar sessions.
 
-## Done when
-
-- The user can distinguish similarly named child sessions by real first/last excerpts, directory and **absolute** time without import.
-- Opening or expanding the sheet issues no extra daemon RPC; payload growth stays limited to at most the new excerpt cap per Pi field.
-- A click on details never imports. The existing row import continues to work on desktop and narrow layouts.
-- Non-Pi provider sessions, stale/partial preview data, provider errors, filters, pagination, and the original import identity remain correct.
-
-## Minimal checks
-
-- One targeted component interaction: expanding details does **not** call `importAgent`; explicitly importing still calls it once with the unchanged provider handle.
-- If Pi preview length changes, extend **one** existing temporary-JSONL descriptor test to cover truncation, a term beyond the old 160-character boundary, and bounded search. No extra fixture suites.
-- Run affected import-sheet and Pi descriptor test files, relevant app/server workspace typechecks, and changed-file formatting. Manually try one parent-style session and two similar children on desktop and narrow layout. No broad E2E, coverage target, or performance threshold test.
-
-## Files
-
-- `packages/app/src/components/import-session-sheet.tsx` and existing component test
-- `packages/app/src/components/import-session-sheet-view-model.ts` only if a shared helper is actually useful
-- `packages/server/src/server/agent/providers/pi/session-descriptor.ts` and existing descriptor test **only if** changing the excerpt cap
+**Done:** the user can compare real task clues and exact metadata before importing without extra RPCs or reads. If 512 bounded characters still give indistinguishable sessions, stop and investigate child-session naming at creation time instead of building a transcript browser.
