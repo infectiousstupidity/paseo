@@ -1,5 +1,7 @@
 # Pi import 01: Filter scoped sessions before tail parsing
 
+Status: **implemented in this fork** (code and focused regression tests). Actual Windows Pi-history timing remains unmeasured. The implementation uses bounded header reads for cwd rejection and a per-listing cwd-result memo; the remaining instructions below are kept as acceptance/reference, **not future work**.
+
 ## Outcome
 
 Opening **Import session** inside a workspace stops parsing the expensive JSONL tail/head metadata of every newer session from unrelated working directories. Existing sessions from that workspace, including old ones beyond the 400-candidate window, remain discoverable.
