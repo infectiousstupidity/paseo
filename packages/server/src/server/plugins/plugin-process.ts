@@ -547,8 +547,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const handlers = new Set<(message: PluginProcessRequest) => void>();
   const channel: PluginWorkerChannel = {
     send(message, callback) {
-      if (callback) process.send?.(message, () => callback());
-      else process.send?.(message);
+      // Hooks and RPCs can finish after shutdown has disconnected the parent.
+      if (!process.connected) {
+        callback?.();
+        return;
+      }
+      // Always consume send errors: IPC may close between the check and send.
+      process.send?.(message, () => callback?.());
     },
     onMessage(handler) {
       handlers.add(handler);
@@ -557,7 +562,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       };
     },
     disconnect() {
-      process.disconnect();
+      if (process.connected) process.disconnect();
     },
   };
   process.on("message", (raw) => {
