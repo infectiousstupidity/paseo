@@ -282,6 +282,12 @@ export function createPluginWorker(options: {
     const contributedCleanup = contribute({
       handle: (contract, handler) =>
         register(contract, (input, context) => handler(contract.input.parse(input), context)),
+      // Supply the live Paseo API to the contribution so a plugin can seed its
+      // own state at daemon start, before any RPC or lifecycle event arrives.
+      context: () => {
+        if (paseo === null) throw new Error("Paseo API is not ready");
+        return { paseo };
+      },
       registerProvider,
       registerUsageSource,
       registerSettings,
