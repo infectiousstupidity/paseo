@@ -1,6 +1,6 @@
 # Pi import 06 — Inspect without importing
 
-Status: **implemented; manual desktop/narrow-width review pending**. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
+Status: **implemented in `6beba9cfb9`; manual desktop/narrow-width review pending**. Task 05 was previously marked blocked on the same review, not on implementation; validate both slices together. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
 
 Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Compare its Details expansion and narrow layout, but reuse the real sheet's focus/scroll/import semantics. Its example data and simulation controls are not requirements.
 
