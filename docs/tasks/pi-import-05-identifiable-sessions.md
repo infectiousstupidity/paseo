@@ -1,6 +1,6 @@
 # Pi import 05 — Make session rows identifiable
 
-Status: **blocked** pending required manual desktop and narrow-width review. Do not start [06](./pi-import-06-inspect-session.md) yet. Read the single authoritative [implementation plan](../plans/pi-import-session-identification.md) for the verified code path, trade-offs and exclusions.
+Status: **implementation delivered** (commit `316dbf58dd`); **manual desktop/narrow-width acceptance still pending**. [06](./pi-import-06-inspect-session.md) has also been implemented (commit `6beba9cfb9`); do **not** repeat its code. Both await one shared real Pi-session visual smoke. Read the single authoritative [implementation plan](../plans/pi-import-session-identification.md) for the verified code path, trade-offs and exclusions.
 
 Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Use its overall width, row hierarchy and typography as a target, **not** its custom CSS/JS or fictitious data. The [implementation plan](../plans/pi-import-session-identification.md) governs real behavior.
 
