@@ -1,6 +1,6 @@
 # Pi import session identification — implementation plan
 
-Status: **ready to implement**, 2026-10-10. Scope: [05 — identifiable rows](../tasks/pi-import-05-identifiable-sessions.md), followed by [06 — inline inspection](../tasks/pi-import-06-inspect-session.md). This updates the earlier proposal after comparing the interactive HTML mock with **the current fork**, not merely upstream. No app code is implemented by this document.
+Status: **05 (`316dbf58dd`) and 06 (`6beba9cfb9`) implemented**; one shared **real desktop/narrow-width acceptance** with actual Pi sessions remains. The code below is historical design rationale, not an instruction to reimplement. Verify the fork after any upstream merges before making corrections.
 
 ## Visual reference
 
@@ -12,7 +12,7 @@ Make the right Pi session recognizable among many similar `subagent-reviewer-<uu
 
 Do **not** add LLM summaries, per-row fetches, transcript browsing, a second index/cache, session hierarchy, a database, a general parser for task prompts, or extra dependencies. No changes to Pi session files, the import/resume command, or Shiori are required.
 
-## Verified code path (fork, 2026-10-10)
+## Verified code path at planning time (2026-10-10; historical before implementation)
 
 | Layer | File / existing behavior | Change |
 | --- | --- | --- |
