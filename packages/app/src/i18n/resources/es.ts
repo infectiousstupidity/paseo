@@ -1952,6 +1952,13 @@ export const es: TranslationResources = {
     archiveTooltip: "Subagente de archivo",
     archiveFinishedAction: "Archivar subagentes finalizados",
     archiveFinishedRetry: "Reintentar ({{failed}}/{{total}})",
+    stateRunning: "En ejecución",
+    stateFinished: "Finalizado",
+    stateFailed: "Fallido",
+    stateCanceled: "Cancelado",
+    activityAwaiting: "Esperando actividad",
+    activityUnobserved: "Sin actividad observada",
+    activityLastResponse: "Última respuesta: {{text}}",
   },
   panels: {
     draft: {

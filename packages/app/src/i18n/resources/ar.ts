@@ -1904,6 +1904,13 @@ export const ar: TranslationResources = {
     archiveTooltip: "أرشفة الوكيل الفرعي",
     archiveFinishedAction: "أرشفة الوكلاء الفرعيين المكتملين",
     archiveFinishedRetry: "إعادة المحاولة ({{failed}}/{{total}})",
+    stateRunning: "قيد التنفيذ",
+    stateFinished: "مكتمل",
+    stateFailed: "فشل",
+    stateCanceled: "أُلغي",
+    activityAwaiting: "بانتظار النشاط",
+    activityUnobserved: "لا يوجد نشاط مرصود",
+    activityLastResponse: "آخر رد: {{text}}",
   },
   panels: {
     draft: {

@@ -1,11 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import type { PaseoSubagentRow, ProviderSubagentRow, SubagentRow } from "./select";
+import { isFinishedSubagent } from "./archive-finished";
 import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
+  orderSubagentRows,
   resolveRowLabel,
+  resolveSubagentState,
 } from "./track-presentation";
 
 function row(
@@ -295,5 +298,141 @@ describe("provider-owned row subtitles", () => {
         providerRow({ description: null, subtitle: null, title: "general-purpose" }),
       ).subtitle,
     ).toBe("");
+  });
+});
+
+describe("resolveSubagentState", () => {
+  function providerRow(overrides: Partial<ProviderSubagentRow> & { id: string }): SubagentRow {
+    return {
+      kind: "provider",
+      id: overrides.id,
+      parentAgentId: "parent",
+      provider: "claude",
+      title: "general-purpose",
+      description: null,
+      subtitle: null,
+      status: overrides.status ?? "running",
+      requiresAttention: false,
+      createdAt: new Date("2026-07-26T00:00:00.000Z"),
+    };
+  }
+
+  it("maps provider statuses to neutral lifecycle words", () => {
+    expect(resolveSubagentState(providerRow({ id: "a", status: "running" }))).toBe("running");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "completed" }))).toBe("finished");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "failed" }))).toBe("failed");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "canceled" }))).toBe("canceled");
+  });
+
+  it("never calls a completed child anything other than finished", () => {
+    expect(
+      resolveSubagentState(
+        providerRow({ id: "a", status: "completed", description: "Review the change" }),
+      ),
+    ).toBe("finished");
+  });
+
+  it("derives managed children from their turn and status", () => {
+    expect(resolveSubagentState(row({ id: "a", status: "running" }))).toBe("running");
+    expect(resolveSubagentState(row({ id: "a", status: "error" }))).toBe("failed");
+    expect(resolveSubagentState(row({ id: "a" }))).toBe("finished");
+    // Still starting up: nothing to name yet, so the word stays absent.
+    expect(resolveSubagentState(row({ id: "a", status: "initializing" }))).toBeNull();
+  });
+});
+
+describe("orderSubagentRows", () => {
+  function providerRow(
+    id: string,
+    status: "running" | "completed" | "failed" | "canceled",
+  ): ProviderSubagentRow {
+    return {
+      kind: "provider",
+      id,
+      parentAgentId: "parent",
+      provider: "claude",
+      title: null,
+      description: null,
+      subtitle: null,
+      status,
+      requiresAttention: false,
+      createdAt: new Date("2026-07-26T00:00:00.000Z"),
+    };
+  }
+
+  it("keeps running and failed children ahead of terminal ones", () => {
+    const rows = [
+      providerRow("f1", "completed"),
+      providerRow("r1", "running"),
+      providerRow("f2", "completed"),
+      providerRow("x1", "failed"),
+      providerRow("c1", "canceled"),
+      providerRow("f3", "completed"),
+    ];
+    expect(orderSubagentRows(rows).map((r) => r.id)).toEqual(["r1", "x1", "f1", "f2", "c1", "f3"]);
+  });
+
+  it("orders by attention, not archiving: a failed child sorts first but still counts as finished", () => {
+    const failed = providerRow("x1", "failed");
+    const done = providerRow("f1", "completed");
+    expect(orderSubagentRows([done, failed]).map((r) => r.id)).toEqual(["x1", "f1"]);
+    expect(isFinishedSubagent(failed)).toBe(true);
+  });
+
+  it("preserves creation order inside each group", () => {
+    const base = Date.parse("2026-07-26T00:00:00.000Z");
+    const at = (minutes: number) => new Date(base + minutes * 60_000);
+    const oldDone: SubagentRow = { ...providerRow("old-done", "completed"), createdAt: at(1) };
+    const oldRun: SubagentRow = { ...providerRow("old-run", "running"), createdAt: at(2) };
+    const newDone: SubagentRow = { ...providerRow("new-done", "completed"), createdAt: at(3) };
+    const newRun: SubagentRow = { ...providerRow("new-run", "running"), createdAt: at(4) };
+    expect(orderSubagentRows([oldDone, oldRun, newDone, newRun]).map((r) => r.id)).toEqual([
+      "old-run",
+      "new-run",
+      "old-done",
+      "new-done",
+    ]);
+  });
+
+  it("moves a row only when it crosses the finished boundary", () => {
+    const a = providerRow("a", "running");
+    const b = providerRow("b", "completed");
+    const c = providerRow("c", "running");
+    const before = orderSubagentRows([a, b, c]);
+    const finishedA: ProviderSubagentRow = { ...a, status: "completed" };
+    const after = orderSubagentRows([finishedA, b, c]);
+    expect(before.map((r) => r.id)).toEqual(["a", "c", "b"]);
+    expect(after.map((r) => r.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("mixes provider and managed children in one fan-out without inventing groupings", () => {
+    const base = Date.parse("2026-07-26T00:00:00.000Z");
+    const at = (minutes: number) => new Date(base + minutes * 60_000);
+    // A realistic fan-out: one running provider child, two finished siblings of the same type,
+    // a failed provider child, a canceled one, a running managed child, and a finished managed
+    // child.
+    const rows: SubagentRow[] = [
+      { ...providerRow("p-done-1", "completed"), createdAt: at(1), title: "reviewer" },
+      { ...providerRow("p-run", "running"), createdAt: at(2), title: "reviewer" },
+      { ...providerRow("p-done-2", "completed"), createdAt: at(3), title: "reviewer" },
+      { ...providerRow("p-failed", "failed"), createdAt: at(4), title: "fixer" },
+      { ...providerRow("p-canceled", "canceled"), createdAt: at(5), title: "explorer" },
+      { ...row({ id: "m-run", status: "running" }), createdAt: at(6) },
+      { ...row({ id: "m-done" }), createdAt: at(7) },
+    ];
+    const ordered = orderSubagentRows(rows);
+    // Working and failed children first (in creation order), terminal ones after.
+    expect(ordered.map((r) => r.id)).toEqual([
+      "p-run",
+      "p-failed",
+      "m-run",
+      "p-done-1",
+      "p-done-2",
+      "p-canceled",
+      "m-done",
+    ]);
+    // The repeated agent type does not create a group; siblings keep creation order.
+    const reviewers = ordered.filter((r) => r.kind === "provider" && r.title === "reviewer");
+    expect(reviewers.map((r) => r.id)).toEqual(["p-run", "p-done-1", "p-done-2"]);
   });
 });

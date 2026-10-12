@@ -1,8 +1,11 @@
-import { useCallback, type ReactElement } from "react";
+import { useCallback, useState, type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Archive, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { useStoreWithEqualityFn } from "zustand/traditional";
+import equal from "fast-deep-equal";
 import { useProviderIcon } from "@/components/provider-icons";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -17,9 +20,18 @@ import { getPanelManifest } from "@/panels/panel-manifest";
 import type { SubagentRow } from "./select";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
 import {
+  deriveSubagentActivity,
+  formatSubagentAge,
+  type SubagentActivity,
+} from "./subagent-activity";
+import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
+import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
+  orderSubagentRows,
+  resolveSubagentState,
+  type SubagentStateWord,
 } from "./track-presentation";
 
 const ThemedArchive = withUnistyles(Archive);
@@ -45,6 +57,28 @@ const IDLE_ARCHIVE_FINISHED_STATUS: ArchiveFinishedStatus = { kind: "idle" };
 
 /** Leading and action glyphs share one size so rows keep a single icon column. */
 const ROW_ICON_SIZE = 14;
+
+const NONE_ACTIVITY: SubagentActivity = { kind: "none" };
+
+/**
+ * The row's newest meaningful event, from timeline the client already streamed. Only the owning
+ * row subscribes, and only re-renders when the derived label actually changes — a token streaming
+ * into an assistant message leaves a running child's label (its newest tool call) untouched.
+ * Managed children have no timeline in this store, so they report none.
+ */
+function useSubagentActivity(serverId: string, row: SubagentRow): SubagentActivity {
+  return useStoreWithEqualityFn(
+    useProviderSubagentStore,
+    (state) => {
+      if (row.kind !== "provider") return NONE_ACTIVITY;
+      const tail = state.timelines.get(
+        providerSubagentKey(serverId, row.parentAgentId, row.id),
+      )?.tail;
+      return deriveSubagentActivity(tail, row.status === "running");
+    },
+    equal,
+  );
+}
 
 function useRowPresentation(row: SubagentRow, serverId: string): WorkspaceTabPresentation {
   const icon = useProviderIcon(row.provider, serverId);
@@ -96,7 +130,7 @@ export function SubagentsTrack({
           />
         </ComposerTrackActions>
       ) : null}
-      {rows.map((row) => (
+      {orderSubagentRows(rows).map((row) => (
         <SubagentsTrackRow
           key={row.id}
           row={row}
@@ -178,6 +212,40 @@ interface SubagentsTrackRowProps {
   onDetachSubagent?: (id: string) => void;
 }
 
+const STATE_WORD_KEYS: Record<SubagentStateWord, string> = {
+  running: "subagents.stateRunning",
+  finished: "subagents.stateFinished",
+  failed: "subagents.stateFailed",
+  canceled: "subagents.stateCanceled",
+};
+
+/**
+ * One muted line under the task: provider context, age, then the latest meaningful activity.
+ * Unknown pieces stay absent rather than invented; `createdAt` that is not a valid date drops the
+ * age instead of showing garbage.
+ */
+function buildRowMetadata(
+  t: TFunction,
+  context: string | null,
+  age: string | null,
+  activity: SubagentActivity | null,
+  state: SubagentStateWord | null,
+): string | null {
+  let activityText: string | null = null;
+  if (activity) {
+    if (activity.kind === "tool") {
+      activityText = activity.label;
+    } else if (activity.kind === "response") {
+      activityText = t("subagents.activityLastResponse", { text: activity.text });
+    } else {
+      activityText =
+        state === "running" ? t("subagents.activityAwaiting") : t("subagents.activityUnobserved");
+    }
+  }
+  const parts = [context, age, activityText].filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 function SubagentsTrackRow({
   serverId,
   row,
@@ -191,6 +259,17 @@ function SubagentsTrackRow({
   const presentation = useRowPresentation(row, serverId);
   const displayLabel =
     presentation.titleState === "loading" ? t("common.states.loading") : presentation.label;
+  const state = resolveSubagentState(row);
+  const stateWord = state ? t(STATE_WORD_KEYS[state]) : null;
+  const age = formatSubagentAge(row.createdAt, new Date());
+  const activity = useSubagentActivity(serverId, row);
+  // Managed children have no timeline in this store; a "no activity" line for them would just be
+  // noise next to a session that is one press away.
+  const shownActivity = row.kind === "provider" ? activity : null;
+  const metadata = buildRowMetadata(t, presentation.subtitle || null, age, shownActivity, state);
+  const [hovered, setHovered] = useState(false);
+  const actionsAlwaysVisible = isNative || isCompact;
+  const actionsVisible = actionsAlwaysVisible || hovered;
   const handlePress = useCallback(() => {
     if (row.kind === "provider") {
       onOpenProviderSubagent(row.parentAgentId, row.id);
@@ -204,52 +283,84 @@ function SubagentsTrackRow({
   const handleDetachPress = useCallback(() => {
     onDetachSubagent?.(row.id);
   }, [onDetachSubagent, row.id]);
-  const actionsAlwaysVisible = isNative || isCompact;
+  const handlePointerEnter = useCallback(() => setHovered(true), []);
+  const handlePointerLeave = useCallback(() => setHovered(false), []);
 
   const renderRow = useCallback(
     ({ active }: { active: boolean }) => (
       <>
         <WorkspaceTabIcon presentation={presentation} backdrop={active ? "surface2" : "surface1"} />
-        <Text style={styles.rowLabel} numberOfLines={1}>
-          {displayLabel}
-        </Text>
-        {presentation.subtitle ? (
-          <Text style={styles.rowTrailing} numberOfLines={1}>
-            {presentation.subtitle}
-          </Text>
-        ) : null}
-        {row.kind === "paseo" ? (
-          <SubagentRowActions
-            rowId={row.id}
-            displayLabel={displayLabel}
-            visible={actionsAlwaysVisible || active}
-            onDetachPress={onDetachSubagent ? handleDetachPress : undefined}
-            onArchivePress={handleArchivePress}
-          />
-        ) : null}
+        <View
+          style={
+            row.kind === "paseo" ? [styles.rowBody, styles.rowBodyWithActions] : styles.rowBody
+          }
+        >
+          <View style={styles.rowLabelRow}>
+            <Text
+              style={styles.rowLabel}
+              numberOfLines={2}
+              testID={`subagents-track-label-${row.id}`}
+            >
+              {displayLabel}
+            </Text>
+            {stateWord ? (
+              <Text style={stateWordStyle(state)} numberOfLines={1}>
+                {stateWord}
+              </Text>
+            ) : null}
+          </View>
+          {metadata ? (
+            <Text
+              style={styles.rowMeta}
+              numberOfLines={1}
+              testID={`subagents-track-activity-${row.id}`}
+            >
+              {metadata}
+            </Text>
+          ) : null}
+        </View>
       </>
     ),
-    [
-      actionsAlwaysVisible,
-      displayLabel,
-      handleArchivePress,
-      handleDetachPress,
-      onDetachSubagent,
-      presentation,
-      row.kind,
-      row.id,
-    ],
+    [displayLabel, metadata, presentation, row.id, row.kind, state, stateWord],
   );
 
   return (
-    <ComposerTrackRow
-      accessibilityLabel={displayLabel}
-      testID={`subagents-track-row-${row.id}`}
-      onPress={handlePress}
+    <View
+      style={styles.rowContainer}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
     >
-      {renderRow}
-    </ComposerTrackRow>
+      <ComposerTrackRow
+        accessibilityLabel={[displayLabel, stateWord, metadata].filter(Boolean).join(", ")}
+        testID={`subagents-track-row-${row.id}`}
+        onPress={handlePress}
+      >
+        {renderRow}
+      </ComposerTrackRow>
+      {row.kind === "paseo" ? (
+        // Action controls sit beside the row's Pressable, never inside it: a press on a button
+        // must not be able to fall through to opening the session.
+        <View
+          style={actionsVisible ? styles.actionClusterVisible : styles.actionClusterHidden}
+          pointerEvents={actionsVisible ? "auto" : "none"}
+        >
+          <SubagentRowActions
+            rowId={row.id}
+            displayLabel={displayLabel}
+            visible={actionsVisible}
+            onDetachPress={onDetachSubagent ? handleDetachPress : undefined}
+            onArchivePress={handleArchivePress}
+          />
+        </View>
+      ) : null}
+    </View>
   );
+}
+
+function stateWordStyle(state: SubagentStateWord | null) {
+  if (state === "running") return styles.stateWordRunning;
+  if (state === "failed") return styles.stateWordFailed;
+  return styles.stateWord;
 }
 
 function SubagentRowActions({
@@ -267,10 +378,7 @@ function SubagentRowActions({
 }): ReactElement {
   const { t } = useTranslation();
   return (
-    <View
-      style={visible ? styles.actionClusterVisible : styles.actionClusterHidden}
-      pointerEvents={visible ? "auto" : "none"}
-    >
+    <>
       {onDetachPress ? (
         <SubagentActionButton
           accessibilityLabel={t("subagents.detachAction", { label: displayLabel })}
@@ -289,7 +397,7 @@ function SubagentRowActions({
         visible={visible}
         onPress={onArchivePress}
       />
-    </View>
+    </>
   );
 }
 
@@ -340,6 +448,27 @@ function SubagentActionButton({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  // The row's Pressable owns the navigation press; the action cluster overlays its trailing edge
+  // as a sibling, so a button press can never fall through to opening the session.
+  rowContainer: {
+    position: "relative",
+  },
+  rowBody: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "auto",
+    minWidth: 0,
+    gap: 2,
+  },
+  // Room for the two action buttons on managed rows, so the state word never slides under them.
+  rowBodyWithActions: {
+    paddingRight: 56,
+  },
+  rowLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
   // `flexBasis: "auto"` rather than `flex: 1`: a zero-basis label contributes nothing to the row's
   // intrinsic width, so the panel measures itself at its floor and truncates every label at once.
   rowLabel: {
@@ -350,9 +479,28 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.base,
     color: theme.colors.foreground,
   },
-  // Trailing metadata — provider context on a subagent row, progress on the archive row. No width
-  // cap: the panel's own ceiling bounds it. It shrinks twice as fast as the label, so a wordy
-  // provider subtitle gives way first instead of squeezing the thing that names the row.
+  rowMeta: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  stateWord: {
+    flexShrink: 0,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  stateWordRunning: {
+    flexShrink: 0,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.statusDotRunning,
+  },
+  stateWordFailed: {
+    flexShrink: 0,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.statusDotDanger,
+  },
+  // Trailing metadata for the archive row. No width cap: the panel's own ceiling bounds it.
   rowTrailing: {
     flexShrink: 2,
     minWidth: 0,
@@ -360,12 +508,20 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
   },
   actionClusterVisible: {
+    position: "absolute",
+    right: theme.spacing[1],
+    top: "50%",
+    transform: [{ translateY: "-50%" }],
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],
     opacity: 1,
   },
   actionClusterHidden: {
+    position: "absolute",
+    right: theme.spacing[1],
+    top: "50%",
+    transform: [{ translateY: "-50%" }],
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1],

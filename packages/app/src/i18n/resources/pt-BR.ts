@@ -1937,6 +1937,13 @@ export const ptBR: TranslationResources = {
     archiveTooltip: "Arquivar subagente",
     archiveFinishedAction: "Arquivar subagentes concluídos",
     archiveFinishedRetry: "Tentar novamente ({{failed}}/{{total}})",
+    stateRunning: "Em execução",
+    stateFinished: "Finalizado",
+    stateFailed: "Falhou",
+    stateCanceled: "Cancelado",
+    activityAwaiting: "Aguardando atividade",
+    activityUnobserved: "Nenhuma atividade observada",
+    activityLastResponse: "Última resposta: {{text}}",
   },
   panels: {
     draft: {

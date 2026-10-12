@@ -1882,6 +1882,13 @@ export const zhCN: TranslationResources = {
     archiveTooltip: "归档 subagent",
     archiveFinishedAction: "归档已完成的 subagent",
     archiveFinishedRetry: "重试 ({{failed}}/{{total}})",
+    stateRunning: "运行中",
+    stateFinished: "已完成",
+    stateFailed: "已失败",
+    stateCanceled: "已取消",
+    activityAwaiting: "等待活动",
+    activityUnobserved: "未观察到活动",
+    activityLastResponse: "最后回复：{{text}}",
   },
   panels: {
     draft: {

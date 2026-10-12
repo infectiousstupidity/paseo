@@ -1914,6 +1914,13 @@ export const ko: TranslationResources = {
     archiveTooltip: "서브에이전트 보관",
     archiveFinishedAction: "완료된 하위 에이전트 보관",
     archiveFinishedRetry: "다시 시도 ({{failed}}/{{total}})",
+    stateRunning: "실행 중",
+    stateFinished: "완료됨",
+    stateFailed: "실패",
+    stateCanceled: "취소됨",
+    activityAwaiting: "활동 대기 중",
+    activityUnobserved: "관찰된 활동 없음",
+    activityLastResponse: "마지막 응답: {{text}}",
   },
   panels: {
     draft: {

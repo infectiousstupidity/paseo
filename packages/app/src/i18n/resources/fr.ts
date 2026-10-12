@@ -1948,6 +1948,13 @@ export const fr: TranslationResources = {
     archiveTooltip: "Archiver le sous-agent",
     archiveFinishedAction: "Archiver les sous-agents terminés",
     archiveFinishedRetry: "Réessayer ({{failed}}/{{total}})",
+    stateRunning: "En cours",
+    stateFinished: "Terminé",
+    stateFailed: "Échoué",
+    stateCanceled: "Annulé",
+    activityAwaiting: "En attente d'activité",
+    activityUnobserved: "Aucune activité observée",
+    activityLastResponse: "Dernière réponse : {{text}}",
   },
   panels: {
     draft: {

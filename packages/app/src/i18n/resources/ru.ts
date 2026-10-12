@@ -1936,6 +1936,13 @@ export const ru: TranslationResources = {
     archiveTooltip: "Архивировать субагента",
     archiveFinishedAction: "Архивировать завершенные субагенты",
     archiveFinishedRetry: "Повторить ({{failed}}/{{total}})",
+    stateRunning: "Выполняется",
+    stateFinished: "Завершено",
+    stateFailed: "Ошибка",
+    stateCanceled: "Отменено",
+    activityAwaiting: "Ожидание активности",
+    activityUnobserved: "Наблюдаемой активности нет",
+    activityLastResponse: "Последний ответ: {{text}}",
   },
   panels: {
     draft: {

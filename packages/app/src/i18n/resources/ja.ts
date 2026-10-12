@@ -1923,6 +1923,13 @@ export const ja: TranslationResources = {
     archiveTooltip: "サブエージェントをアーカイブ",
     archiveFinishedAction: "完了したサブエージェントをアーカイブ",
     archiveFinishedRetry: "再試行 ({{failed}}/{{total}})",
+    stateRunning: "実行中",
+    stateFinished: "完了",
+    stateFailed: "失敗",
+    stateCanceled: "キャンセル済み",
+    activityAwaiting: "活動を待機中",
+    activityUnobserved: "観察された活動なし",
+    activityLastResponse: "最後の応答: {{text}}",
   },
   panels: {
     draft: {

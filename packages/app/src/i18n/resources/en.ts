@@ -1929,6 +1929,13 @@ export const en = {
     archiveTooltip: "Archive subagent",
     archiveFinishedAction: "Archive finished subagents",
     archiveFinishedRetry: "Retry ({{failed}}/{{total}})",
+    stateRunning: "Running",
+    stateFinished: "Finished",
+    stateFailed: "Failed",
+    stateCanceled: "Canceled",
+    activityAwaiting: "Awaiting activity",
+    activityUnobserved: "No activity observed",
+    activityLastResponse: "Last response: {{text}}",
   },
   panels: {
     draft: {
