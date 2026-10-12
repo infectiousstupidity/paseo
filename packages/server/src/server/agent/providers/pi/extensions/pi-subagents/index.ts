@@ -2,6 +2,7 @@ import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractTextFromToolResult } from "../../tool-call-mapper.js";
+import type { ProviderSubagentStatus } from "../../../../provider-subagents/store.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
 
 const Args = z
@@ -49,11 +50,45 @@ const AsyncStatus = z
   })
   .passthrough();
 
-function asyncChildStatus(runState: string, stepStatus?: string) {
-  if (!["complete", "failed", "stopped"].includes(runState)) return "running";
-  if (runState === "stopped" || stepStatus === "stopped") return "canceled";
-  if (runState === "failed" || stepStatus === "failed" || stepStatus === "error") return "failed";
-  return "completed";
+/** Run states from which an async run never advances on its own. */
+const TERMINAL_RUN_STATES = new Set(["complete", "failed", "partial", "rejected", "stopped"]);
+
+function runStateStatus(runState: string): ProviderSubagentStatus {
+  switch (runState) {
+    case "complete":
+      return "completed";
+    case "stopped":
+      return "canceled";
+    case "failed":
+    case "partial":
+    case "rejected":
+      return "failed";
+    default:
+      // queued, running, paused, and unknown states keep the child alive.
+      return "running";
+  }
+}
+
+/** A step's own terminal state wins; non-terminal or missing step states fall back to the run. */
+function stepStatusStatus(stepStatus: string | undefined): ProviderSubagentStatus | undefined {
+  switch (stepStatus) {
+    case "complete":
+    case "completed":
+      return "completed";
+    case "stopped":
+      return "canceled";
+    case "failed":
+    case "error":
+    case "rejected":
+    case "partial":
+      return "failed";
+    default:
+      return undefined;
+  }
+}
+
+function asyncChildStatus(runState: string, stepStatus?: string): ProviderSubagentStatus {
+  return stepStatusStatus(stepStatus) ?? runStateStatus(runState);
 }
 
 /** The `subagent-notify` header; a grouped notice reports every run as completed. */
@@ -72,10 +107,13 @@ export const piSubagents: PiExtension = {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
     /** Keyed by async directory, which both status.json and the completion notice carry. */
-    const asyncRuns = new Map<string, { owner: string; polling: boolean }>();
+    const asyncRuns = new Map<
+      string,
+      { owner: string; polling: boolean; last: Map<string, { status: string; title: string }> }
+    >();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
       if (details.asyncDir && call.status !== "failed") {
-        asyncRuns.set(details.asyncDir, { owner: call.callId, polling: true });
+        asyncRuns.set(details.asyncDir, { owner: call.callId, polling: true, last: new Map() });
       }
     };
     const collectRows = (
@@ -94,8 +132,12 @@ export const piSubagents: PiExtension = {
           title: row.agent,
           description,
           toolCallId: owner,
+          // Missing both `success` and `exitCode` is an unjudged finish, not a failure: the
+          // pi-subagents producer records `success: false` and/or a nonzero `exitCode` on failure.
           status:
-            failed || row.success === false || (row.success !== true && row.exitCode !== 0)
+            failed ||
+            row.success === false ||
+            (row.success === undefined && row.exitCode !== undefined && row.exitCode !== 0)
               ? "failed"
               : "completed",
         });
@@ -215,27 +257,39 @@ export const piSubagents: PiExtension = {
           try {
             raw = JSON.parse(readFileSync(join(dir, "status.json"), "utf8"));
           } catch {
+            // Missing or partial status files are not evidence of failure; keep the prior state.
             continue;
           }
           const parsed = AsyncStatus.safeParse(raw);
           if (!parsed.success) continue;
-          const terminal = ["complete", "failed", "stopped"].includes(parsed.data.state);
-          for (const [index, step] of parsed.data.steps.entries()) {
-            const id = parsed.data.steps.length === 1 ? run.owner : `${run.owner}:${index}`;
-            const status = asyncChildStatus(parsed.data.state, step.status);
-            subagents.push({ type: "upsert", id, title: step.agent, status });
-            if (step.sessionFile && !readSessions.has(step.sessionFile)) {
-              readSessions.add(step.sessionFile);
-              childSessions.push({ id, file: step.sessionFile });
+          const runState = parsed.data.state;
+          const steps = parsed.data.steps;
+          for (const [index, step] of steps.entries()) {
+            const id = steps.length === 1 ? run.owner : `${run.owner}:${index}`;
+            const status = asyncChildStatus(runState, step.status);
+            const file =
+              step.sessionFile && !readSessions.has(step.sessionFile)
+                ? step.sessionFile
+                : undefined;
+            const last = run.last.get(id);
+            // Emit only on first observation or a material change (lifecycle, agent title,
+            // newly attached session file), so an unchanged running status stays quiet.
+            if (!last || last.status !== status || last.title !== step.agent || file) {
+              run.last.set(id, { status, title: step.agent });
+              subagents.push({ type: "upsert", id, title: step.agent, status });
+            }
+            if (file) {
+              readSessions.add(file);
+              childSessions.push({ id, file });
             }
           }
-          if (terminal) {
-            if (parsed.data.steps.length === 0) {
-              subagents.push({
-                type: "upsert",
-                id: run.owner,
-                status: parsed.data.state === "complete" ? "completed" : "failed",
-              });
+          if (TERMINAL_RUN_STATES.has(runState)) {
+            if (steps.length === 0) {
+              const status = runStateStatus(runState);
+              if (run.last.get(run.owner)?.status !== status) {
+                run.last.set(run.owner, { status, title: "" });
+                subagents.push({ type: "upsert", id: run.owner, status });
+              }
             }
             run.polling = false;
           }
