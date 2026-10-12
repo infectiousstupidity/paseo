@@ -166,6 +166,73 @@ describe("deriveSubagentActivity", () => {
       text: "2 defects found in the change.",
     });
   });
+
+  describe("daemon descriptor activity (Task 03)", () => {
+    const desc = (label: string, at: string) => ({ kind: "tool" as const, label, at });
+    const tailTool = tool("edit", { type: "edit", filePath: "src/review.ts" }); // 12:00:00Z
+
+    it("prefers a newer descriptor while the child is running", () => {
+      expect(
+        deriveSubagentActivity([tailTool], true, desc("bash npm test", "2026-07-22T12:00:05.000Z")),
+      ).toEqual({ kind: "tool", label: "bash npm test" });
+    });
+
+    it("keeps the timeline tail when the descriptor is older", () => {
+      expect(
+        deriveSubagentActivity([tailTool], true, desc("ls .", "2026-07-22T11:00:00.000Z")),
+      ).toEqual({ kind: "tool", label: "edit review.ts" });
+    });
+
+    it("treats a tied timestamp as the daemon's (it observes every row)", () => {
+      expect(
+        deriveSubagentActivity(
+          [tailTool],
+          true,
+          desc("write notes.md", "2026-07-22T12:00:00.000Z"),
+        ),
+      ).toEqual({ kind: "tool", label: "write notes.md" });
+    });
+
+    it("keeps a finished child's newer final response over the descriptor's tool", () => {
+      const done = tool("edit", { type: "edit", filePath: "src/review.ts" }, "completed");
+      expect(
+        deriveSubagentActivity(
+          [done, assistant("2 defects found in the change.")], // 12:00:01Z
+          false,
+          desc("edit review.ts", "2026-07-22T12:00:00.000Z"),
+        ),
+      ).toEqual({ kind: "response", text: "2 defects found in the change." });
+    });
+
+    it("prefers a newer descriptor over a stale pre-cap response in the retained tail", () => {
+      // Beyond the caps the retained tail only holds early history; the daemon's descriptor is
+      // the only signal that keeps advancing.
+      expect(
+        deriveSubagentActivity(
+          [assistant("early scratch note")],
+          false,
+          desc("bash npm test", "2026-07-22T12:00:02.000Z"),
+        ),
+      ).toEqual({ kind: "tool", label: "bash npm test" });
+    });
+
+    it("reports the descriptor when no timeline has been observed at all", () => {
+      expect(
+        deriveSubagentActivity([], false, desc("read spec.md", "2026-07-22T12:00:00.000Z")),
+      ).toEqual({ kind: "tool", label: "read spec.md" });
+    });
+
+    it("falls back to the timeline when the daemon omits the field", () => {
+      expect(deriveSubagentActivity([tailTool], true, undefined)).toEqual({
+        kind: "tool",
+        label: "edit review.ts",
+      });
+      expect(deriveSubagentActivity([tailTool], true, null)).toEqual({
+        kind: "tool",
+        label: "edit review.ts",
+      });
+    });
+  });
 });
 
 describe("formatSubagentAge", () => {

@@ -1,6 +1,6 @@
 # Pi subagent activity monitor — implementation plan
 
-Status: **ready; not implemented**. Checked against `infectiousstupidity/paseo` main on 2026-10-12. This is about subagents spawned *by Pi* and surfaced inside the existing Paseo composer track, not a separate dashboard or a change to Shiori.
+Status: **done** (2026-10-12). All three tasks committed on `main`; checked against `infectiousstupidity/paseo` main on 2026-10-12. This is about subagents spawned _by Pi_ and surfaced inside the existing Paseo composer track, not a separate dashboard or a change to Shiori.
 
 ## User outcome
 
@@ -18,13 +18,13 @@ The composer subagent popover should answer without opening a child session: **W
 
 ## Scope / falsifiable design rules
 
-1. Show actual lifecycle state distinct from *review outcome*. A successful process may have reported defects. Only show "tests passed", "changes committed", "0 findings", etc. if directly established by structured or explicit child evidence; otherwise use neutral "Finished" and/or "Last response".
+1. Show actual lifecycle state distinct from _review outcome_. A successful process may have reported defects. Only show "tests passed", "changes committed", "0 findings", etc. if directly established by structured or explicit child evidence; otherwise use neutral "Finished" and/or "Last response".
 2. Identify a child using its supplied task and agent type. Do not parse arbitrary task wording to classify roles, fabricate "C1/C2/C3" group relationships, display unknown models as real, or claim a progress percentage.
 3. First derive bounded last-event detail from **existing** client timeline data, with a documented empty/older-history fallback. No summary LLM, tool-output dump, global rescans, per-child polling loops, new database, dashboard, or new dependency.
 4. Limit list density: primarily task (up to two lines), state, agent type/available context, and a short latest meaningful event. Reveal further detail for only one child on request. Retain normal click-through to full session.
 5. Keep parent/child identity, grouped fan-out, reconnect, completion, lifecycle transitions, client hiding, screen-reader semantics, keyboard focus, 360px compact width and server isolation intact.
 6. Make runtime costs proportional to changed child state, not wall clock x number of children. Never subscribe every closed row to high-frequency streaming text or turn `updatedAt` into a heartbeat.
-7. Bounded history and bounded **latest activity** are separate requirements. If the existing lifetime follower cap prevents current activity, fix it without unbounded full-timeline retention. Make protocol additions optional/backwards compatible *only if* needed; prefer the current data path.
+7. Bounded history and bounded **latest activity** are separate requirements. If the existing lifetime follower cap prevents current activity, fix it without unbounded full-timeline retention. Make protocol additions optional/backwards compatible _only if_ needed; prefer the current data path.
 8. Keep tests focused on observable failures and regression risks. Do not add a new framework, broad test matrix, snapshot farms, or exhaustive coverage.
 
 ## Ordered implementation

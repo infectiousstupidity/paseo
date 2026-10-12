@@ -25,12 +25,57 @@ const NONE_ACTIVITY: SubagentActivity = { kind: "none" };
  * streaming and would change on every token. A finished child reports its last explicit response
  * when one was observed, else its last tool call. Reasoning, user prompts, and raw tool arguments
  * never surface here.
+ *
+ * The daemon can also carry a bounded current-activity projection on the descriptor (Task 03),
+ * which keeps advancing after the retained history caps while the client's timeline tail stops.
+ * The fresher source wins: the descriptor observes every transcript row the daemon follows, so
+ * for children beyond the caps it is newer than the retained tail; for children inside the caps
+ * a finished child's final response stays the newest meaningful event and keeps its precedence.
+ * Older daemons omit the field and the pure timeline projection below applies unchanged.
  */
 export function deriveSubagentActivity(
   tail: readonly StreamItem[] | undefined,
   isRunning: boolean,
+  descriptorActivity?: { kind: "tool"; label: string; at: string } | null,
 ): SubagentActivity {
-  if (!tail || tail.length === 0) return NONE_ACTIVITY;
+  const desc = descriptorActivity
+    ? {
+        kind: "tool" as const,
+        label: descriptorActivity.label,
+        at: Date.parse(descriptorActivity.at),
+      }
+    : null;
+  const projected = projectTail(tail, isRunning);
+  if (isRunning) {
+    if (desc && (!projected || desc.at >= projected.at)) {
+      return { kind: "tool", label: desc.label };
+    }
+    return projected ? asSubagentActivity(projected) : NONE_ACTIVITY;
+  }
+  if (projected && projected.kind === "response" && (!desc || projected.at >= desc.at)) {
+    return { kind: "response", text: projected.label };
+  }
+  if (desc && (!projected || desc.at >= projected.at)) {
+    return { kind: "tool", label: desc.label };
+  }
+  return projected ? asSubagentActivity(projected) : NONE_ACTIVITY;
+}
+
+function asSubagentActivity(projected: {
+  kind: "tool" | "response";
+  label: string;
+}): SubagentActivity {
+  return projected.kind === "tool"
+    ? { kind: "tool", label: projected.label }
+    : { kind: "response", text: projected.label };
+}
+
+/** Task 02's bounded tail projection, with the chosen item's timestamp for freshness checks. */
+function projectTail(
+  tail: readonly StreamItem[] | undefined,
+  isRunning: boolean,
+): { kind: "tool" | "response"; label: string; at: number } | null {
+  if (!tail || tail.length === 0) return null;
   const window = tail.slice(-TAIL_SCAN_LIMIT);
   for (let i = window.length - 1; i >= 0; i -= 1) {
     const item = window[i];
@@ -38,21 +83,21 @@ export function deriveSubagentActivity(
     if (isRunning) {
       if (item.kind === "tool_call") {
         const label = toolCallLabel(item);
-        if (label) return { kind: "tool", label };
+        if (label) return { kind: "tool", label, at: item.timestamp.getTime() };
       }
       continue;
     }
     if (item.kind === "assistant_message") {
       const text = responseExcerpt(item.text);
-      if (text) return { kind: "response", text };
+      if (text) return { kind: "response", label: text, at: item.timestamp.getTime() };
       continue;
     }
     if (item.kind === "tool_call") {
       const label = toolCallLabel(item);
-      if (label) return { kind: "tool", label };
+      if (label) return { kind: "tool", label, at: item.timestamp.getTime() };
     }
   }
-  return NONE_ACTIVITY;
+  return null;
 }
 
 function toolCallLabel(item: ToolCallItem): string | null {

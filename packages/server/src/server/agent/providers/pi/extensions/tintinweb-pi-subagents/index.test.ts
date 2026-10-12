@@ -46,7 +46,7 @@ describe("@tintinweb/pi-subagents adapter", () => {
     const events = await verifySubagentFixture(fixture);
     expect(
       events
-        .filter((event) => event.event.type === "upsert")
+        .filter((event) => event.event.type === "upsert" && event.event.status)
         .map((event) => (event.event.type === "upsert" ? event.event.status : null)),
     ).toEqual(["running", "running", "completed"]);
     expect(events.filter((event) => event.event.type === "timeline").length).toBeGreaterThan(0);

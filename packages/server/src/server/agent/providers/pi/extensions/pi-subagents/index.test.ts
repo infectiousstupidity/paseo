@@ -245,9 +245,10 @@ describe("pi-subagents adapter", () => {
     });
     const events = await verifySubagentFixture(fixture);
     const upserts = events
-      .filter((event) => event.event.type === "upsert")
+      .filter((event) => event.event.type === "upsert" && event.event.status)
       .map((event) => (event.event.type === "upsert" ? event.event : null));
-    // bg_wait settles the child; the later completion notice repeats it.
+    // bg_wait settles the child; the later completion notice repeats it. Activity-only upserts
+    // (Task 03) carry no status and are not part of the lifecycle sequence.
     expect(upserts.map((event) => event?.status)).toEqual([
       "running",
       "running",

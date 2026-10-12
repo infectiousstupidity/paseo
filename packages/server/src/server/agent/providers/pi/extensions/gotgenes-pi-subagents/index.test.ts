@@ -118,8 +118,9 @@ describe("@gotgenes/pi-subagents adapter", () => {
     });
     const events = await verifySubagentFixture(fixture);
     const upserts = events
-      .filter((event) => event.event.type === "upsert")
+      .filter((event) => event.event.type === "upsert" && event.event.status)
       .map((event) => (event.event.type === "upsert" ? event.event : null));
+    // Lifecycle status sequence; activity-only upserts carry no status.
     expect(upserts.map((event) => event?.status)).toEqual([
       "running",
       "running",

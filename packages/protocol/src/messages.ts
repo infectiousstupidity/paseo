@@ -4695,6 +4695,21 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
   }),
 });
 
+/**
+ * Bounded current-activity projection for a provider subagent row: the newest completed tool
+ * call the daemon observed in the child transcript, so the row keeps advancing after the
+ * retained history caps. The label is short and display-ready; clients show it as latest
+ * activity and never parse it further.
+ */
+export const ProviderSubagentActivitySchema = z.object({
+  kind: z.literal("tool"),
+  label: z.string(),
+  /** Real timestamp of the observed event (or the observation time when the row carries none). */
+  at: z.string(),
+});
+
+export type ProviderSubagentActivity = z.infer<typeof ProviderSubagentActivitySchema>;
+
 export const ProviderSubagentDescriptorPayloadSchema = z.object({
   id: z.string(),
   parentAgentId: z.string(),
@@ -4711,6 +4726,9 @@ export const ProviderSubagentDescriptorPayloadSchema = z.object({
   // Compact provider-owned context for the shared track. Providers choose what belongs here and
   // format it for display; clients must not parse provider-specific facts out of this string.
   subtitle: z.string().nullable().optional(),
+  // COMPAT(providerSubagentActivity): optional so pre-existing clients ignore it and older
+  // daemons simply omit it (clients then fall back to the streamed timeline tail).
+  activity: ProviderSubagentActivitySchema.nullable().optional(),
 });
 
 export type ProviderSubagentDescriptorPayload = z.infer<

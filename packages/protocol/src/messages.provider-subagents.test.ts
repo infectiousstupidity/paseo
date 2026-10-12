@@ -73,4 +73,41 @@ describe("provider subagent protocol", () => {
       }),
     ).toMatchObject({ payload: { subagents: [{ id: "child-1" }] } });
   });
+
+  test("accepts bounded subagent activity while remaining compatible when absent", () => {
+    const descriptor = {
+      id: "child-1",
+      parentAgentId: "parent-1",
+      provider: "pi",
+      title: "Explore",
+      description: null,
+      status: "running",
+      createdAt: "2026-07-12T10:00:00.000Z",
+      updatedAt: "2026-07-12T10:00:00.000Z",
+      toolCallId: null,
+    };
+
+    // Older daemons omit the field entirely; pre-existing clients ignore it when present.
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "agent.provider_subagents.update",
+        payload: { kind: "upsert", subagent: descriptor },
+      }),
+    ).toMatchObject({ payload: { subagent: { id: "child-1" } } });
+
+    expect(
+      SessionOutboundMessageSchema.parse({
+        type: "agent.provider_subagents.update",
+        payload: {
+          kind: "upsert",
+          subagent: {
+            ...descriptor,
+            activity: { kind: "tool", label: "edit track.tsx", at: "2026-07-12T10:00:01.000Z" },
+          },
+        },
+      }),
+    ).toMatchObject({
+      payload: { subagent: { activity: { kind: "tool", label: "edit track.tsx" } } },
+    });
+  });
 });

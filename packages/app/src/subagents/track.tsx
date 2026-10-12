@@ -67,6 +67,7 @@ const NONE_ACTIVITY: SubagentActivity = { kind: "none" };
  * Managed children have no timeline in this store, so they report none.
  */
 function useSubagentActivity(serverId: string, row: SubagentRow): SubagentActivity {
+  const descriptorActivity = row.kind === "provider" ? row.activity : null;
   return useStoreWithEqualityFn(
     useProviderSubagentStore,
     (state) => {
@@ -74,7 +75,7 @@ function useSubagentActivity(serverId: string, row: SubagentRow): SubagentActivi
       const tail = state.timelines.get(
         providerSubagentKey(serverId, row.parentAgentId, row.id),
       )?.tail;
-      return deriveSubagentActivity(tail, row.status === "running");
+      return deriveSubagentActivity(tail, row.status === "running", descriptorActivity);
     },
     equal,
   );

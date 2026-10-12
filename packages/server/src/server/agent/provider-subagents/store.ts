@@ -9,6 +9,20 @@ import type {
 
 export type ProviderSubagentStatus = "running" | "completed" | "failed" | "canceled";
 
+/**
+ * Bounded current-activity projection for a subagent row: the newest completed tool call
+ * observed from the child transcript, kept small enough that a two-line popover never needs
+ * the full history. Sent as part of the descriptor; absent on older daemons (clients fall
+ * back to the streamed timeline tail).
+ */
+export interface ProviderSubagentActivity {
+  kind: "tool";
+  /** Short display-ready label, e.g. "edit track.tsx". */
+  label: string;
+  /** Real timestamp of the observed event (or observation time when the row carries none). */
+  at: string;
+}
+
 export interface ProviderSubagentDescriptor {
   id: string;
   parentAgentId: string;
@@ -23,6 +37,7 @@ export interface ProviderSubagentDescriptor {
   toolCallId: string | null;
   cwd: string | null;
   subtitle: string | null;
+  activity: ProviderSubagentActivity | null;
 }
 
 export type ProviderSubagentInputEvent =
@@ -39,6 +54,7 @@ export type ProviderSubagentInputEvent =
       toolCallId?: string | null;
       cwd?: string | null;
       subtitle?: string | null;
+      activity?: ProviderSubagentActivity | null;
       parentSubagentId?: string | null;
       timestamp?: string;
     }
@@ -125,6 +141,7 @@ export class ProviderSubagentStore {
       toolCallId: stickyField(event.toolCallId, previous?.toolCallId),
       cwd: stickyField(event.cwd, previous?.cwd),
       subtitle: stickyField(event.subtitle, previous?.subtitle),
+      activity: stickyField(event.activity, previous?.activity),
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };
     this.descriptors.set(key, subagent);
