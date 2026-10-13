@@ -4742,6 +4742,8 @@ export const ProviderSubagentDescriptorPayloadSchema = z.object({
   // COMPAT(providerSubagentActivity): optional so pre-existing clients ignore it and older
   // daemons simply omit it (clients then fall back to the streamed timeline tail).
   activity: ProviderSubagentActivitySchema.nullable().optional(),
+  // COMPAT(providerSubagentControls): optional; does not bypass live target validation.
+  controlEligible: z.boolean().optional(),
 });
 
 export type ProviderSubagentDescriptorPayload = z.infer<

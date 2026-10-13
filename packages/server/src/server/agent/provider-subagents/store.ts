@@ -46,6 +46,8 @@ export interface ProviderSubagentDescriptor {
   cwd: string | null;
   subtitle: string | null;
   activity: ProviderSubagentActivity | null;
+  /** Presence of an exact native target; actual control is always revalidated. */
+  controlEligible?: boolean;
 }
 
 export type ProviderSubagentInputEvent =
@@ -163,6 +165,7 @@ export class ProviderSubagentStore {
     } else if (event.controlTarget !== undefined && provider === "pi") {
       this.controlTargets.set(key, event.controlTarget);
     }
+    subagent.controlEligible = this.controlTargets.has(key);
     this.descriptors.set(key, subagent);
     return { type: "upsert", subagent };
   }
