@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
 export type FeedbackPhase = "investigate" | "implement";
 export type FeedbackKind = "submitted" | "revision_submitted" | "spawn_requested" | "spawn_accepted"
   | "uncertain" | "proposal_ready" | "approved" | "implementation_started"
-  | "verified" | "verification_failed" | "blocked" | "cancelled";
+  | "verified" | "verification_failed" | "failed" | "blocked" | "cancelled";
 export interface FeedbackNote {
   sourceApp: "seicho-dev";
   sourceNamespace: string;
@@ -170,6 +170,25 @@ export class FeedbackStore {
       write(file, markdown(record), false);
       return true;
     });
+  }
+
+  /** Conservative recovery: unknown/still-active children continue occupying slots across restart. */
+  active(phase: FeedbackPhase): string[] {
+    const root = privateDirectory(this.home);
+    const busy: string[] = [];
+    for (const entry of readdirSync(root)) {
+      if (!/^[0-9a-f]{40}\\.md$/.test(entry)) continue;
+      const record = this.load(entry.slice(0, -3));
+      const requests = record.events.filter(e => e.kind === "spawn_requested" && e.phase === phase);
+      for (const request of requests) {
+        const later = record.events.some(e => e.revision === request.revision &&
+          e.phase === phase && e.requestId === request.requestId &&
+          ((phase === "investigate" && e.kind === "proposal_ready") ||
+           (phase === "implement" && ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind))));
+        if (!later) { busy.push(record.recordId); break; }
+      }
+    }
+    return busy;
   }
 
   append(id: string, input: Omit<FeedbackEvent, "eventId" | "at"> & { eventId?: string }): FeedbackRecord {
