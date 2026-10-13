@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Archive, ChevronDown, Unlink } from "lucide-react-native";
-import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import equal from "fast-deep-equal";
 import { useProviderIcon } from "@/components/provider-icons";
-import { Button } from "@/components/ui/button";
 import { useSessionStore } from "@/stores/session-store";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,12 +26,12 @@ import {
   type SubagentActivity,
 } from "./subagent-activity";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
+import { SubagentExpandedDetails } from "./expanded-details";
 import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
   groupSubagentRows,
-  canControlPiSubagent,
   resolveSubagentState,
   type SubagentStateWord,
 } from "./track-presentation";
@@ -280,33 +278,6 @@ const STATE_WORD_KEYS: Record<SubagentStateWord, string> = {
   canceled: "subagents.stateCanceled",
 };
 
-/**
- * One muted line under the task: provider context, age, then the latest meaningful activity.
- * Unknown pieces stay absent rather than invented; `createdAt` that is not a valid date drops the
- * age instead of showing garbage.
- */
-function buildRowMetadata(
-  t: TFunction,
-  context: string | null,
-  age: string | null,
-  activity: SubagentActivity | null,
-  state: SubagentStateWord | null,
-): string | null {
-  let activityText: string | null = null;
-  if (activity) {
-    if (activity.kind === "tool") {
-      activityText = activity.label;
-    } else if (activity.kind === "response") {
-      activityText = t("subagents.activityLastResponse", { text: activity.text });
-    } else {
-      activityText =
-        state === "running" ? t("subagents.activityAwaiting") : t("subagents.activityUnobserved");
-    }
-  }
-  const parts = [context, age, activityText].filter((part): part is string => Boolean(part));
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
-
 function SubagentsTrackRow({
   serverId,
   row,
@@ -322,6 +293,7 @@ function SubagentsTrackRow({
   onDetachSubagent,
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
+  const { theme } = useUnistyles();
   const isCompact = useIsCompactFormFactor();
   const presentation = useRowPresentation(row, serverId);
   const displayLabel =
@@ -334,10 +306,12 @@ function SubagentsTrackRow({
   // noise next to a session that is one press away.
   const shownActivity = row.kind === "provider" ? activity : null;
   // Dense rows use one meaningful outcome/activity line; exact metadata is available on expansion.
-  const metadata = shownActivity?.kind === "response" ? shownActivity.text
+  const metadata =
+    shownActivity?.kind === "response" ? shownActivity.text
     : shownActivity?.kind === "tool" ? shownActivity.label
-    : shownActivity?.kind === "none" ? (state === "running" ? t("subagents.activityAwaiting") : t("subagents.panel.resultUnavailable"))
-    : null;
+    : shownActivity?.kind === "none"
+      ? (state === "running" ? t("subagents.activityAwaiting") : t("subagents.panel.resultUnavailable"))
+      : null;
   const [hovered, setHovered] = useState(false);
   const actionsAlwaysVisible = isNative || isCompact;
   const actionsVisible = actionsAlwaysVisible || hovered;
@@ -392,7 +366,7 @@ function SubagentsTrackRow({
         </View>
       </>
     ),
-    [displayLabel, metadata, presentation, row.id, row.kind, state, stateWord],
+    [displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t],
   );
 
   return (
@@ -433,7 +407,7 @@ function SubagentsTrackRow({
         hitSlop={8}
         style={row.kind === "paseo" ? styles.disclosureManaged : styles.disclosure}
       >
-        <ChevronDown size={ROW_ICON_SIZE} color={expanded ? "#FFFFFF" : "#A0A0A0"} />
+        <ChevronDown size={ROW_ICON_SIZE} color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted} />
       </Pressable>
       {expanded ? (
         <SubagentExpandedDetails
@@ -442,6 +416,7 @@ function SubagentsTrackRow({
           client={client}
           supportsControls={supportsControls}
           activity={shownActivity}
+          age={age}
           stopping={stopping}
           onStopAccepted={onStopAccepted}
           onOpenSession={handlePress}
