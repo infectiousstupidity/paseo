@@ -1630,6 +1630,10 @@ export class PiRpcAgentSession implements AgentSession {
    * Direct, parent-turn-free Pi extension IPC. The caller must have already authenticated
    * and stored a unique requestId before asking for a fresh-context annotation child.
    */
+  getFeedbackSessionId(): string | null {
+    return this.closed ? null : this.state.sessionId;
+  }
+
   async spawnAnnotationChild(input: {
     requestId: string; sessionId: string; role: FeedbackRole; task: string;
   }): Promise<{ ok: boolean; requestId: string; runId?: string; reason?: string }> {
