@@ -8052,6 +8052,12 @@ export class Session {
       } else if (msg.action === "approve") {
         if (!msg.recordId || !msg.revision) throw new Error("Record and revision required");
         records = [feedbackDispatcher.approve(target, msg.recordId, msg.revision)];
+      } else if (msg.action === "record_outcome") {
+        if (!msg.recordId || !msg.revision || !msg.outcome || !msg.evidence)
+          throw new Error("Record, revision, outcome and verification evidence required");
+        records = [feedbackDispatcher.recordOutcome(
+          msg.recordId, msg.revision, msg.outcome, msg.evidence,
+        )];
       } else if (msg.action === "get") {
         if (!msg.recordId) throw new Error("Record ID required");
         const record = feedbackDispatcher.get(msg.recordId);
