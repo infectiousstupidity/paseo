@@ -1639,7 +1639,12 @@ export class PiRpcAgentSession implements AgentSession {
   }): Promise<{ ok: boolean; requestId: string; runId?: string; reason?: string }> {
     if (this.closed || !this.feedbackBridge || input.sessionId !== this.state.sessionId)
       return { ok: false, requestId: input.requestId, reason: "unavailable" };
-    return spawnFeedbackChild(this.feedbackBridge, input);
+    const result = await spawnFeedbackChild(this.feedbackBridge, input);
+    if (result.ok && result.runId && validPiSubagentRunId(result.runId)) {
+      // Native status can now resolve a directly spawned annotation child.
+      this.observedAsyncRunIds.add(result.runId);
+    }
+    return result;
   }
 
   /** Internal only: slash-command execution must never send a model prompt. */
