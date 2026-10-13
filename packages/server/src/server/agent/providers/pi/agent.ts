@@ -85,6 +85,7 @@ import type {
   PiThinkingLevel,
 } from "./rpc-types.js";
 import { PiUsagePoller, type PiUsagePollScheduler } from "./usage-poller.js";
+import { feedbackBridgeTarget, piFeedbackRuntimeBridge, spawnFeedbackChild, type FeedbackBridgeTarget, type FeedbackRole } from "./feedback-bridge.js";
 import {
   PI_SUBAGENT_RPC_COMMAND,
   PI_SUBAGENT_RPC_MARKER,
@@ -256,6 +257,7 @@ interface PiRpcAgentSessionOptions {
   extensionTimeoutMs?: number;
   logger: Logger;
   usagePollScheduler?: PiUsagePollScheduler;
+  feedbackBridge?: FeedbackBridgeTarget;
 }
 
 interface PiResumeConfig {
@@ -288,6 +290,7 @@ interface PiPaseoExtensionOptions {
 interface PiTempFile {
   path: string;
   cleanup: () => void;
+  feedbackBridge?: FeedbackBridgeTarget;
 }
 
 interface PiCapturedEntry extends PiCapturedUserMessageEntry {
@@ -631,6 +634,7 @@ function createPiPaseoExtensionFile({
 }: PiPaseoExtensionOptions): PiTempFile {
   const dir = mkdtempSync(join(tmpdir(), "paseo-pi-extension-"));
   const filePath = join(dir, "paseo-integration.mjs");
+  const feedbackBridge = feedbackBridgeTarget(dir);
   writeFileSync(
     filePath,
     `
@@ -694,6 +698,7 @@ function createPiPaseoExtensionFile({
 	  const submittedUserMessages = [];
 	  ${piExtensionRuntimeBridge}
 	  ${piSubagentRpcRuntimeBridge}
+	  ${piFeedbackRuntimeBridge(feedbackBridge)}
 
 	  function emitSubmittedUserEntries(ctx) {
 	    const entries = ctx.sessionManager.getEntries();
@@ -803,6 +808,7 @@ function createPiPaseoExtensionFile({
   return {
     path: filePath,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
+    feedbackBridge,
   };
 }
 
@@ -1234,6 +1240,7 @@ export class PiRpcAgentSession implements AgentSession {
     }
   >();
   private readonly observedAsyncRunIds = new Set<string>();
+  private readonly feedbackBridge: FeedbackBridgeTarget | undefined;
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
@@ -1272,6 +1279,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.currentModeId = options.currentModeId ?? null;
     this.cleanup = options.cleanup;
     this.extensionTimeoutMs = options.extensionTimeoutMs ?? DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS;
+    this.feedbackBridge = options.feedbackBridge;
     this.logger = options.logger;
     this.extensionHost = createPiExtensionHost(this.logger);
     this.extensionHost.follow((event) => {
@@ -1616,6 +1624,18 @@ export class PiRpcAgentSession implements AgentSession {
     });
     this.currentLeafOverrideId = targetEntry.parentId;
     this.activeToolCalls.clear();
+  }
+
+  /**
+   * Direct, parent-turn-free Pi extension IPC. The caller must have already authenticated
+   * and stored a unique requestId before asking for a fresh-context annotation child.
+   */
+  async spawnAnnotationChild(input: {
+    requestId: string; sessionId: string; role: FeedbackRole; task: string;
+  }): Promise<{ ok: boolean; requestId: string; runId?: string; reason?: string }> {
+    if (this.closed || !this.feedbackBridge || input.sessionId !== this.state.sessionId)
+      return { ok: false, requestId: input.requestId, reason: "unavailable" };
+    return spawnFeedbackChild(this.feedbackBridge, input);
   }
 
   /** Internal only: slash-command execution must never send a model prompt. */
@@ -2815,6 +2835,7 @@ export class PiRpcAgentClient implements AgentClient {
         capabilities: capabilitiesForSession(mcp !== null),
         cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
+        feedbackBridge: paseoExtension.feedbackBridge,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
       });
@@ -2889,6 +2910,7 @@ export class PiRpcAgentClient implements AgentClient {
         capabilities: capabilitiesForSession(mcp !== null),
         cleanup: combineCleanup([mcpConfigFile?.cleanup, paseoExtension?.cleanup]),
         extensionTimeoutMs: providerOptions.extensionTimeoutMs,
+        feedbackBridge: paseoExtension.feedbackBridge,
         logger: this.logger,
         usagePollScheduler: this.usagePollScheduler,
       });
