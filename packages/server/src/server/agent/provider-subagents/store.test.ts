@@ -62,7 +62,7 @@ describe("ProviderSubagentStore", () => {
 
   test("keeps native Pi targets private, parent-scoped, and revokes them on terminal state", () => {
     const store = new ProviderSubagentStore();
-    const target = { runId: "run-1", childId: "native-second", index: 1, sessionId: "pi-session" };
+    const target = { runId: "run-1", childId: "native-second", snapshotId: "step:1", index: 1, sessionId: "pi-session" };
     const update = store.apply("parent-a", "pi", {
       type: "upsert", id: "call-1:1", status: "running", controlTarget: target,
     });
@@ -75,6 +75,8 @@ describe("ProviderSubagentStore", () => {
     // Unknown native run IDs must never ride on a public descriptor or update.
     store.apply("parent-a", "pi", { type: "upsert", id: "call-1:1", status: "canceled" });
     expect(store.getControlTarget("parent-a", "call-1:1")).toBeNull();
+    expect(store.get("parent-a", "call-1:1")?.controlEligible).toBe(false);
+    // Canceled/stopped children must never retain a native target for a guessed Resume.
     store.apply("parent-a", "claude", {
       type: "upsert", id: "call-1:2", status: "running", controlTarget: target,
     });

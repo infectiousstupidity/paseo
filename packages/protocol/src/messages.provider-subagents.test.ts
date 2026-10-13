@@ -22,6 +22,33 @@ describe("provider subagent protocol", () => {
     }).payload).toMatchObject({ deliveryStatus: "queued" });
   });
 
+  test("rejects unproven interrupt and resume controls at the wire boundary", () => {
+    for (const action of ["interrupt", "resume"]) {
+      const request = {
+        type: "agent.provider_subagents.control.request",
+        parentAgentId: "parent",
+        subagentId: "display-row",
+        requestId: "request",
+        action,
+        message: "Resume this selected child with the next task",
+      };
+      // A nonempty instruction must never make an unverified action admissible.
+      expect(SessionInboundMessageSchema.safeParse(request).success).toBe(false);
+      // The response schema must not advertise an action unavailable in the daemon.
+      expect(SessionOutboundMessageSchema.safeParse({
+        type: "agent.provider_subagents.control.response",
+        payload: {
+          requestId: "request",
+          parentAgentId: "parent",
+          subagentId: "display-row",
+          action,
+          success: true,
+          error: null,
+        },
+      }).success).toBe(false);
+    }
+  });
+
   test("accepts a scoped timeline request and structured live update", () => {
     expect(
       SessionInboundMessageSchema.parse({
