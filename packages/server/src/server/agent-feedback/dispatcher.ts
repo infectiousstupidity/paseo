@@ -66,7 +66,7 @@ function buildTask(note: FeedbackNote, phase: FeedbackPhase, proposal?: string):
 /** One small daemon-wide queue; the Markdown files remain the authoritative durable receipts. */
 export class FeedbackDispatcher {
   private readonly store: FeedbackStore;
-  private readonly queue: Array<{ phase: FeedbackPhase; recordId: string; run: () => Promise<void> }> = [];
+  private readonly queue: Array<{ phase: FeedbackPhase; recordId: string; run: () => Promise<boolean> }> = [];
   private investigating = 0;
   private implementing = 0;
 
@@ -81,11 +81,11 @@ export class FeedbackDispatcher {
     for (const note of notes) {
       const { record, revision } = this.store.submit(note);
       const key = randomUUID();
-      const reserved = this.store.reserve(record.recordId, revision, "investigate", key, parent.id, parent.sessionId);
-      if (reserved) {
-        this.queue.push({ phase: "investigate", recordId: record.recordId, run: async () => {
-          await this.launch(parent, record.recordId, revision, key, "investigate", buildTask(note, "investigate"));
-        } });
+      const alreadyDispatched = record.events.some(e => e.kind === "spawn_requested" &&
+        e.phase === "investigate" && e.revision === revision);
+      if (!alreadyDispatched && !this.queue.some(j => j.phase === "investigate" && j.recordId === record.recordId)) {
+        this.queue.push({ phase: "investigate", recordId: record.recordId, run: async () =>
+          this.launch(parent, record.recordId, revision, key, "investigate", buildTask(note, "investigate")) });
       }
       receipts.push(getReceipt(this.store.load(record.recordId), revision));
     }
@@ -115,16 +115,16 @@ export class FeedbackDispatcher {
     const prior = record.events.find(e => e.kind === "approved" && e.revision === revision);
     if (!prior) this.store.append(recordId, { kind: "approved", revision, proposal });
     const requestId = randomUUID();
-    const reserved = this.store.reserve(recordId, revision, "implement", requestId, parent.id, parent.sessionId);
-    if (reserved) {
+    const alreadyDispatched = record.events.some(e => e.kind === "spawn_requested" &&
+      e.phase === "implement" && e.revision === revision);
+    if (!alreadyDispatched && !this.queue.some(j => j.phase === "implement" && j.recordId === recordId)) {
       const comment = record.revisions.at(-1)!.comment;
       const note: FeedbackNote = {
         sourceApp: "seicho-dev", sourceNamespace: record.sourceNamespace,
         annotationId: record.annotationId, screen: record.screen, comment,
       };
-      this.queue.push({ phase: "implement", recordId, run: async () => {
-        await this.launch(parent, recordId, revision, requestId, "implement", buildTask(note, "implement", proposal));
-      } });
+      this.queue.push({ phase: "implement", recordId, run: async () =>
+        this.launch(parent, recordId, revision, requestId, "implement", buildTask(note, "implement", proposal)) });
     }
     this.drain();
     return getReceipt(this.store.load(recordId), revision);
@@ -152,7 +152,11 @@ export class FeedbackDispatcher {
   get(recordId: string): FeedbackRecord { return this.store.load(recordId); }
 
   private async launch(parent: FeedbackParent, recordId: string, revision: string,
-    requestId: string, phase: FeedbackPhase, task: string): Promise<void> {
+    requestId: string, phase: FeedbackPhase, task: string): Promise<boolean> {
+    // Queue reservations are in-memory, not execution evidence. Claim the durable request
+    // immediately before crossing into Pi, so queued notes cannot exhaust the live caps.
+    if (!this.store.reserve(recordId, revision, phase, requestId, parent.id, parent.sessionId))
+      return false;
     try {
       assertSeichoParent(parent);
       const reply = await parent.spawn({ requestId, sessionId: parent.sessionId, role: phase, task });
@@ -168,6 +172,7 @@ export class FeedbackDispatcher {
       this.store.append(recordId, { kind: "uncertain", phase, revision, requestId,
         evidence: "Spawn status uncertain: " + (error instanceof Error ? error.message.slice(0, 140) : "unknown") });
     }
+    return true;
   }
   private drain(): void {
     for (let i = 0; i < this.queue.length;) {
@@ -182,7 +187,14 @@ export class FeedbackDispatcher {
             .some(id => id !== job.recordId))) { i++; continue; }
       this.queue.splice(i, 1);
       if (job.phase === "investigate") this.investigating++; else this.implementing++;
-      void job.run().catch(() => undefined);
+      void job.run().then((claimed) => {
+        if (!claimed) {
+          if (job.phase === "investigate") this.investigating--; else this.implementing--;
+          this.drain();
+        }
+      }).catch(() => {
+        // A durable request might exist; do not assume the child never started.
+      });
       // A proposal or explicit verified/failed outcome frees the relevant slot.
       // Lost receipts remain occupied until inspected; there is no automatic retry.
     }
