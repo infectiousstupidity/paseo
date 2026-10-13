@@ -133,10 +133,20 @@ function shortTarget(detail: ToolCallDetail): string {
   }
 }
 
-/** Only the first line of a response: a multi-paragraph report never reaches the row. */
+/**
+ * Find a meaningful first statement, not a standalone Markdown heading/fence. Scan only a
+ * bounded prefix; never interpret a reviewer heading such as "## Review" as a verdict.
+ */
 function responseExcerpt(text: string): string | null {
-  const line = excerpt(firstLine(text));
-  return line || null;
+  const lines = text.split(/\r?\n/, 32);
+  for (const raw of lines) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (!line || /^\`{3}|^~{3}/.test(line) || /^#{1,6}\s/.test(line) ||
+        /^[-*_]{3,}$/.test(line) || /^\*\*[^*]+\*\*:?$/.test(line)) continue;
+    const cleaned = line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, "");
+    if (cleaned) return excerpt(cleaned);
+  }
+  return null;
 }
 
 function firstLine(text: string): string {

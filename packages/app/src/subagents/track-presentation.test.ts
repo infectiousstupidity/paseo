@@ -6,6 +6,7 @@ import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
+  groupSubagentRows,
   orderSubagentRows,
   resolveRowLabel,
   resolveSubagentState,
@@ -149,6 +150,22 @@ describe("countFinishedSubagents", () => {
         row({ id: "finished", status: "idle" }),
       ]),
     ).toBe(1);
+  });
+});
+
+describe("groupSubagentRows", () => {
+  it("groups attention, active and recent rows without inventing success", () => {
+    const rows = [
+      row({ id: "done" }),
+      row({ id: "run-1", status: "running" }),
+      row({ id: "failed", status: "error" }),
+      row({ id: "review", requiresAttention: true }),
+      row({ id: "run-2", status: "running" }),
+    ];
+    const groups = groupSubagentRows(rows);
+    expect(groups.attention.map((r) => r.id)).toEqual(["failed", "review"]);
+    expect(groups.working.map((r) => r.id)).toEqual(["run-1", "run-2"]);
+    expect(groups.recent.map((r) => r.id)).toEqual(["done"]);
   });
 });
 

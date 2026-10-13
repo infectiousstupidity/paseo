@@ -40,6 +40,8 @@ export interface ProviderSubagentRow {
    */
   activity: ProviderSubagentActivity | null;
   status: ProviderSubagentDescriptorPayload["status"];
+  /** Advisory native target presence; server revalidates every control. */
+  controlEligible?: boolean;
   requiresAttention: boolean;
   createdAt: Date;
 }
@@ -132,6 +134,7 @@ export function selectProviderSubagentsForParent(
       subtitle: subagent.subtitle ?? null,
       activity: subagent.activity ?? null,
       status: subagent.status,
+      controlEligible: subagent.controlEligible === true,
       requiresAttention: subagent.status === "failed",
       createdAt: new Date(subagent.createdAt),
     });

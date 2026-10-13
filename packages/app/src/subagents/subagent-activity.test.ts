@@ -93,6 +93,13 @@ describe("deriveSubagentActivity", () => {
     });
   });
 
+  it("skips Markdown-only headings and fences instead of presenting TL;DR as findings", () => {
+    expect(deriveSubagentActivity([assistant("## TL;DR\n\n\`\`\`text\nFound two concrete failures.\n\`\`\`")], false))
+      .toEqual({ kind: "response", text: "Found two concrete failures." });
+    expect(deriveSubagentActivity([assistant("## Review\n### Findings")], false))
+      .toEqual({ kind: "none" });
+  });
+
   it("caps a long response at the excerpt limit", () => {
     const long = "x".repeat(200);
     expect(deriveSubagentActivity([assistant(long)], false)).toEqual({

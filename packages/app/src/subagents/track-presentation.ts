@@ -39,6 +39,24 @@ export function resolveSubagentState(row: SubagentRow): SubagentStateWord | null
  * it crosses the active/finished boundary — never on an event inside one group. This is
  * attention ordering, not archiving: a failed child still sorts as finished for the archive row.
  */
+/** Three stable visual groups. A failed child needs attention, not an invented review verdict. */
+export interface SubagentSections {
+  attention: SubagentRow[];
+  working: SubagentRow[];
+  recent: SubagentRow[];
+}
+
+export function groupSubagentRows(rows: readonly SubagentRow[]): SubagentSections {
+  const groups: SubagentSections = { attention: [], working: [], recent: [] };
+  for (const row of rows) {
+    const state = resolveSubagentState(row);
+    if (state === "failed" || row.requiresAttention) groups.attention.push(row);
+    else if (state === "running") groups.working.push(row);
+    else groups.recent.push(row);
+  }
+  return groups;
+}
+
 export function orderSubagentRows(rows: readonly SubagentRow[]): SubagentRow[] {
   const active: SubagentRow[] = [];
   const finished: SubagentRow[] = [];
