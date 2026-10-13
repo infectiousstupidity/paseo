@@ -1,6 +1,6 @@
 # Pi subagent controls 06 — Clear, compact panel and safe controls
 
-Status: **ready**. Depends on [05](./pi-subagent-controls-05-targeted-actions.md). [Plan](../plans/pi-subagent-controls.md).
+Status: **implemented in code on main (2026-10-13); automated and real Electron/Pi acceptance unverified**. Depends on [05](./pi-subagent-controls-05-targeted-actions.md), whose live native acceptance is still pending. [Plan](../plans/pi-subagent-controls.md).
 
 ## Deliverable
 
@@ -37,3 +37,22 @@ For each failed comparison, correct the actual app, re-capture the *same* state,
 ## Implementation/testing limits
 
 Keep changes local to `packages/app/src/subagents` and existing panel primitives unless an actual bug requires touching shared components. Use narrow Zustand selectors. Desktop popover stays bounded and scrollable; the expanded area must scroll inside the panel and never overlap the fixed footer. Test active/attention/results, expanded/dismissed, pending Stop, denied/stale errors and 360px layout in focused tests. Use the mandatory comparison gate above; never claim visual acceptance from the static mock or automated checks alone. Run target app typecheck, lint, formatter and focused tests. Commit + record evidence.
+
+## Implementation record — 2026-10-13
+
+Implemented directly on `main` in scoped commits, without restarting any daemon or changing upstream Pi. Files: `packages/app/src/subagents/track.tsx`, `expanded-details.tsx`, `track-presentation.ts`, `subagent-activity.ts`, `select.ts`, their corresponding focused tests, and the existing English `subagents.panel` resource.
+
+- Reuses the existing `ComposerTrackPill` popover/compact sheet. Sections are **Needs attention / Working / Recent results**, each displayed only when populated, with actual row counts. Archive-finished moved below the results. Completed rows do not repeat a `Finished` label unless expanded.
+- Rows keep single-press session navigation. A **separate, focusable Details disclosure** opens at most one inline detail at a time, including the source task, observed timeline result/tool activity, provider context and an explicitly labeled **started ... ago** age (not an inferred duration). Full source task is retained; the condensed row line skips standalone repo/HEAD metadata and avoids fabricated summaries.
+- Final response snippets skip standalone Markdown headings, fences and boilerplate; `## TL;DR` / `## Review` alone is no longer presented as findings. No inference of reviewer verdict or successful completion.
+- **Scoped Pi Status / Stop / Steer** appear only for running `pi` provider children with a server-advertised capability and an advisory `controlEligible` flag. Actions recheck the latest store descriptor and go through the existing typed `client.controlProviderSubagent` route; the daemon and Pi bridge independently verify exact live child/session identity. No model prompts, new polling or generic RPC.
+- Stop requires an inline confirm/cancel step. A successful `stopping` receipt is displayed as **Stopping…**, preserved across detail collapse until a terminal event is observed, not as terminal proof. Failed controls show the actual error. Steer retains its input on failure and distinguishes **Queued** from **Delivered**. Status runs only on demand. Conflicting mutation controls are disabled during requests. Old daemons, ineligible children and other providers retain ordinary navigation with controls absent.
+- Added regression cases for grouping and native eligibility, markdown-only report suppression, task text trimming, control confirmation/cancellation, stale-target rejection, queued steer and on-demand status, without creating a new test harness.
+
+**Verification not performed:** This environment only has GitHub source/commit access, not a checked-out app with dependencies or the user's actual Pi/Electron runtime. These tests and app typecheck, ESLint and formatting were **added/planned but not run**. No real Electron screenshots, 360px measurements, sibling stop/steer acceptance or exact-theme contrast measurements are available. Treat the code as **unverified**, not completed acceptance. Task 07 remains conditional/blocked on the required live native evidence.
+
+### Required local gate (use a separate development daemon; do not restart :6767)
+
+1. Run `npm run build:client` if needed, then `npm exec --workspace=@getpaseo/app -- vitest run src/subagents/expanded-details.test.tsx src/subagents/track-presentation.test.ts src/subagents/subagent-activity.test.ts src/subagents/select.test.ts`, `npm run typecheck --workspace=@getpaseo/app`, changed-file ESLint and `npm run format:check:files -- <changed paths>`; fix failures, then re-run the focused checks.
+2. Verify against a disposable installed Pi session with **one child and two parallel children**: eligibility, sibling isolation on Stop, confirmation cancellation, stopped-only-after-observation, Steer queued/delivered, status, busy/unsupported/wrong-session errors and other-provider navigation. Do not assume the Task 05 backend is already proven.
+3. Capture `docs/mockups/paseo-subagents-v2.html` and the **real Electron renderer** at matched desktop collapsed / expanded running / findings states, a 360-logical-pixel collapsed and expanded compact sheet, and Stop confirmation/pending/terminal where eligible. Record real screenshot artifact paths, dimensions, mismatches and iterations here. No standalone mock screenshot may substitute for the Electron renderer. Close this task only after that comparison passes.

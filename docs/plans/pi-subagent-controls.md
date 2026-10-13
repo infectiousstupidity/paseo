@@ -1,6 +1,6 @@
 # Pi subagent controls and compact panel — delivery plan
 
-Status: **04 and 05 implemented in code, live acceptance unproven; 06 pending; 07 blocked pending live native interrupt/recovery proof** (2026-10-13). Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The checked-in [interactive V2 HTML mock](../mockups/paseo-subagents-v2.html) is the visual/interaction reference, not executable production UI. **Task 06 requires capturing that mock and the actual Electron app in matched states, comparing side by side, correcting layout and repeating**. Use Paseo's own components and tokens; do not port the HTML sample's CSS or fabricated demo data.
+Status: **04, 05 and 06 implemented in code on main; focused automated checks and live native/visual acceptance unproven. 07 blocked pending real interrupt/recovery proof** (2026-10-13). Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The checked-in [interactive V2 HTML mock](../mockups/paseo-subagents-v2.html) is the visual/interaction reference, not executable production UI. **Task 06 requires capturing that mock and the actual Electron app in matched states, comparing side by side, correcting layout and repeating**. Use Paseo's own components and tokens; do not port the HTML sample's CSS or fabricated demo data.
 
 ## Goal
 
@@ -20,7 +20,7 @@ Upstream `stop` acknowledgement means `state: stopping`, **not** terminal proof.
 
 1. [04 — Prove the in-process Pi RPC bridge](../tasks/pi-subagent-controls-04-pi-rpc-bridge.md)
 2. [05 — Authoritative child targeting, Status, Stop, and Steer](../tasks/pi-subagent-controls-05-targeted-actions.md)
-3. [06 — Compact, legible panel and action UX](../tasks/pi-subagent-controls-06-panel-v2.md)
+3. [06 — Compact, legible panel and action UX](../tasks/pi-subagent-controls-06-panel-v2.md) — **implemented in code; mandatory actual Electron screenshot comparison and live Pi validation pending**
 4. [07 — Interrupt/Resume only with verified semantics](../tasks/pi-subagent-controls-07-interrupt-resume.md) — **blocked**, not exposed. Requires installed-extension single/multi-child live proof and completion of 06; upstream source alone is insufficient.
 
 Every slice is a separate commit. Implement 07 only if its live semantics can be proven; otherwise leave those buttons absent and mark task blocked with evidence. No automated retries of mutating RPCs. Do not make a best-effort fallback to a parent natural-language prompt.

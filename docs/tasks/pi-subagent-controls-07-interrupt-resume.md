@@ -1,6 +1,6 @@
 # Pi subagent controls 07 — Only add Interrupt/Resume when semantics are proven
 
-Status: **blocked — interrupt/resume deliberately not exposed (2026-10-13)**. Depends on [06](./pi-subagent-controls-06-panel-v2.md), which is still marked ready rather than implemented, and on live acceptance of [05](./pi-subagent-controls-05-targeted-actions.md). [Plan](../plans/pi-subagent-controls.md).
+Status: **blocked — interrupt/resume deliberately not exposed (2026-10-13)**. Depends on [06](./pi-subagent-controls-06-panel-v2.md), which is implemented in code but lacks mandatory live/visual acceptance, and on live acceptance of [05](./pi-subagent-controls-05-targeted-actions.md). [Plan](../plans/pi-subagent-controls.md).
 
 ## Decision
 
@@ -17,7 +17,7 @@ Upstream RPC includes `interrupt` and `resume`; their use is **not** interchange
 
 Source-level review is **not** a live acceptance run. This environment has only GitHub repository access, not the user's installed `pi-subagents` extension, running Pi parent session, actual child processes or Electron renderer. We could not identify the installed extension revision, send live interrupt/resume controls, inspect native persisted recovery proofs, verify sibling survival, or capture real panel screenshots. The current upstream `main` implementation is **not** proof of the user's installed behavior.
 
-- **Task 06 is a dependency and remains pending.** The current `packages/app/src/subagents/track.tsx` has the old row actions, not the proposed verified-capability action panel. Adding speculative buttons here would bypass that task's interaction/visual gate.
+- **Task 06 is implemented in code but remains unverified.** The panel now exposes guarded Status/Stop/Steer for eligible Pi children; the required real Electron screenshot comparison and live child acceptance still have no evidence. Adding Interrupt/Resume before that gate would be speculative.
 - **A paused/recoverable child cannot be identified by Task 05's current public state.** `ProviderSubagentStatus` represents running/completed/failed/canceled; its server-only `controlTarget` is revoked outside `running`. The existing `PiRpcAgentSession.controlSubagent` rejects an inactive run or child for mutating actions. Neither an old row nor a `controlEligible` flag proves native recovery eligibility or a persisted resumable state.
 - **Native targeting differs from Stop.** In upstream [RPC implementation](https://github.com/nicobailon/pi-subagents/blob/main/src/extension/rpc.ts), `interrupt` and `resume` normalize `id/runId/dir/index`, not the verified `childId` required by Task 05's safe Stop. A displayed row/index cannot be assumed immutable while parallel children change. Sibling isolation and selection across status→action races require actual proof.
 - **Stopped means not resumable.** Upstream [resume target resolver](https://github.com/nicobailon/pi-subagents/blob/main/src/runs/background/async-resume.ts) rejects both `state: stopped` and individually stopped steps; it validates persisted session files, recovery descriptors, worktree/cwd and capability ceilings. Upstream `resume` demands a nonempty `message`. Recovery creates a **new** child/run where revival is needed; it does not continue the stopped process.
