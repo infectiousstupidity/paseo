@@ -1,10 +1,10 @@
-/** Narrow, internal read-only Pi subagent RPC bridge. No generic dispatch. */
+/** Narrow, correlated Pi subagent RPC bridge. No generic method/path dispatch. */
 export const PI_SUBAGENT_RPC_COMMAND = "paseo_subagent_rpc";
 export const PI_SUBAGENT_RPC_MARKER = "PASEO_SUBAGENT_RPC";
 export const PI_SUBAGENT_RPC_TIMEOUT_MS = 8_000;
 export const PI_SUBAGENT_RPC_MAX_BYTES = 16 * 1024;
 
-export type PiSubagentRpcMethod = "ping" | "status";
+export type PiSubagentRpcMethod = "ping" | "status" | "stop" | "steer";
 export type PiSubagentRpcFailureReason = "busy" | "unavailable" | "timeout" | "unsupported" | "invalid_target" | "closed" | "invalid_reply" | "error";
 export type PiSubagentRpcResult =
   | { ok: true; data: Record<string, unknown> }
@@ -64,6 +64,17 @@ export function parsePiSubagentRpcReply(
   )) {
     return { ok: false, reason: "unsupported", message: "No compatible pi-subagents RPC in this parent session." };
   }
+  if (method === "stop" && (
+    raw.data.state !== "stopping" || typeof raw.data.childId !== "string"
+  )) {
+    return { ok: false, reason: "invalid_reply", message: "Pi stop did not acknowledge an exact child." };
+  }
+  if (method === "steer" && !(
+    (isRecord(raw.data.details) && (raw.data.details.deliveryStatus === "queued" || raw.data.details.deliveryStatus === "delivered")) ||
+    raw.data.deliveryStatus === "queued" || raw.data.deliveryStatus === "delivered"
+  )) {
+    return { ok: false, reason: "invalid_reply", message: "Pi steer receipt lacks a delivery status." };
+  }
   if (method === "status" && typeof raw.data.text !== "string") {
     return { ok: false, reason: "invalid_reply", message: "Pi subagent RPC status is missing its result." };
   }
@@ -87,7 +98,7 @@ export const piSubagentRpcRuntimeBridge = String.raw`
   });
 
   pi.registerCommand("paseo_subagent_rpc", {
-    description: "Internal Paseo read-only subagent RPC bridge",
+    description: "Internal Paseo scoped subagent RPC bridge",
     handler: async (args, ctx) => {
       const marker = "PASEO_SUBAGENT_RPC ";
       const notify = (reply) => {
@@ -105,15 +116,24 @@ export const piSubagentRpcRuntimeBridge = String.raw`
       }
       if (!input || input.version !== 1 || typeof input.requestId !== "string" ||
           !/^[a-f0-9-]{36}$/i.test(input.requestId) ||
-          (input.method !== "ping" && input.method !== "status")) return;
+          (input.method !== "ping" && input.method !== "status" && input.method !== "stop" && input.method !== "steer")) return;
       const { requestId, method } = input;
       if (paseoSubagentRpcClosed) {
         notify({ version: 1, requestId, method, success: false, reason: "closed", message: "Pi session closed." });
         return;
       }
-      if (method === "ping" && input.runId !== undefined) return;
-      if (method === "status" && (typeof input.runId !== "string" ||
+      if (method === "ping" && (input.runId !== undefined || input.childId !== undefined ||
+          input.index !== undefined || input.message !== undefined)) return;
+      if (method !== "ping" && (typeof input.runId !== "string" ||
           !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/.test(input.runId))) return;
+      if (method === "status" && (input.childId !== undefined || input.message !== undefined)) return;
+      if (method === "stop" && (typeof input.childId !== "string" ||
+          !input.childId.trim() || input.childId.length > 256 || /[\r\n]/.test(input.childId) ||
+          !Number.isSafeInteger(input.index) || input.index < 0)) return;
+      if (method === "steer" && (typeof input.childId !== "string" ||
+          !input.childId.trim() || !Number.isSafeInteger(input.index) || input.index < 0 ||
+          typeof input.message !== "string" || !input.message.trim() ||
+          Buffer.byteLength(input.message, "utf8") > 360)) return;
 
       const reply = await new Promise((resolve) => {
         const eventName = "subagents:rpc:v1:reply:" + requestId;
@@ -155,7 +175,11 @@ export const piSubagentRpcRuntimeBridge = String.raw`
           }), 8000);
           pi.events.emit("subagents:rpc:v1:request", {
             version: 1, requestId, method,
-            ...(method === "status" ? { params: { runId: input.runId } } : {})
+            ...(method === "status" ? { params: { runId: input.runId } } :
+              method === "stop" ? { params: { runId: input.runId, childId: input.childId } } :
+              method === "steer" ? { params: {
+                runId: input.runId, index: input.index, message: input.message, mode: "steer"
+              } } : {})
           });
         } catch {
           finish({ version: 1, requestId, method, success: false,

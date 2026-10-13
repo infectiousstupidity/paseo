@@ -7,6 +7,14 @@ import type {
   AgentTimelineRow,
 } from "../agent-timeline-store-types.js";
 
+/** Server-only capability. Native identities must never be serialized to clients. */
+export interface ProviderSubagentControlTarget {
+  runId: string;
+  childId: string;
+  index: number;
+  sessionId: string;
+}
+
 export type ProviderSubagentStatus = "running" | "completed" | "failed" | "canceled";
 
 /**
@@ -56,6 +64,8 @@ export type ProviderSubagentInputEvent =
       subtitle?: string | null;
       activity?: ProviderSubagentActivity | null;
       parentSubagentId?: string | null;
+      /** Native, session-owned target from verified Pi status.json, not display metadata. */
+      controlTarget?: ProviderSubagentControlTarget | null;
       timestamp?: string;
     }
   | {
@@ -93,6 +103,7 @@ function stickyField<T>(next: T | undefined, previous: T | null | undefined): T 
 
 export class ProviderSubagentStore {
   private readonly descriptors = new Map<string, ProviderSubagentDescriptor>();
+  private readonly controlTargets = new Map<string, ProviderSubagentControlTarget>();
   private readonly timelines = new InMemoryAgentTimelineStore();
 
   apply(
@@ -103,6 +114,7 @@ export class ProviderSubagentStore {
     const key = storeKey(parentAgentId, event.id);
     if (event.type === "remove") {
       this.descriptors.delete(key);
+      this.controlTargets.delete(key);
       this.timelines.delete(key);
       return { type: "remove", parentAgentId, subagentId: event.id };
     }
@@ -144,6 +156,12 @@ export class ProviderSubagentStore {
       activity: stickyField(event.activity, previous?.activity),
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };
+    // Invalidate control authority as soon as the child is no longer running.
+    if (subagent.status !== "running" || event.controlTarget === null) {
+      this.controlTargets.delete(key);
+    } else if (event.controlTarget !== undefined && provider === "pi") {
+      this.controlTargets.set(key, event.controlTarget);
+    }
     this.descriptors.set(key, subagent);
     return { type: "upsert", subagent };
   }
@@ -162,6 +180,10 @@ export class ProviderSubagentStore {
     return this.descriptors.get(storeKey(parentAgentId, subagentId)) ?? null;
   }
 
+  getControlTarget(parentAgentId: string, subagentId: string): ProviderSubagentControlTarget | null {
+    return this.controlTargets.get(storeKey(parentAgentId, subagentId)) ?? null;
+  }
+
   fetchTimeline(
     parentAgentId: string,
     subagentId: string,
@@ -175,6 +197,7 @@ export class ProviderSubagentStore {
     for (const subagent of this.list(parentAgentId)) {
       const key = storeKey(parentAgentId, subagent.id);
       this.descriptors.delete(key);
+      this.controlTargets.delete(key);
       this.timelines.delete(key);
       events.push({ type: "remove", parentAgentId, subagentId: subagent.id });
     }

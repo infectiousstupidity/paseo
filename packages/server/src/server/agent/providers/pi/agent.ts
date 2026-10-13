@@ -1632,12 +1632,104 @@ export class PiRpcAgentSession implements AgentSession {
         message: "No matching native async subagent run was observed in this Pi session.",
       };
     }
-    return this.callSubagentRpc("status", runId);
+    return this.callSubagentRpc("status", { runId });
+  }
+
+  /**
+   * Only daemon-owned status.json identities may reach here. The upstream status snapshot
+   * is rechecked immediately before any mutation; absence/ambiguity disables controls.
+   */
+  async controlSubagent(input: {
+    action: "status" | "stop" | "steer";
+    runId: string;
+    childId: string;
+    index: number;
+    sessionId: string;
+    message?: string;
+  }): Promise<PiSubagentRpcResult> {
+    const fail = (message: string): PiSubagentRpcResult =>
+      ({ ok: false, reason: "invalid_target", message });
+    if (this.closed || input.sessionId !== this.state.sessionId ||
+        !validPiSubagentRunId(input.runId) || !this.observedAsyncRunIds.has(input.runId) ||
+        !Number.isSafeInteger(input.index) || input.index < 0 || !input.childId ||
+        input.childId.length > 256 || /[\r\n]/.test(input.childId)) {
+      return fail("Child target is not owned by the active parent Pi session.");
+    }
+    if (input.action === "steer" && (!input.message?.trim() ||
+        Buffer.byteLength(input.message, "utf8") > 360)) {
+      return fail("Steering instruction must be nonempty and at most 360 UTF-8 bytes.");
+    }
+    const ping = await this.pingSubagents();
+    if (!ping.ok) return ping;
+    const methods = ping.data.methods;
+    const capabilities = ping.data.capabilities;
+    if (!Array.isArray(methods) || !methods.includes(input.action) ||
+        !capabilities || typeof capabilities !== "object" ||
+        (input.action === "stop" && (capabilities as Record<string, unknown>).stop !== true) ||
+        (input.action === "steer" && ((capabilities as Record<string, unknown>).steer !== true ||
+          (capabilities as Record<string, unknown>).nonRecoveringSteer !== true))) {
+      return { ok: false, reason: "unsupported", message: "Installed pi-subagents does not support this scoped control." };
+    }
+    const fresh = await this.statusSubagent(input.runId);
+    if (!fresh.ok) return fresh;
+    const snapshot = fresh.data.asyncSnapshot;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return fail("No authoritative async child snapshot is available.");
+    }
+    const typed = snapshot as Record<string, unknown>;
+    if (typed.kind !== "pi-subagents.async-status-snapshot" || typed.version !== 1 ||
+        !Array.isArray(typed.runs)) return fail("Unsupported async snapshot version.");
+    const runs = typed.runs.filter((run): run is Record<string, unknown> =>
+      !!run && typeof run === "object" && !Array.isArray(run) && (run as Record<string, unknown>).id === input.runId);
+    if (runs.length !== 1) return fail("Async run is missing or ambiguous.");
+    const run = runs[0]!;
+    if (!Array.isArray(run.children)) return fail("Async run has no verified children.");
+    const steps = run.children.filter((step): step is Record<string, unknown> =>
+      !!step && typeof step === "object" && !Array.isArray(step) &&
+      (step as Record<string, unknown>).kind === "step");
+    // Native status step index is authoritative; never derive it from a display row.
+    const child = steps[input.index];
+    if (!child || child.id !== input.childId ||
+        steps.filter((step) => step.id === input.childId).length !== 1) {
+      return fail("Child identity changed or is ambiguous.");
+    }
+    const state = child.state;
+    if (typeof state !== "string") return fail("Child state is unavailable.");
+    if (input.action === "status") {
+      return { ok: true, data: { state, runState: run.state, childId: input.childId } };
+    }
+    if (run.state !== "running" && run.state !== "queued") {
+      return fail("Async run is not active.");
+    }
+    if (state !== "running" && state !== "queued") {
+      return fail("Child is no longer controllable.");
+    }
+    if (input.action === "stop") {
+      const receipt = await this.callSubagentRpc("stop", {
+        runId: input.runId, childId: input.childId, index: input.index,
+      });
+      if (!receipt.ok) return receipt;
+      if (receipt.data.childId !== input.childId || receipt.data.runId !== input.runId)
+        return { ok: false, reason: "invalid_reply", message: "Stop acknowledgement did not match the child." };
+      return { ok: true, data: { state: "stopping", childId: input.childId } };
+    }
+    const receipt = await this.callSubagentRpc("steer", {
+      runId: input.runId, childId: input.childId, index: input.index, message: input.message!.trim(),
+    });
+    if (!receipt.ok) return receipt;
+    const details = receipt.data.details;
+    const deliveryStatus = details && typeof details === "object"
+      ? (details as Record<string, unknown>).deliveryStatus
+      : receipt.data.deliveryStatus;
+    if (deliveryStatus !== "queued" && deliveryStatus !== "delivered") {
+      return { ok: false, reason: "invalid_reply", message: "Steer delivery acknowledgement was ambiguous." };
+    }
+    return { ok: true, data: { deliveryStatus } };
   }
 
   private async callSubagentRpc(
     method: PiSubagentRpcMethod,
-    runId?: string,
+    params?: { runId?: string; childId?: string; index?: number; message?: string },
   ): Promise<PiSubagentRpcResult> {
     if (this.closed) return { ok: false, reason: "closed", message: "Pi session closed." };
     if (this.activeTurnId || this.activeTurnStarted || this.state.isStreaming) {
@@ -1677,7 +1769,7 @@ export class PiRpcAgentSession implements AgentSession {
       this.pendingSubagentRpc.set(requestId, { method, settle });
     });
     const encoded = Buffer.from(JSON.stringify({
-      version: 1, requestId, method, ...(runId ? { runId } : {}),
+      version: 1, requestId, method, ...params,
     })).toString("base64url");
     // A stalled Pi prompt acknowledgement must not hold the caller past our deadline.
     // The notification can arrive synchronously before the prompt acknowledgement.

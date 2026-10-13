@@ -2,7 +2,7 @@ import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractTextFromToolResult } from "../../tool-call-mapper.js";
-import type { ProviderSubagentStatus } from "../../../../provider-subagents/store.js";
+import type { ProviderSubagentStatus, ProviderSubagentControlTarget } from "../../../../provider-subagents/store.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
 
 const Args = z
@@ -38,10 +38,15 @@ const Details = z
 const AsyncStatus = z
   .object({
     state: z.string(),
+    sessionId: z.string().optional(),
+    runId: z.string().optional(),
     steps: z.array(
       z
         .object({
           agent: z.string().trim().min(1),
+          childId: z.string().optional(),
+          workflowKey: z.string().optional(),
+          runId: z.string().optional(),
           status: z.string().optional(),
           sessionFile: z.string().trim().min(1).optional(),
         })
@@ -109,11 +114,11 @@ export const piSubagents: PiExtension = {
     /** Keyed by async directory, which both status.json and the completion notice carry. */
     const asyncRuns = new Map<
       string,
-      { owner: string; polling: boolean; last: Map<string, { status: string; title: string }> }
+      { owner: string; runId: string; polling: boolean; last: Map<string, { status: string; title: string; target: string }> }
     >();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
-      if (details.asyncDir && call.status !== "failed") {
-        asyncRuns.set(details.asyncDir, { owner: call.callId, polling: true, last: new Map() });
+      if (details.asyncDir && details.runId && call.status !== "failed") {
+        asyncRuns.set(details.asyncDir, { owner: call.callId, runId: details.runId, polling: true, last: new Map() });
       }
     };
     const collectRows = (
@@ -264,9 +269,22 @@ export const piSubagents: PiExtension = {
           if (!parsed.success) continue;
           const runState = parsed.data.state;
           const steps = parsed.data.steps;
+          // Do not invent step:index identities. Native child IDs are required for control.
+          // Multiple status rows can share aliases; only a uniquely resolved native ID is safe.
+          const identities = steps.map((step) => step.childId || step.workflowKey || step.runId);
           for (const [index, step] of steps.entries()) {
             const id = steps.length === 1 ? run.owner : `${run.owner}:${index}`;
             const status = asyncChildStatus(runState, step.status);
+            const nativeId = identities[index];
+            const controlTarget: ProviderSubagentControlTarget | null =
+              status === "running" && (step.status === "running" || step.status === "pending") &&
+              parsed.data.runId === run.runId &&
+              typeof parsed.data.sessionId === "string" && parsed.data.sessionId.length > 0 &&
+              typeof nativeId === "string" && nativeId.length > 0 &&
+              identities.filter((value) => value === nativeId).length === 1
+                ? { runId: run.runId, childId: nativeId, index, sessionId: parsed.data.sessionId }
+                : null;
+            const targetKey = controlTarget ? JSON.stringify(controlTarget) : "";
             const file =
               step.sessionFile && !readSessions.has(step.sessionFile)
                 ? step.sessionFile
@@ -274,9 +292,9 @@ export const piSubagents: PiExtension = {
             const last = run.last.get(id);
             // Emit only on first observation or a material change (lifecycle, agent title,
             // newly attached session file), so an unchanged running status stays quiet.
-            if (!last || last.status !== status || last.title !== step.agent || file) {
-              run.last.set(id, { status, title: step.agent });
-              subagents.push({ type: "upsert", id, title: step.agent, status });
+            if (!last || last.status !== status || last.title !== step.agent || last.target !== targetKey || file) {
+              run.last.set(id, { status, title: step.agent, target: targetKey });
+              subagents.push({ type: "upsert", id, title: step.agent, status, controlTarget });
             }
             if (file) {
               readSessions.add(file);
@@ -287,7 +305,7 @@ export const piSubagents: PiExtension = {
             if (steps.length === 0) {
               const status = runStateStatus(runState);
               if (run.last.get(run.owner)?.status !== status) {
-                run.last.set(run.owner, { status, title: "" });
+                run.last.set(run.owner, { status, title: "", target: "" });
                 subagents.push({ type: "upsert", id: run.owner, status });
               }
             }
