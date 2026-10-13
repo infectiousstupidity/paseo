@@ -66,7 +66,7 @@ function buildTask(note: FeedbackNote, phase: FeedbackPhase, proposal?: string):
 /** One small daemon-wide queue; the Markdown files remain the authoritative durable receipts. */
 export class FeedbackDispatcher {
   private readonly store: FeedbackStore;
-  private readonly queue: Array<{ phase: FeedbackPhase; run: () => Promise<void> }> = [];
+  private readonly queue: Array<{ phase: FeedbackPhase; recordId: string; run: () => Promise<void> }> = [];
   private investigating = 0;
   private implementing = 0;
 
@@ -83,7 +83,7 @@ export class FeedbackDispatcher {
       const key = randomUUID();
       const reserved = this.store.reserve(record.recordId, revision, "investigate", key, parent.id, parent.sessionId);
       if (reserved) {
-        this.queue.push({ phase: "investigate", run: async () => {
+        this.queue.push({ phase: "investigate", recordId: record.recordId, run: async () => {
           await this.launch(parent, record.recordId, revision, key, "investigate", buildTask(note, "investigate"));
         } });
       }
@@ -102,6 +102,8 @@ export class FeedbackDispatcher {
     if (record.events.some(e => e.kind === "proposal_ready" && e.revision === revision))
       throw Error("Proposal already recorded; create a revised annotation for changes");
     this.store.append(recordId, { kind: "proposal_ready", revision, proposal });
+    if (this.investigating > 0) this.investigating--;
+    this.drain();
     return getReceipt(this.store.load(recordId), revision);
   }
 
@@ -120,10 +122,29 @@ export class FeedbackDispatcher {
         sourceApp: "seicho-dev", sourceNamespace: record.sourceNamespace,
         annotationId: record.annotationId, screen: record.screen, comment,
       };
-      this.queue.push({ phase: "implement", run: async () => {
+      this.queue.push({ phase: "implement", recordId, run: async () => {
         await this.launch(parent, recordId, revision, requestId, "implement", buildTask(note, "implement", proposal));
       } });
     }
+    this.drain();
+    return getReceipt(this.store.load(recordId), revision);
+  }
+
+  /** Only the authenticated operator can attest evidence, never child process exit. */
+  recordOutcome(recordId: string, revision: string,
+    outcome: "verified" | "verification_failed" | "failed" | "blocked" | "cancelled",
+    evidence: string): FeedbackReceipt {
+    if (typeof evidence !== "string" || !evidence.trim() || evidence.length > 1000)
+      throw Error("Explicit evidence is required");
+    const record = this.store.load(recordId);
+    if (record.revisions.at(-1)?.digest !== revision || !record.events.some(
+      e => e.revision === revision && e.kind === "spawn_requested" && e.phase === "implement"))
+      throw Error("No current implementation to assess");
+    if (record.events.some(e => e.revision === revision &&
+      ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind)))
+      return getReceipt(record, revision);
+    this.store.append(recordId, { kind: outcome, revision, phase: "implement", evidence });
+    if (this.implementing > 0) this.implementing--;
     this.drain();
     return getReceipt(this.store.load(recordId), revision);
   }
@@ -151,14 +172,19 @@ export class FeedbackDispatcher {
   private drain(): void {
     for (let i = 0; i < this.queue.length;) {
       const job = this.queue[i]!;
-      if ((job.phase === "investigate" && this.investigating >= 2) ||
-          (job.phase === "implement" && this.implementing >= 1)) { i++; continue; }
+      // The Pi RPC acknowledgement starts a long-running child. It does not release the slot.
+      // Durable ledger claims continue to block conflicting work if the daemon restarts.
+      if (job.phase === "investigate" &&
+          (this.investigating >= 2 || this.store.active("investigate")
+            .filter(id => id !== job.recordId).length >= 2)) { i++; continue; }
+      if (job.phase === "implement" &&
+          (this.implementing >= 1 || this.store.active("implement")
+            .some(id => id !== job.recordId))) { i++; continue; }
       this.queue.splice(i, 1);
       if (job.phase === "investigate") this.investigating++; else this.implementing++;
-      void job.run().finally(() => {
-        if (job.phase === "investigate") this.investigating--; else this.implementing--;
-        this.drain();
-      });
+      void job.run().catch(() => undefined);
+      // A proposal or explicit verified/failed outcome frees the relevant slot.
+      // Lost receipts remain occupied until inspected; there is no automatic retry.
     }
   }
 }
