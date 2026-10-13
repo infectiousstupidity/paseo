@@ -177,12 +177,11 @@ export class FeedbackStore {
     const root = privateDirectory(this.home);
     const busy: string[] = [];
     for (const entry of readdirSync(root)) {
-      if (!/^[0-9a-f]{40}\\.md$/.test(entry)) continue;
+      if (!/^[0-9a-f]{40}\.md$/.test(entry)) continue;
       const record = this.load(entry.slice(0, -3));
       const requests = record.events.filter(e => e.kind === "spawn_requested" && e.phase === phase);
       for (const request of requests) {
         const later = record.events.some(e => e.revision === request.revision &&
-          e.phase === phase && e.requestId === request.requestId &&
           ((phase === "investigate" && e.kind === "proposal_ready") ||
            (phase === "implement" && ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind))));
         if (!later) { busy.push(record.recordId); break; }
