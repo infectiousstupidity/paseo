@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FeedbackStore, feedbackDigest, feedbackId, type FeedbackNote } from "./store.js";
+import { FeedbackStore, feedbackId, type FeedbackNote } from "./store.js";
 
 const roots: string[] = [];
 function setup() {
