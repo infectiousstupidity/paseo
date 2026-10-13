@@ -1914,7 +1914,7 @@ export const ProviderSubagentControlRequestMessageSchema = z.object({
 /** Explicit owner action only. Agentation creation events never trigger this RPC. */
 export const AgentFeedbackRequestSchema = z.object({
   type: z.literal("agent.feedback.request"),
-  action: z.enum(["submit", "record_proposal", "approve", "get"]),
+  action: z.enum(["submit", "record_proposal", "approve", "record_outcome", "get"]),
   requestId: z.string().min(1),
   parentAgentId: z.string().min(1),
   sourceNamespace: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional(),
@@ -1926,6 +1926,8 @@ export const AgentFeedbackRequestSchema = z.object({
   recordId: z.string().regex(/^[0-9a-f]{40}$/).optional(),
   revision: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(),
   proposal: z.string().min(1).max(3000).optional(),
+  outcome: z.enum(["verified", "verification_failed", "failed", "blocked", "cancelled"]).optional(),
+  evidence: z.string().min(1).max(1000).optional(),
 }).strict();
 
 export const ProviderSubagentTimelineRequestMessageSchema = z.object({
