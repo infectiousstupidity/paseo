@@ -156,8 +156,14 @@ export class FeedbackDispatcher {
     requestId: string, phase: FeedbackPhase, task: string): Promise<boolean> {
     // Queue reservations are in-memory, not execution evidence. Claim the durable request
     // immediately before crossing into Pi, so queued notes cannot exhaust the live caps.
-    if (!this.store.reserve(recordId, revision, phase, requestId, parent.id, parent.sessionId))
+    try {
+      if (!this.store.reserve(recordId, revision, phase, requestId, parent.id, parent.sessionId))
+        return false;
+    } catch {
+      // A stale queued revision, collision, or unavailable disk must not strand the pool.
+      // No Pi call was made: retry requires another explicit submission.
       return false;
+    }
     try {
       assertSeichoParent(parent);
       const reply = await parent.spawn({ requestId, sessionId: parent.sessionId, role: phase, task });
