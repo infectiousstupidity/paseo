@@ -1676,13 +1676,29 @@ export class PiRpcAgentSession implements AgentSession {
     const encoded = Buffer.from(JSON.stringify({
       version: 1, requestId, method, ...(runId ? { runId } : {}),
     })).toString("base64url");
-    try {
-      await this.runtimeSession.prompt(`/${PI_SUBAGENT_RPC_COMMAND} ${encoded}`);
-    } catch {
+    // A stalled Pi prompt acknowledgement must not hold the caller past our deadline.
+    // The notification can arrive synchronously before the prompt acknowledgement.
+    if (this.closed || this.activeTurnId || this.activeTurnStarted) {
       this.pendingSubagentRpc.get(requestId)?.settle({
-        ok: false, reason: "unavailable", message: "Pi rejected the internal RPC command.",
+        ok: false,
+        reason: this.closed ? "closed" : "busy",
+        message: this.closed ? "Pi session closed." : "Parent Pi agent started a turn.",
       });
+      return resultPromise;
     }
+    void this.runtimeSession.prompt(`/${PI_SUBAGENT_RPC_COMMAND} ${encoded}`)
+      .then((ack) => {
+        if (ack.agentInvoked === true) {
+          this.pendingSubagentRpc.get(requestId)?.settle({
+            ok: false, reason: "unavailable", message: "Pi did not handle the internal slash command locally.",
+          });
+        }
+      })
+      .catch(() => {
+        this.pendingSubagentRpc.get(requestId)?.settle({
+          ok: false, reason: "unavailable", message: "Pi rejected the internal RPC command.",
+        });
+      });
     return resultPromise;
   }
 
