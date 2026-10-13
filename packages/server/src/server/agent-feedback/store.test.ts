@@ -58,7 +58,7 @@ describe("Global agent feedback ledger", () => {
     store.append(record.recordId, { kind: "approved", revision, proposal: "Change CSS token" });
     expect(store.reserve(record.recordId, revision, "implement", "req-2", "parent", "session")).toBe(true);
     expect(store.active("implement")).toContain(record.recordId);
-    store.append(record.recordId, { kind: "verified", phase: "implement", revision, evidence: "Visual capture reviewed" });
+    store.append(record.recordId, { kind: "verification_passed", phase: "implement", revision, evidence: "Visual capture reviewed" });
     expect(store.active("implement")).not.toContain(record.recordId);
   });
 
