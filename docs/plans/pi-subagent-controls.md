@@ -1,6 +1,6 @@
 # Pi subagent controls and compact panel — delivery plan
 
-Status: **ready; not implemented**. Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The HTML V2 design shown to the user is a **reference**, not executable production UI; implement the design hierarchy described below using Paseo's existing components and tokens.
+Status: **ready; not implemented**. Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The checked-in [interactive V2 HTML mock](../mockups/paseo-subagents-v2.html) is the visual/interaction reference, not executable production UI. **Task 06 requires capturing that mock and the actual Electron app in matched states, comparing side by side, correcting layout and repeating**. Use Paseo's own components and tokens; do not port the HTML sample's CSS or fabricated demo data.
 
 ## Goal
 
@@ -43,4 +43,4 @@ No frequent status timers, heavy per-child transcripts, new stores, additional e
 
 ## Completion criteria
 
-Live Pi async child: target resolved → status read → Stop confirmed → accepted receipt → observed terminal state. A sibling stays running after a single-child Stop. Steer shows queued/delivered truthfully. Missing targets and unsupported versions never display controls. Other provider children still open normally. Real Electron/wide/360px visual captures reviewed against the hierarchy; no fake screenshots or claims. Existing focused Pi adapter, daemon RPC, protocol, client, and app test files pass with relevant typechecks, lint, formatting. Never restart the active Paseo daemon on port 6767.
+Live Pi async child: target resolved → status read → Stop confirmed → accepted receipt → observed terminal state. A sibling stays running after a single-child Stop. Steer shows queued/delivered truthfully. Missing targets and unsupported versions never display controls. Other provider children still open normally. The V2 mock and real Electron panel must be screenshot-captured in matched desktop collapsed, desktop expanded running/findings and 360px states; compare, fix and recapture until the Task 06 visual gate passes. Document exact evidence paths and outstanding differences; no fake screenshots or unverified claims. Existing focused Pi adapter, daemon RPC, protocol, client, and app test files pass with relevant typechecks, lint, formatting. Never restart the active Paseo daemon on port 6767.

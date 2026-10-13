@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Paseo · Subagent activity / v2 concept</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0e0f12; --surface: #17191e; --surface-raised: #1e2128;
+  --surface-hover: #242830; --surface-open: #20242b;
+  --line: #373b45; --line-subtle: #2c3039;
+  --text: #f4f1e8; --secondary: #c3c8d3; --muted: #abb2c0;
+  --amber: #ffd18b; --amber-tint: #3b3022;
+  --blue: #b2c8fa; --blue-tint: #29344a;
+  --danger: #f0adad; --focus: #b4c9f7;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px;
+  font-family:Inter, ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font:13px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+[hidden]{display:none!important}
+.icon{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.stage{width:min(100% - 32px,780px);margin:28px auto 36px}
+.prototype-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+.prototype-caption{font-size:11px;color:var(--muted);letter-spacing:.025em}
+.prototype-switch{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:8px;padding:3px;background:#181a1f}
+.prototype-switch button{border:0;border-radius:5px;background:transparent;color:var(--muted);padding:6px 11px;font-size:12px}
+.prototype-switch button[aria-pressed=true]{background:#343a46;color:var(--text)}
+.reset{font-size:11px;border:0;background:none;color:var(--secondary);padding:5px 3px}
+.layout{display:flex;justify-content:center}
+.panel{width:min(100%,640px);background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 28px 70px #0009;min-width:0}
+.panel.compact{width:360px}
+.panel-header{padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.title-row{display:flex;align-items:center;gap:10px;min-width:0}
+.title-icon{color:var(--secondary)}
+h1{font-size:15px;line-height:20px;letter-spacing:-.02em;font-weight:680;margin:0}
+.scope{font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--secondary);background:#252831;border:1px solid var(--line);border-radius:5px;padding:3px 6px;white-space:nowrap}
+.head-right{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
+.summary{display:flex;align-items:center;gap:14px;margin-top:9px;padding-left:26px;color:var(--secondary);font-size:11px;flex-wrap:wrap;row-gap:6px}
+.summary-part{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{display:inline-block;border-radius:50%;width:6px;height:6px;background:#9297a1;flex:none}
+.dot.warn{background:var(--amber)}.dot.live{background:var(--blue)}
+.panel-content{max-height:430px;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:#545967 transparent;scrollbar-width:thin;padding:8px 8px 10px}
+.group{margin:0;padding-top:6px}
+.group + .group{margin-top:8px}
+.group-title{display:flex;align-items:center;gap:8px;color:var(--secondary);font-size:11px;font-weight:700;margin:0;padding:4px 10px 10px;letter-spacing:.015em}
+.group-title .count{font-size:11px;font-weight:500;color:var(--muted);margin-left:auto}
+.group-title.attention{color:var(--amber)}.group-title.running{color:var(--blue)}
+.entry{border-top:1px solid var(--line-subtle);position:relative}
+.entry:first-of-type{border-top:0}
+.entry.is-open{background:var(--surface-open);border-radius:8px;outline:1px solid #3c4351;outline-offset:-1px;margin-top:4px;margin-bottom:4px}
+.entry.attention::before,.entry.running::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;border-radius:2px;background:var(--amber)}
+.entry.running::before,.entry.stopping::before{background:var(--blue)}
+.entry.is-open::before{left:0}
+.entry-trigger{display:grid;grid-template-columns:20px minmax(0,1fr) auto 13px;align-items:start;gap:12px;width:100%;min-height:67px;border:0;background:transparent;color:inherit;text-align:left;padding:12px 10px 12px 12px; border-radius:7px}
+.entry-trigger:hover{background:var(--surface-hover)}
+.entry.is-open .entry-trigger{border-radius:7px 7px 0 0}
+.entry-icon{color:var(--muted);display:flex;align-items:center;justify-content:center;padding-top:1px}
+.entry.attention .entry-icon{color:var(--amber)}.entry.running .entry-icon,.entry.stopping .entry-icon{color:var(--blue)}
+.entry-primary{min-width:0}
+.entry-title{margin:0;font-size:13px;line-height:19px;font-weight:650;color:var(--text);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.entry-subtitle{margin-top:3px;color:var(--secondary);font-size:12px;line-height:17px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.entry.attention .entry-subtitle{color:#e9c99a}
+.entry-meta{font-size:11px;line-height:19px;color:var(--muted);white-space:nowrap;padding-left:2px}
+.entry-arrow{width:13px;height:13px;color:var(--muted);margin-top:3px;transition:transform .13s ease}
+.entry.is-open .entry-arrow{transform:rotate(180deg)}
+.entry-details{padding:0 16px 16px 44px}
+.detail-inner{border-top:1px solid #3e444f;padding-top:14px;display:grid;gap:14px}
+.detail-section{display:grid;gap:4px}
+.detail-heading{font-size:10px;line-height:14px;font-weight:750;letter-spacing:.055em;text-transform:uppercase;color:var(--muted)}
+.detail-text{font-size:12px;line-height:1.55;color:var(--secondary);white-space:pre-wrap;overflow-wrap:anywhere}
+.detail-metadata{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:11px}
+.detail-metadata code{font:11px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--secondary)}
+.detail-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.action{border:1px solid #4f586b;color:var(--text);border-radius:7px;background:#2e3440;padding:8px 11px;font-size:12px;font-weight:600;min-height:34px;display:flex;align-items:center;justify-content:center;gap:7px}
+.action:hover{background:#3a4353}
+.action.quiet{background:transparent;color:var(--secondary);border-color:var(--line)}
+.action.quiet:hover{background:#30343d}
+.action.stop{color:#f5b6b6;border-color:#785258;background:transparent;margin-left:auto}
+.action.stop:hover{background:#3d292d}
+.action:disabled{opacity:.5;cursor:not-allowed}
+.action .icon{width:14px;height:14px}
+.steer-form{display:flex;gap:8px;flex-wrap:wrap}
+.steer-form input{border-radius:7px;background:#15171b;border:1px solid #555c6b;color:var(--text);padding:8px 10px;min-height:36px;flex:1;min-width:160px;font-size:12px}
+.steer-form input::placeholder{color:var(--muted)}
+.interaction-note{font-size:11px;line-height:1.45;color:var(--muted)}
+.panel-footer{min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:8px 14px 8px 18px;color:var(--muted);font-size:11px}
+.panel-footer button{border:0;background:none;color:var(--secondary);padding:6px 7px;display:inline-flex;align-items:center;gap:7px;border-radius:6px;font-size:11px}
+.panel-footer button:hover{background:var(--surface-hover)}.panel-footer button:disabled{opacity:.45;cursor:not-allowed}
+.panel-footer svg{width:14px;height:14px}
+.empty{padding:28px 14px;text-align:center;color:var(--secondary)}
+.empty p{font-size:12px;margin:4px 0 0;color:var(--muted)}
+.footnote{max-width:640px;margin:16px auto 0;font-size:12px;color:var(--muted);line-height:1.65}
+.footnote strong{color:var(--secondary)}
+.modal-backdrop{position:fixed;inset:0;background:#030409bb;display:grid;place-items:center;z-index:10;padding:16px}
+.modal{width:min(100%,410px);background:#20232a;border:1px solid #5e6675;border-radius:11px;padding:20px;box-shadow:0 22px 70px #000b}
+.modal h2{margin:0 0 8px;font-size:16px;font-weight:690;letter-spacing:-.015em}
+.modal p{font-size:12px;line-height:1.65;color:var(--secondary);margin:0 0 18px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px}
+.modal-actions button{border:1px solid #555e6e;border-radius:7px;background:#303641;color:var(--text);padding:8px 13px;font-size:12px;font-weight:600}
+.modal-actions button.danger{background:#a55b61;border-color:#bc767c;color:#fff}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#303640;color:var(--text);border:1px solid #6a7180;border-radius:8px;padding:10px 14px;font-size:12px;box-shadow:0 8px 30px #0009;z-index:20;max-width:calc(100vw - 32px);text-align:center}
+@media(max-width:480px){.stage{width:100%;margin:0 auto;padding:12px}.panel{width:100%}.panel.compact{width:100%}.panel-header{padding:14px 12px}.summary{padding-left:0;gap:10px}.head-right{font-size:10px}.panel-content{padding:6px;max-height:65dvh}.group-title{padding-left:6px;padding-right:6px}.entry-trigger{grid-template-columns:17px minmax(0,1fr) 13px;gap:9px;padding:12px 8px;min-height:67px}.entry-meta{display:none}.entry-title{font-size:12px}.entry-subtitle{font-size:11px}.entry-details{padding:0 12px 14px 33px}.detail-actions{gap:6px}.action{padding:8px 9px;font-size:11px}.action.stop{margin-left:0}.prototype-tools{margin-bottom:12px}.panel-footer{padding:8px 10px}.footnote{padding:0 4px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="prototype-tools">
+    <div class="prototype-caption">PASEO / SUBAGENT PANEL · V2 INTERACTIVE CONCEPT</div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="prototype-switch" aria-label="Preview width">
+        <button id="modeDesktop" aria-pressed="true" type="button">Desktop</button>
+        <button id="modeCompact" aria-pressed="false" type="button">360px</button>
+      </div>
+      <button class="reset" id="reset" type="button">Reset demo</button>
+    </div>
+  </div>
+  <div class="layout"><section class="panel" id="panel" aria-label="Subagents monitor">
+    <header class="panel-header">
+      <div class="title-row">
+        <svg class="icon title-icon" aria-hidden="true"><use href="#ico-layers"/></svg>
+        <h1>Subagents</h1>
+        <span class="scope">SEICHO · 0044c6</span>
+        <span class="head-right" id="totalCount"></span>
+      </div>
+      <div class="summary" id="summary" aria-live="polite"></div>
+    </header>
+    <div class="panel-content" id="content"></div>
+    <footer class="panel-footer">
+      <span id="footerLabel"></span>
+      <button id="archiveBtn" type="button"><svg class="icon" aria-hidden="true"><use href="#ico-archive"/></svg>Archive finished</button>
+    </footer>
+  </section></div>
+  <p class="footnote"><strong>Interactive demonstration only.</strong> All tasks, findings, identifiers and responses are simulated. Expand a running agent to test <strong>Send guidance</strong> and <strong>Stop run</strong>. A real implementation must confirm run ownership and state through Pi's control API before offering those actions.</p>
+</main>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+ <symbol id="ico-layers" viewBox="0 0 24 24"><rect x="5" y="9" width="14" height="12" rx="2"/><path d="M9 9V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v3M5 14h14"/></symbol>
+ <symbol id="ico-alert" viewBox="0 0 24 24"><path d="m11.1 4.2-8.4 14.3A1.8 1.8 0 0 0 4.2 21h15.6a1.8 1.8 0 0 0 1.5-2.5L12.9 4.2a1 1 0 0 0-1.8 0Z"/><path d="M12 9v5M12 18h.01"/></symbol>
+ <symbol id="ico-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+ <symbol id="ico-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+ <symbol id="ico-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+ <symbol id="ico-tool" viewBox="0 0 24 24"><path d="M14.7 6.4a5 5 0 0 0-6.3 6.3l-5.5 5.4a2 2 0 1 0 2.8 2.8l5.5-5.4a5 5 0 0 0 6.3-6.3l-3.1 3.1-3.1-.7-.7-3.1Z"/></symbol>
+ <symbol id="ico-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+ <symbol id="ico-open" viewBox="0 0 24 24"><path d="M13 5h6v6M19 5l-9 9"/><path d="M19 14v5H5V5h5"/></symbol>
+ <symbol id="ico-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+ <symbol id="ico-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+ <symbol id="ico-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/></symbol>
+</svg>
+<div id="modalRoot"></div><div id="toastRoot" aria-live="polite"></div>
+<script>
+'use strict';
+const original = [
+ {id:'rv-css',status:'attention',role:'reviewer',kind:'review',title:'Review CSS layout regression',outcome:'2 concrete findings · follow-up needed',task:'Verify control alignment and narrow viewport behavior in SEICHO.',report:'Two findings reported: bottom action overlaps content at 360px; one control lacks a keyboard focus indicator.',run:'sim-run-review-001',evidence:'Final reviewer report · findings explicit'},
+ {id:'w-viewport',status:'running',role:'worker',kind:'worker',title:'Investigate viewport overflow',outcome:'Editing mobile layout styles · active 12s ago',task:'Investigate the textarea controls in the narrow-screen editor layout. Identify the source of overflow; make a minimal fix and verify.',report:'Latest tool action: edit apps/desktop/src/components/editor-layout.css. No final report yet.',run:'sim-run-async-002',evidence:'Live Pi child activity · exact run ID available',canStop:true},
+ {id:'w-padding',status:'finished',role:'worker',kind:'worker',title:'Fix textarea overlap',outcome:'Adjusted bottom padding to prevent overlap',task:'Apply the narrow-screen overlap fix identified during review of task 0044c6.',report:'Adjusted the textarea bottom padding. Verification status was not provided in this example.',run:'sim-run-003',evidence:'Final worker response · verification not established'},
+ {id:'r-follow',status:'finished',role:'reviewer',kind:'review',title:'Review follow-up changes',outcome:'Review completed · verdict unavailable',task:'Independent follow-up review of the changes made for SEICHO inbox detail view.',report:'The sample response did not include a parseable verdict. Open the full session to inspect the findings.',run:'sim-run-004',evidence:'Completion observed · verdict not derived'},
+ {id:'w-type',status:'finished',role:'worker',kind:'worker',title:'Fix hint typography',outcome:'Updated hint typography in index.css',task:'Apply the concrete review change to hint typography in the desktop editor.',report:'Updated the functional hint typography in index.css. No independent verification is asserted here.',run:'sim-run-005',evidence:'Explicit final worker response'},
+ {id:'r-diff',status:'finished',role:'reviewer',kind:'review',title:'Review uncommitted changes',outcome:'Review completed · verdict unavailable',task:'Read-only changed-diff review for task 0044c6 on the SEICHO main branch.',report:'The report summary could not be extracted reliably from the response.',run:'sim-run-006',evidence:'Completion observed · outcome unknown'},
+ {id:'r-init',status:'finished',role:'reviewer',kind:'review',title:'Initial implementation review',outcome:'Review completed · verdict unavailable',task:'Independent review of task 0044c6 implementation against its acceptance criteria.',report:'The completion state is known, but no structured findings summary is available for this illustration.',run:'sim-run-007',evidence:'Completion observed · outcome unknown'}
+];
+let agents, expanded, compact=false,toastTimer;
+const content=document.getElementById('content');
+const icon=(name)=>`<svg class="icon" aria-hidden="true"><use href="#ico-${name}"/></svg>`;
+const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function reset(){agents=original.map(x=>({...x,hidden:false}));expanded=null;render()}
+function groupRows(group,heading,description){
+ const rows=agents.filter(x=>!x.hidden && (group==='recent'?['finished','stopped'].includes(x.status):group==='running'?['running','stopping'].includes(x.status):x.status===group));
+ if(!rows.length)return '';
+ return `<section class="group" aria-label="${escapeHtml(heading)}"><h2 class="group-title ${group==='attention'?'attention':group==='running'?'running':''}">${escapeHtml(heading)}<span class="count">${rows.length}</span></h2><div>${rows.map(rowMarkup).join('')}</div></section>`;
+}
+function rowMarkup(a){
+ const opened=expanded===a.id;
+ const mark=a.status==='attention'?'alert':['running','stopping'].includes(a.status)?'clock':a.status==='stopped'?'stop':a.kind==='review'?'eye':'tool';
+ return `<article class="entry ${a.status} ${opened?'is-open':''}" id="entry-${a.id}">
+ <button class="entry-trigger" type="button" data-expand="${a.id}" aria-expanded="${opened}" aria-controls="details-${a.id}">
+ <span class="entry-icon">${icon(mark)}</span>
+ <span class="entry-primary"><span class="entry-title">${escapeHtml(a.title)}</span><span class="entry-subtitle">${escapeHtml(a.outcome)}</span></span>
+ <span class="entry-meta">${escapeHtml(a.role)}</span>${icon('chevron').replace('class="icon"','class="icon entry-arrow"')}
+ </button>
+ ${opened?detailsMarkup(a):''}
+ </article>`;
+}
+function detailsMarkup(a){
+ const running=a.status==='running',stopping=a.status==='stopping';
+ return `<div class="entry-details" id="details-${a.id}"><div class="detail-inner">
+ <div class="detail-actions"><button class="action" type="button" data-open="${a.id}">${icon('open')}Open session</button>
+ ${running && a.canStop?`<button class="action stop" type="button" data-stop="${a.id}">${icon('stop')}Stop run</button>`:''}
+ </div>
+ <div class="detail-section"><div class="detail-heading">${running||stopping?'Current activity':'Observed result'}</div><div class="detail-text">${escapeHtml(a.report)}</div></div>
+ <div class="detail-section"><div class="detail-heading">Original task</div><div class="detail-text">${escapeHtml(a.task)}</div></div>
+ <div class="detail-metadata"><span>Agent: ${escapeHtml(a.role)}</span><span>Run: <code>${escapeHtml(a.run)}</code></span><span>${escapeHtml(a.evidence)}</span></div>
+ ${running?`<div class="detail-section"><div class="detail-heading">Send guidance (acknowledged steer)</div><form class="steer-form" data-steer="${a.id}"><input aria-label="Guidance to ${escapeHtml(a.title)}" name="guidance" maxlength="280" required placeholder="e.g. check 360px keyboard focus before finishing"><button type="submit" class="action">${icon('send')}Send</button></form></div>`:''}
+ <div class="interaction-note">${running||stopping?'Stop is permanent for this async run, not a pause. This mock only simulates the control request.':'Final completion alone does not prove that a review passed or changes were committed.'}</div>
+ </div></div>`;
+}
+function render(){
+ const visible=agents.filter(x=>!x.hidden),attention=visible.filter(x=>x.status==='attention').length,working=visible.filter(x=>['running','stopping'].includes(x.status)).length,finished=visible.filter(x=>['finished','stopped'].includes(x.status)).length;
+ document.getElementById('totalCount').textContent=`${visible.length} sessions`;
+ document.getElementById('summary').innerHTML=`<span class="summary-part"><i class="dot warn"></i>${attention} needs review</span><span class="summary-part"><i class="dot live"></i>${working} running</span><span class="summary-part"><i class="dot"></i>${finished} other finished</span>`;
+ content.innerHTML=groupRows('attention','Needs review','')+groupRows('running','Working','')+groupRows('recent','Recent results','')||'<div class="empty">No visible subagents<p>Use Reset demo to restore this example.</p></div>';
+ document.getElementById('footerLabel').textContent=`${visible.length} shown · newest result first`;
+ document.getElementById('archiveBtn').disabled=!visible.some(x=>['finished','stopped','attention'].includes(x.status));
+}
+function toast(message){const root=document.getElementById('toastRoot');root.innerHTML=`<div class="toast" role="status">${escapeHtml(message)}</div>`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>root.textContent='',3300)}
+function confirmStop(id){
+ const a=agents.find(x=>x.id===id);if(!a||a.status!=='running'||!a.canStop)return;
+ const root=document.getElementById('modalRoot');root.innerHTML=`<div class="modal-backdrop"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="stopTitle" aria-describedby="stopDescription"><h2 id="stopTitle">Stop this subagent?</h2><p id="stopDescription"><strong>${escapeHtml(a.title)}</strong> will be asked to terminate. This is not a pause and it cannot be resumed as the same run. Other subagents should continue.</p><div class="modal-actions"><button type="button" data-cancel-stop>Cancel</button><button class="danger" type="button" data-confirm-stop="${a.id}">Stop run</button></div></div></div>`;
+ root.querySelector('[data-cancel-stop]').focus();
+}
+function closeModal(){document.getElementById('modalRoot').textContent=''}
+content.addEventListener('click',e=>{
+ const toggle=e.target.closest('[data-expand]');if(toggle){const id=toggle.dataset.expand;expanded=expanded===id?null:id;render();if(expanded){const el=document.getElementById(`entry-${id}`);el?.scrollIntoView({block:'nearest',behavior:'instant'});}else document.querySelector(`[data-expand="${id}"]`)?.focus();return}
+ const opener=e.target.closest('[data-open]');if(opener){toast('Demo only · Paseo would open the existing child-session view.');return}
+ const stopper=e.target.closest('[data-stop]');if(stopper){confirmStop(stopper.dataset.stop);return}
+});
+content.addEventListener('submit',e=>{const form=e.target.closest('[data-steer]');if(!form)return;e.preventDefault();const value=form.elements.guidance.value.trim();if(!value)return;form.elements.guidance.value='';toast('Demo: guidance delivery acknowledged (not model compliance).')});
+document.getElementById('modalRoot').addEventListener('click',e=>{
+ if(e.target.closest('[data-cancel-stop]')||e.target.classList.contains('modal-backdrop')){closeModal();return}
+ const target=e.target.closest('[data-confirm-stop]');if(!target)return;const a=agents.find(x=>x.id===target.dataset.confirmStop);if(!a||a.status!=='running')return;
+ closeModal();a.status='stopping';a.outcome='Stop request accepted · awaiting termination';expanded=a.id;render();toast('Demo: stop accepted; waiting for confirmed terminal status.');
+ setTimeout(()=>{if(a.status==='stopping'){a.status='stopped';a.outcome='Stopped by operator · no restart of this run';a.report='Stop requested for the exact asynchronous run. Terminal state confirmed (simulated).';expanded=a.id;render()}},1050);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.querySelector('.modal-backdrop'))closeModal();else if(expanded){expanded=null;render()}}});
+document.getElementById('archiveBtn').addEventListener('click',()=>{let n=0;agents.forEach(a=>{if(['finished','stopped','attention'].includes(a.status)&&!a.hidden){a.hidden=true;n++}});expanded=null;render();toast(`Demo: hid ${n} terminal subagent${n===1?'':'s'} locally (not deleted).`)});
+function toggleMode(which){compact=which==='compact';document.getElementById('panel').classList.toggle('compact',compact);document.getElementById('modeDesktop').setAttribute('aria-pressed',String(!compact));document.getElementById('modeCompact').setAttribute('aria-pressed',String(compact))}
+document.getElementById('modeDesktop').addEventListener('click',()=>toggleMode('desktop'));
+document.getElementById('modeCompact').addEventListener('click',()=>toggleMode('compact'));
+document.getElementById('reset').addEventListener('click',()=>{closeModal();reset();toast('Example reset.')});
+reset();
+</script>
+</body>
+</html>
