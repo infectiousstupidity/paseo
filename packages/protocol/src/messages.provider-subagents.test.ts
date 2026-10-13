@@ -2,6 +2,26 @@ import { describe, expect, test } from "vitest";
 import { SessionInboundMessageSchema, SessionOutboundMessageSchema } from "./messages.js";
 
 describe("provider subagent protocol", () => {
+  test("accepts only scoped actions without native IDs or RPC passthrough", () => {
+    const base = {
+      type: "agent.provider_subagents.control.request",
+      parentAgentId: "parent", subagentId: "display-row", requestId: "request",
+      action: "stop",
+    };
+    expect(SessionInboundMessageSchema.safeParse(base).success).toBe(true);
+    expect(SessionInboundMessageSchema.safeParse({ ...base, action: "spawn" }).success).toBe(false);
+    expect(SessionInboundMessageSchema.safeParse({ ...base, runId: "native-run" }).success).toBe(false);
+    expect(SessionInboundMessageSchema.safeParse({ ...base, asyncDir: "/tmp/stale" }).success).toBe(false);
+    expect(SessionInboundMessageSchema.safeParse({ ...base, method: "stop" }).success).toBe(false);
+    expect(SessionOutboundMessageSchema.parse({
+      type: "agent.provider_subagents.control.response",
+      payload: {
+        requestId: "request", parentAgentId: "parent", subagentId: "display-row",
+        action: "steer", success: true, deliveryStatus: "queued", error: null,
+      },
+    }).payload).toMatchObject({ deliveryStatus: "queued" });
+  });
+
   test("accepts a scoped timeline request and structured live update", () => {
     expect(
       SessionInboundMessageSchema.parse({

@@ -47,6 +47,68 @@ function hasCompletedChild(events: AgentStreamEvent[]) {
 }
 
 describe("pi-subagents adapter", () => {
+  test("binds a native second child, never a display-row index or ambiguous alias", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-native-child-"));
+    const adapter = piSubagents.createSession();
+    try {
+      adapter.mapToolCall?.({
+        callId: "call-native", toolName: "subagent",
+        args: { agent: "scout", task: "Two children", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "parallel", runId: "run-native", asyncId: "run-native",
+            asyncDir: dir, results: [] },
+        },
+      });
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running", childId: "first-native" },
+          { agent: "second", status: "running", childId: "second-native" },
+        ],
+      }));
+      const observations = adapter.poll?.()?.subagents ?? [];
+      expect(observations).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: "call-native:1",
+          controlTarget: {
+            runId: "run-native", childId: "second-native", index: 1,
+            sessionId: "parent-session",
+          },
+        }),
+      ]));
+
+      // A missing ID must not be synthesized as step:1. A duplicate cannot be resolved.
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running", childId: "duplicate" },
+          { agent: "second", status: "running", childId: "duplicate" },
+        ],
+      }));
+      const changed = adapter.poll?.()?.subagents ?? [];
+      expect(changed.filter((event) => event.type === "upsert")).toEqual(
+        expect.arrayContaining([expect.objectContaining({
+          id: "call-native:1", controlTarget: null,
+        })]),
+      );
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running" },
+          { agent: "second", status: "running" },
+        ],
+      }));
+      const missing = adapter.poll?.()?.subagents ?? [];
+      expect(missing).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "call-native:1", controlTarget: null }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+
   test("follows async status and transcript without bg_wait", async () => {
     const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
     const file = join(dir, "child.jsonl");
