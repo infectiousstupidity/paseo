@@ -14,6 +14,12 @@ import { providerSubagentLifecycleStatus } from "./provider-store";
  */
 export type SubagentStateWord = "running" | "finished" | "failed" | "canceled";
 
+/** Visibility hint only. Every click is independently authorized by the daemon and native Pi. */
+export function canControlPiSubagent(row: SubagentRow): boolean {
+  return row.kind === "provider" && row.provider === "pi" &&
+    row.status === "running" && row.controlEligible === true;
+}
+
 export function resolveSubagentState(row: SubagentRow): SubagentStateWord | null {
   if (row.kind === "provider") {
     switch (row.status) {

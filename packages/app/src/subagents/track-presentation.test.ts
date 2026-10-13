@@ -5,6 +5,7 @@ import { isFinishedSubagent } from "./archive-finished";
 import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
+  canControlPiSubagent,
   countFinishedSubagents,
   groupSubagentRows,
   orderSubagentRows,
@@ -150,6 +151,30 @@ describe("countFinishedSubagents", () => {
         row({ id: "finished", status: "idle" }),
       ]),
     ).toBe(1);
+  });
+});
+
+describe("canControlPiSubagent", () => {
+  it("requires live eligible Pi provider ownership and excludes all other rows", () => {
+    const pi = {
+      kind: "provider" as const,
+      id: "child",
+      parentAgentId: "parent",
+      provider: "pi" as const,
+      title: "Reviewer",
+      description: null,
+      subtitle: null,
+      activity: null,
+      status: "running" as const,
+      controlEligible: true,
+      requiresAttention: false,
+      createdAt: new Date("2026-10-13T08:00:00Z"),
+    };
+    expect(canControlPiSubagent(pi)).toBe(true);
+    expect(canControlPiSubagent({ ...pi, controlEligible: false })).toBe(false);
+    expect(canControlPiSubagent({ ...pi, status: "canceled" })).toBe(false);
+    expect(canControlPiSubagent({ ...pi, provider: "claude" })).toBe(false);
+    expect(canControlPiSubagent(row({ id: "managed", status: "running" }))).toBe(false);
   });
 });
 
