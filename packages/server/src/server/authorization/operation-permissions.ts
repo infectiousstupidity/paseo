@@ -13,6 +13,7 @@ const INBOUND_PERMISSION = {
   "agent.provider_subagents.list.request": "workspace.read",
   "agent.provider_subagents.timeline.get.request": "workspace.read",
   "agent.provider_subagents.control.request": "workspace.write",
+  "agent.feedback.request": "workspace.write",
   "agent.rewind.request": "workspace.write",
   "agent.skills.get_status.request": "daemon.read",
   "agent.skills.import_legacy_selection.request": "daemon.manage",
