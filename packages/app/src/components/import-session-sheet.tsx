@@ -424,8 +424,10 @@ function ImportSessionSheetRow({
 }
 
 function ImportSessionActivityTime({ date }: { date: string }) {
-  const label = useTimeAgo(new Date(date));
-  return <Text style={styles.rowMeta}>{label}</Text>;
+  const { t } = useTranslation();
+  const timestamp = new Date(date);
+  const label = useTimeAgo(Number.isFinite(timestamp.getTime()) ? timestamp : null);
+  return <Text style={styles.rowMeta}>{label || t("importSession.details.unavailable")}</Text>;
 }
 
 function ImportSessionDetails({ entry }: { entry: FetchRecentProviderSessionEntry }) {

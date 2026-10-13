@@ -27,3 +27,9 @@ Visual reference: [interactive Import session HTML mock](../mockups/import-sessi
 - Kept Pi prompt caps unchanged at 160 characters because no real-session evidence showed that cap was inadequate.
 - Passed: focused import-sheet suite (29), i18n resource suite (39), app typecheck, changed-file lint, and formatting.
 - Manual desktop/narrow-width review with real Pi sessions remains pending. Task 05 is still marked blocked on the same visual review, so the visual acceptance check is not claimed complete.
+
+### Follow-up hardening (2026-10-13)
+
+The task's original implementation already existed on `main` (commit `6beba9cfb9`). This follow-up guards malformed/missing last-activity timestamps in the *row* as well as in Details, using the existing translated “Unavailable” label; it does not change the import path, RPC count, provider parsing, query cache, or Pi's 160-character excerpt cap. Focused interaction regressions now exercise two similar Pi sessions with one expanded at a time and no additional fetch/import, plus invalid dates and equivalent first/last excerpts.
+
+**Verification disclosure:** The new tests and affected app checks could not be executed from this GitHub-only environment. As requested, the commit is pushed to `main` without making verification a prerequisite. Real Pi-session desktop and narrow-width visual review remains pending; do not mark visual acceptance complete.
