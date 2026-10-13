@@ -1,12 +1,15 @@
-import { useCallback, useState, type ReactElement } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Archive, Unlink } from "lucide-react-native";
+import { Archive, ChevronDown, Unlink } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import equal from "fast-deep-equal";
 import { useProviderIcon } from "@/components/provider-icons";
+import { Button } from "@/components/ui/button";
+import { useSessionStore } from "@/stores/session-store";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
@@ -29,7 +32,8 @@ import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   countFinishedSubagents,
-  orderSubagentRows,
+  groupSubagentRows,
+  canControlPiSubagent,
   resolveSubagentState,
   type SubagentStateWord,
 } from "./track-presentation";
@@ -104,6 +108,29 @@ export function SubagentsTrack({
   onDetachSubagent,
 }: SubagentsTrackProps): ReactElement | null {
   const { t } = useTranslation();
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [stoppingKeys, setStoppingKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
+  const supportsControls = useSessionStore(
+    (state) => state.sessions[serverId]?.serverInfo?.features?.providerSubagentControls === true,
+  );
+  const groups = groupSubagentRows(rows);
+
+  useEffect(() => {
+    // Stop remains pending after RPC acceptance until an observed terminal child update.
+    setStoppingKeys((previous) => {
+      const next = new Set([...previous].filter((key) =>
+        rows.some((row) => subagentTrackKey(row) === key && resolveSubagentState(row) === "running"),
+      ));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [rows]);
+  const toggleDetails = useCallback((key: string) => {
+    setExpandedKey((previous) => previous === key ? null : key);
+  }, []);
+  const markStopping = useCallback((key: string) => {
+    setStoppingKeys((previous) => new Set(previous).add(key));
+  }, []);
 
   const isArchivingFinished = archiveFinishedStatus.kind === "archiving";
   const isArchiveFinishedFailed = archiveFinishedStatus.kind === "failed";
@@ -122,6 +149,40 @@ export function SubagentsTrack({
       accessibilityLabel={pill.accessibilityLabel}
       panelTitle={t("subagents.title")}
     >
+      {([
+        ["attention", groups.attention, t("subagents.panel.needsAttention")],
+        ["working", groups.working, t("subagents.panel.working")],
+        ["recent", groups.recent, t("subagents.panel.recentResults")],
+      ] as const).map(([section, sectionRows, label]) =>
+        sectionRows.length > 0 ? (
+          <View key={section} style={styles.section} testID={`subagents-track-section-${section}`}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{label}</Text>
+              <Text style={styles.sectionCount}>{sectionRows.length}</Text>
+            </View>
+            {sectionRows.map((row) => {
+              const key = subagentTrackKey(row);
+              return (
+                <SubagentsTrackRow
+                  key={key}
+                  row={row}
+                  serverId={serverId}
+                  client={client}
+                  supportsControls={supportsControls}
+                  expanded={expandedKey === key}
+                  stopping={stoppingKeys.has(key)}
+                  onToggleDetails={() => toggleDetails(key)}
+                  onStopAccepted={() => markStopping(key)}
+                  onOpenSubagent={onOpenSubagent}
+                  onOpenProviderSubagent={onOpenProviderSubagent}
+                  onArchiveSubagent={onArchiveSubagent}
+                  onDetachSubagent={onDetachSubagent}
+                />
+              );
+            })}
+          </View>
+        ) : null,
+      )}
       {showArchiveFinished && onArchiveFinished ? (
         <ComposerTrackActions divided={rows.length > 0}>
           <ArchiveFinishedRow
@@ -131,17 +192,6 @@ export function SubagentsTrack({
           />
         </ComposerTrackActions>
       ) : null}
-      {orderSubagentRows(rows).map((row) => (
-        <SubagentsTrackRow
-          key={row.id}
-          row={row}
-          serverId={serverId}
-          onOpenSubagent={onOpenSubagent}
-          onOpenProviderSubagent={onOpenProviderSubagent}
-          onArchiveSubagent={onArchiveSubagent}
-          onDetachSubagent={onDetachSubagent}
-        />
-      ))}
     </ComposerTrackPill>
   );
 }
@@ -204,9 +254,19 @@ function ArchiveFinishedRow({
   );
 }
 
+function subagentTrackKey(row: SubagentRow): string {
+  return row.kind === "provider" ? `provider:${row.parentAgentId}:${row.id}` : `paseo:${row.id}`;
+}
+
 interface SubagentsTrackRowProps {
   serverId: string;
   row: SubagentRow;
+  client: DaemonClient | null;
+  supportsControls: boolean;
+  expanded: boolean;
+  stopping: boolean;
+  onToggleDetails: () => void;
+  onStopAccepted: () => void;
   onOpenSubagent: (id: string) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   onArchiveSubagent: (id: string) => void;
@@ -250,6 +310,12 @@ function buildRowMetadata(
 function SubagentsTrackRow({
   serverId,
   row,
+  client,
+  supportsControls,
+  expanded,
+  stopping,
+  onToggleDetails,
+  onStopAccepted,
   onOpenSubagent,
   onOpenProviderSubagent,
   onArchiveSubagent,
@@ -267,7 +333,11 @@ function SubagentsTrackRow({
   // Managed children have no timeline in this store; a "no activity" line for them would just be
   // noise next to a session that is one press away.
   const shownActivity = row.kind === "provider" ? activity : null;
-  const metadata = buildRowMetadata(t, presentation.subtitle || null, age, shownActivity, state);
+  // Dense rows use one meaningful outcome/activity line; exact metadata is available on expansion.
+  const metadata = shownActivity?.kind === "response" ? shownActivity.text
+    : shownActivity?.kind === "tool" ? shownActivity.label
+    : shownActivity?.kind === "none" ? (state === "running" ? t("subagents.activityAwaiting") : t("subagents.panel.resultUnavailable"))
+    : null;
   const [hovered, setHovered] = useState(false);
   const actionsAlwaysVisible = isNative || isCompact;
   const actionsVisible = actionsAlwaysVisible || hovered;
@@ -304,9 +374,9 @@ function SubagentsTrackRow({
             >
               {displayLabel}
             </Text>
-            {stateWord ? (
+            {stateWord && (state !== "finished" || expanded) ? (
               <Text style={stateWordStyle(state)} numberOfLines={1}>
-                {stateWord}
+                {stopping && state === "running" ? t("subagents.panel.stopping") : stateWord}
               </Text>
             ) : null}
           </View>
@@ -353,6 +423,29 @@ function SubagentsTrackRow({
             onArchivePress={handleArchivePress}
           />
         </View>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? t("subagents.panel.collapseDetails", { label: displayLabel }) : t("subagents.panel.expandDetails", { label: displayLabel })}
+        accessibilityState={{ expanded }}
+        testID={`subagents-track-details-${row.id}`}
+        onPress={onToggleDetails}
+        hitSlop={8}
+        style={row.kind === "paseo" ? styles.disclosureManaged : styles.disclosure}
+      >
+        <ChevronDown size={ROW_ICON_SIZE} color={expanded ? "#FFFFFF" : "#A0A0A0"} />
+      </Pressable>
+      {expanded ? (
+        <SubagentExpandedDetails
+          row={row}
+          serverId={serverId}
+          client={client}
+          supportsControls={supportsControls}
+          activity={shownActivity}
+          stopping={stopping}
+          onStopAccepted={onStopAccepted}
+          onOpenSession={handlePress}
+        />
       ) : null}
     </View>
   );
@@ -454,7 +547,41 @@ const styles = StyleSheet.create((theme) => ({
   rowContainer: {
     position: "relative",
   },
+  section: {
+    paddingVertical: theme.spacing[1],
+    gap: theme.spacing[1],
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing[3],
+    paddingTop: theme.spacing[2],
+    paddingBottom: theme.spacing[1],
+  },
+  sectionTitle: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.foreground,
+  },
+  sectionCount: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.foregroundMuted,
+  },
+  disclosure: {
+    position: "absolute",
+    right: theme.spacing[2],
+    top: theme.spacing[2],
+    padding: theme.spacing[1],
+  },
+  disclosureManaged: {
+    position: "absolute",
+    right: 60,
+    top: theme.spacing[2],
+    padding: theme.spacing[1],
+  },
   rowBody: {
+    paddingRight: 24,
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: "auto",
@@ -463,7 +590,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   // Room for the two action buttons on managed rows, so the state word never slides under them.
   rowBodyWithActions: {
-    paddingRight: 56,
+    paddingRight: 80,
   },
   rowLabelRow: {
     flexDirection: "row",
