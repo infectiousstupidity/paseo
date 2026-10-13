@@ -16,7 +16,7 @@ One Markdown document per *source annotation identity*, not one per execution se
 
 Recommended minimal layout (illustrative; values are examples, not existing results):
 
-```markdown
+````markdown
 ---
 schema: agent-feedback/v1
 record_id: "record-unique-id"
@@ -44,7 +44,7 @@ created_at: "2026-10-13T12:00:00Z"
 ```json
 {"event_id":"unique-event-2","at":"2026-10-13T12:05:00Z","kind":"investigation_started","revision":"sha256:...","paseo_agent_id":"...","pi_session_id":"..."}
 ```
-```
+````
 
 The implementation must pick **one** precisely defined Markdown/structured-event serialization and test round-trip parsing; the nested fenced example above describes content, not a requirement to allow free-form code fences in user text. Use a constrained YAML-like frontmatter subset (scalar strings only), explicitly escaped user feedback as prose, and compact single-line JSON events inside fenced blocks. All untrusted fields must be escaped/bounded, including quotation marks, headings, `---`, code fences, line endings and Unicode. Do not put arbitrary source comments in machine-readable identity fields.
 
