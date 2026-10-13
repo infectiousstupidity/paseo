@@ -101,6 +101,7 @@ import {
 } from "./workspace-labels/index.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { PiRpcAgentSession } from "./agent/providers/pi/agent.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -2671,6 +2672,8 @@ export class Session {
         return this.handleProviderSubagentListRequest(msg);
       case "agent.provider_subagents.timeline.get.request":
         return this.handleProviderSubagentTimelineRequest(msg, source);
+      case "agent.provider_subagents.control.request":
+        return this.handleProviderSubagentControlRequest(msg, source);
       case "session.events.set_subscription.request": {
         const owner = this.delivery.begin("events", undefined, async (id) => {
           this.eventSubscriptions.delete(id);
@@ -7995,6 +7998,67 @@ export class Session {
           error: error instanceof Error ? error.message : String(error),
         },
       });
+    }
+  }
+
+  private async handleProviderSubagentControlRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.provider_subagents.control.request" }>,
+    source?: object,
+  ): Promise<void> {
+    const response = {
+      requestId: msg.requestId,
+      parentAgentId: msg.parentAgentId,
+      subagentId: msg.subagentId,
+      action: msg.action,
+    };
+    try {
+      // Do not resurrect archived parents or invent control identity during replay.
+      // The daemon's authenticated session supplies server identity; row keys are scoped
+      // to this exact parent. Native IDs remain private to the daemon.
+      const parent = this.agentManager.getAgent(msg.parentAgentId);
+      if (!parent || parent.internal || parent.provider !== "pi" ||
+          !(parent.session instanceof PiRpcAgentSession)) {
+        throw new Error("An active native Pi parent is required.");
+      }
+      const child = this.agentManager.getProviderSubagent(msg.parentAgentId, msg.subagentId);
+      const target = this.agentManager.getProviderSubagentControlTarget(
+        msg.parentAgentId, msg.subagentId,
+      );
+      if (!child || child.provider !== "pi" || child.status !== "running" ||
+          child.parentAgentId !== parent.id || !target) {
+        throw new Error("Subagent control target is absent, finished or no longer owned by this parent.");
+      }
+      if (msg.action !== "steer" && msg.message !== undefined) {
+        throw new Error("Only steer may carry a message.");
+      }
+      if (msg.action === "steer" && (!msg.message?.trim() ||
+          Buffer.byteLength(msg.message.trim(), "utf8") > 360)) {
+        throw new Error("Steer requires a nonempty instruction of at most 360 UTF-8 bytes.");
+      }
+      const result = await parent.session.controlSubagent({
+        action: msg.action, ...target, ...(msg.action === "steer" ? { message: msg.message!.trim() } : {}),
+      });
+      if (!result.ok) throw new Error(result.message);
+      // A stop receipt is only 'stopping'. No speculative terminal descriptor upsert:
+      // the adapter follows authoritative status.json and child events.
+      this.emitForSource({
+        type: "agent.provider_subagents.control.response",
+        payload: {
+          ...response, success: true, error: null,
+          ...(typeof result.data.state === "string" ? { state: result.data.state } : {}),
+          ...(typeof result.data.runState === "string" ? { runState: result.data.runState } : {}),
+          ...(result.data.deliveryStatus === "queued" || result.data.deliveryStatus === "delivered"
+            ? { deliveryStatus: result.data.deliveryStatus } : {}),
+        },
+      }, source);
+    } catch (error) {
+      this.emitForSource({
+        type: "agent.provider_subagents.control.response",
+        payload: {
+          ...response, success: false,
+          error: (error instanceof Error ? error.message : "Subagent control failed.").slice(0, 240),
+        },
+      }, source);
     }
   }
 

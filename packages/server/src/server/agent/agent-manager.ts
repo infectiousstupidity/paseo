@@ -88,6 +88,7 @@ import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
+  type ProviderSubagentControlTarget,
   type ProviderSubagentStoreEvent,
 } from "./provider-subagents/store.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
@@ -1260,6 +1261,14 @@ export class AgentManager {
   ): ProviderSubagentDescriptor | null {
     this.requirePublicAgent(parentAgentId);
     return this.providerSubagents.get(parentAgentId, subagentId);
+  }
+
+  getProviderSubagentControlTarget(
+    parentAgentId: string,
+    subagentId: string,
+  ): ProviderSubagentControlTarget | null {
+    this.requirePublicAgent(parentAgentId);
+    return this.providerSubagents.getControlTarget(parentAgentId, subagentId);
   }
 
   fetchProviderSubagentTimeline(

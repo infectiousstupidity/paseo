@@ -1901,6 +1901,16 @@ export const ProviderSubagentListRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+/** Only opaque Paseo row identity crosses the wire, never native Pi run or child IDs. */
+export const ProviderSubagentControlRequestMessageSchema = z.object({
+  type: z.literal("agent.provider_subagents.control.request"),
+  parentAgentId: z.string().min(1),
+  subagentId: z.string().min(1),
+  action: z.enum(["status", "stop", "steer"]),
+  message: z.string().max(360).optional(),
+  requestId: z.string(),
+}).strict();
+
 export const ProviderSubagentTimelineRequestMessageSchema = z.object({
   type: z.literal("agent.provider_subagents.timeline.get.request"),
   parentAgentId: z.string(),
@@ -3290,6 +3300,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
   ProviderSubagentTimelineRequestMessageSchema,
+  ProviderSubagentControlRequestMessageSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
   AgentForkContextRequestMessageSchema,
   SetAgentModeRequestMessageSchema,
@@ -3686,6 +3697,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentForkContextCursor: z.boolean().optional(),
         // COMPAT(providerSubagents): added in v0.1.107, remove gate after 2027-01-12.
         providerSubagents: z.boolean().optional(),
+        // COMPAT(providerSubagentControls): added 2026-10-13; old daemons cannot route controls.
+        providerSubagentControls: z.boolean().optional(),
         // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove gates after 2027-03-14; retain wire field.
         projectedSubagentTimeline: z.boolean().optional(),
         // COMPAT(providerSubagentNesting): added in v0.7, remove gate after 2027-03-04.
@@ -4741,6 +4754,21 @@ export const ProviderSubagentListResponseMessageSchema = z.object({
     requestId: z.string(),
     parentAgentId: z.string(),
     subagents: z.array(ProviderSubagentDescriptorPayloadSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const ProviderSubagentControlResponseMessageSchema = z.object({
+  type: z.literal("agent.provider_subagents.control.response"),
+  payload: z.object({
+    requestId: z.string(),
+    parentAgentId: z.string(),
+    subagentId: z.string(),
+    action: z.enum(["status", "stop", "steer"]),
+    success: z.boolean(),
+    state: z.string().optional(),
+    runState: z.string().optional(),
+    deliveryStatus: z.enum(["queued", "delivered"]).optional(),
     error: z.string().nullable(),
   }),
 });
@@ -6945,6 +6973,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
   ProviderSubagentTimelineResponseMessageSchema,
+  ProviderSubagentControlResponseMessageSchema,
   ProviderSubagentUpdateMessageSchema,
   SetAgentTimelineSubscriptionResponseMessageSchema,
   AgentAttentionRequiredMessageSchema,
