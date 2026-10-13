@@ -3719,6 +3719,8 @@ export const ServerInfoStatusPayloadSchema = z
         providerSubagents: z.boolean().optional(),
         // COMPAT(providerSubagentControls): added 2026-10-13; old daemons cannot route controls.
         providerSubagentControls: z.boolean().optional(),
+        // COMPAT(agentFeedback): introduced 2026-10-13; old daemons do not route this API.
+        agentFeedback: z.boolean().optional(),
         // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove gates after 2027-03-14; retain wire field.
         projectedSubagentTimeline: z.boolean().optional(),
         // COMPAT(providerSubagentNesting): added in v0.7, remove gate after 2027-03-04.
