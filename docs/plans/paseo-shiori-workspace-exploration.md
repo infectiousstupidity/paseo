@@ -109,6 +109,8 @@ A selected node shows, in plain language, **what exists, what is decided, what i
 
 Accepted decisions should have short understandable summaries, links to the originating discussion/evidence, and explicit superseded history. Technical detail stays accessible without becoming the default reading experience.
 
+**Cross-domain Project identity:** SEICHO's [Life organization and discovery direction](https://github.com/infectiousstupidity/seicho/blob/main/docs/research/life-organization-direction.md#discovering-and-linking-projects-exploration-2026-10-13) owns the user's canonical personal Project and its deduplicated links to folders, Paseo workspaces, Shiori Projects and repositories. Shiori retains its separate software Project/Task identity. Paseo should provide stable workspace/source references and deep links, not create or merge SEICHO Projects when a session starts. Exact known links reconnect mechanically; ambiguous discoveries require review. Keep this logic in SEICHO, not duplicated in the Paseo project map.
+
 ## Project-aware sessions and deterministic updates
 
 When starting from a selected project/area/Task, the system—not the model guessing filenames—resolves stable IDs, authoritative decisions, linked documents, relevant sections and scope. Supply a **small, bounded context packet**, not the entire project's history.
