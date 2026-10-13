@@ -172,32 +172,39 @@ export const piSubagents: PiExtension = {
     };
     const mapSpawn = (call: PiExtensionToolCall) => {
       const args = Args.safeParse(call.args);
-      if (!args.success || args.data.action !== undefined || !args.data.agent || !args.data.task)
-        return undefined;
+      if (!args.success || args.data.action !== undefined) return undefined;
+      const nativeDetails = Details.safeParse(
+        typeof call.result === "object" ? call.result?.details : null,
+      );
+      // Workflow / parallel / chain launches may not have a top-level agent or task.
+      // Recognize those only from a native subagent result, never the display-row name.
+      const nativeLaunch = nativeDetails.success && nativeDetails.data.mode !== "management" &&
+        Boolean(nativeDetails.data.runId);
+      if ((!args.data.agent || !args.data.task) && !nativeLaunch) return undefined;
+      const displayAgent = args.data.agent ?? (nativeDetails.success ? nativeDetails.data.mode : "subagent");
+      const description = args.data.task ?? "";
       const detail = {
         type: "sub_agent" as const,
-        subAgentType: args.data.agent,
-        description: args.data.task,
+        subAgentType: displayAgent,
+        description,
         log: extractTextFromToolResult(call.result)?.trim() ?? "",
       };
       const base = {
         type: "upsert" as const,
         id: call.callId,
-        title: args.data.agent,
-        description: args.data.task,
+        title: displayAgent,
+        description,
         toolCallId: call.callId,
       };
       if (call.status === "running")
         return { detail, subagents: [{ ...base, status: "running" as const }] };
-      const details = Details.safeParse(
-        typeof call.result === "object" ? call.result?.details : null,
-      );
+      const details = nativeDetails;
       if (!details.success || details.data.mode === "management")
         return call.status === "failed"
           ? { detail, subagents: [{ ...base, status: "failed" as const }] }
           : { detail };
       if (details.data.runId) callsByRun.set(details.data.runId, call.callId);
-      if (details.data.results.length === 0 && (details.data.asyncId || args.data.async)) {
+      if (details.data.asyncDir && (details.data.asyncId || args.data.async)) {
         rememberAsyncRun(details.data, call);
         return {
           detail,
@@ -213,7 +220,7 @@ export const piSubagents: PiExtension = {
         return { detail, subagents: [{ ...base, status: "failed" as const }] };
       return {
         detail,
-        ...collectRows(call.callId, details.data.results, args.data.task, call.status === "failed"),
+        ...collectRows(call.callId, details.data.results, description, call.status === "failed"),
       };
     };
     return {
@@ -272,6 +279,13 @@ export const piSubagents: PiExtension = {
           // Do not invent step:index identities. Native child IDs are required for control.
           // Multiple status rows can share aliases; only a uniquely resolved native ID is safe.
           const identities = steps.map((step) => step.childId || step.workflowKey || step.runId);
+          // Upstream resolver accepts all native aliases plus step:index. Detect collisions
+          // against *every* alias, not just the preferred display/native identity.
+          const candidates = steps.map((step, index) =>
+            [step.childId, step.workflowKey, step.runId, `step:${index}`].filter(
+              (value): value is string => typeof value === "string" && value.length > 0,
+            ),
+          );
           for (const [index, step] of steps.entries()) {
             const id = steps.length === 1 ? run.owner : `${run.owner}:${index}`;
             const status = asyncChildStatus(runState, step.status);
@@ -281,7 +295,7 @@ export const piSubagents: PiExtension = {
               parsed.data.runId === run.runId &&
               typeof parsed.data.sessionId === "string" && parsed.data.sessionId.length > 0 &&
               typeof nativeId === "string" && nativeId.length > 0 &&
-              identities.filter((value) => value === nativeId).length === 1
+              candidates.filter((aliases) => aliases.includes(nativeId)).length === 1
                 ? { runId: run.runId, childId: nativeId, index, sessionId: parsed.data.sessionId }
                 : null;
             const targetKey = controlTarget ? JSON.stringify(controlTarget) : "";

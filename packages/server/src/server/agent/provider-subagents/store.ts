@@ -157,7 +157,7 @@ export class ProviderSubagentStore {
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };
     // Invalidate control authority as soon as the child is no longer running.
-    if (provider !== "pi" || previous?.provider && previous.provider !== provider ||
+    if (provider !== "pi" || (previous !== undefined && previous.provider !== provider) ||
         subagent.status !== "running" || event.controlTarget === null) {
       this.controlTargets.delete(key);
     } else if (event.controlTarget !== undefined && provider === "pi") {

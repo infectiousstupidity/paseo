@@ -47,6 +47,42 @@ function hasCompletedChild(events: AgentStreamEvent[]) {
 }
 
 describe("pi-subagents adapter", () => {
+  test("recognizes native asynchronous workflow launches without agent/task inputs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-target-"));
+    const adapter = piSubagents.createSession();
+    try {
+      const initial = adapter.mapToolCall?.({
+        callId: "workflow-call", toolName: "subagent",
+        args: { workflow: true, async: true },
+        status: "completed",
+        result: { details: {
+          mode: "workflow", runId: "workflow-run", asyncId: "workflow-run",
+          asyncDir: dir, results: [],
+        } },
+      });
+      expect(initial?.subagents).toEqual([
+        expect.objectContaining({ id: "workflow-call", status: "running" }),
+      ]);
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "workflow-run", sessionId: "parent-session",
+        steps: [
+          { agent: "implementer", status: "running", workflowKey: "implement" },
+          { agent: "reviewer", status: "running", workflowKey: "review" },
+        ],
+      }));
+      expect(adapter.poll?.()?.subagents).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: "workflow-call:1",
+          controlTarget: {
+            runId: "workflow-run", childId: "review", index: 1, sessionId: "parent-session",
+          },
+        }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("binds a native second child, never a display-row index or ambiguous alias", async () => {
     const dir = await mkdtemp(join(tmpdir(), "paseo-native-child-"));
     const adapter = piSubagents.createSession();
