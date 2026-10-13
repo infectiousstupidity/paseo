@@ -1650,6 +1650,13 @@ export class PiRpcAgentSession implements AgentSession {
       if (state.isStreaming || state.isCompacting || this.activeTurnId) {
         return { ok: false, reason: "busy", message: "Parent Pi agent is busy." };
       }
+      // Never send /paseo_subagent_rpc if Pi did not load our integration command:
+      // unrecognized slash text might otherwise reach the model as a normal prompt.
+      const commands = await this.runtimeSession.getCommands();
+      if (!commands.some((command) =>
+        command.name === PI_SUBAGENT_RPC_COMMAND && command.source === "extension")) {
+        return { ok: false, reason: "unavailable", message: "The Pi integration command is not loaded." };
+      }
     } catch {
       return { ok: false, reason: "unavailable", message: "Cannot read the parent Pi state." };
     }
@@ -2547,9 +2554,15 @@ export class PiRpcAgentSession implements AgentSession {
         "details" in result && result.details &&
         typeof result.details === "object" && !Array.isArray(result.details)) {
       const details = result.details as Record<string, unknown>;
-      if (details.mode !== "management" && typeof details.runId === "string" &&
-          validPiSubagentRunId(details.runId)) {
+      if (details.mode !== "management" &&
+          (typeof details.asyncId === "string" || typeof details.asyncDir === "string") &&
+          typeof details.runId === "string" && validPiSubagentRunId(details.runId)) {
         this.observedAsyncRunIds.add(details.runId);
+        // Bound long-lived sessions without retaining arbitrary historical targets.
+        if (this.observedAsyncRunIds.size > 256) {
+          const oldest = this.observedAsyncRunIds.values().next().value;
+          if (oldest) this.observedAsyncRunIds.delete(oldest);
+        }
       }
     }
     const turnId = this.currentTurnIdForEvent();

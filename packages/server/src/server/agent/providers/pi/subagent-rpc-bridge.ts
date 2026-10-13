@@ -28,7 +28,13 @@ export function parsePiSubagentRpcReply(
   method: PiSubagentRpcMethod,
   parentSessionId: string,
 ): PiSubagentRpcResult {
-  if (!isRecord(raw) || raw.version !== 1 || raw.requestId !== requestId || raw.method !== method) {
+  if (!isRecord(raw)) {
+    return { ok: false, reason: "invalid_reply", message: "Pi subagent RPC reply is not an object." };
+  }
+  if (raw.version !== 1) {
+    return { ok: false, reason: "unsupported", message: "Unsupported pi-subagents RPC protocol version." };
+  }
+  if (raw.requestId !== requestId || raw.method !== method) {
     return { ok: false, reason: "invalid_reply", message: "Pi subagent RPC reply did not match the request." };
   }
   if (raw.success === false) {
@@ -132,7 +138,8 @@ export const piSubagentRpcRuntimeBridge = String.raw`
             if (!raw || raw.version !== 1 || raw.requestId !== requestId ||
                 raw.method !== method || typeof raw.success !== "boolean") {
               finish({ version: 1, requestId, method, success: false,
-                reason: "invalid_reply", message: "Pi subagent RPC returned a mismatched envelope." });
+                reason: raw?.version !== 1 ? "unsupported" : "invalid_reply",
+                message: "Pi subagent RPC returned an incompatible envelope." });
               return;
             }
             if (!raw.success) {
