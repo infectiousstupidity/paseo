@@ -74,9 +74,37 @@ describe("pi-subagents adapter", () => {
         expect.objectContaining({
           id: "workflow-call:1",
           controlTarget: {
-            runId: "workflow-run", childId: "review", index: 1, sessionId: "parent-session",
+            runId: "workflow-run", childId: "review", snapshotId: "review",
+            index: 1, sessionId: "parent-session",
           },
         }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("retains distinct native stop identity and projected workflow identity", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-canonical-"));
+    const adapter = piSubagents.createSession();
+    try {
+      adapter.mapToolCall?.({
+        callId: "canonical-call", toolName: "subagent", args: { workflow: true, async: true },
+        status: "completed",
+        result: { details: { mode: "workflow", runId: "canonical-run",
+          asyncId: "canonical-run", asyncDir: dir, results: [] } },
+      });
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "canonical-run", sessionId: "session-1",
+        steps: [{ agent: "builder", status: "running",
+          childId: "true-child-id", workflowKey: "workflow-visible-key" }],
+      }));
+      const observed = adapter.poll?.()?.subagents ?? [];
+      expect(observed).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "canonical-call", controlTarget: {
+          runId: "canonical-run", childId: "true-child-id",
+          snapshotId: "workflow-visible-key", index: 0, sessionId: "session-1",
+        } }),
       ]));
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -108,8 +136,8 @@ describe("pi-subagents adapter", () => {
         expect.objectContaining({
           id: "call-native:1",
           controlTarget: {
-            runId: "run-native", childId: "second-native", index: 1,
-            sessionId: "parent-session",
+            runId: "run-native", childId: "second-native", snapshotId: "second-native",
+            index: 1, sessionId: "parent-session",
           },
         }),
       ]));

@@ -1,6 +1,6 @@
 # Pi subagent controls 05 — Resolve exact targets; expose Status, Stop and Steer
 
-Status: **ready**. Depends on [04](./pi-subagent-controls-04-pi-rpc-bridge.md). [Plan](../plans/pi-subagent-controls.md).
+Status: **implemented in code; live acceptance and verification unproven**. Depends on [04](./pi-subagent-controls-04-pi-rpc-bridge.md). [Plan](../plans/pi-subagent-controls.md).
 
 ## Deliverable
 
@@ -21,3 +21,13 @@ End-to-end *typed* app → Paseo daemon → parent Pi RPC for **Status, Stop and
 - Stale, already completed, wrong parent, wrong session, unknown extension/version, disconnect, uncertain acknowledgement, async stop still pending.
 - Status is read-only; steer acknowledges queued vs delivered, no model usage. UI-gated actions unavailable for non-`pi-subagents` adapters (including Pi-compatible variants) until explicitly verified.
 - Existing server provider-subagent store, agent-manager/session RPC, protocol/client and Pi adapter tests extended minimally. Run focused suites + typecheck, lint, format. Commit after task acceptance.
+
+## Implementation status (2026-10-13)
+
+Committed directly to `main` per request despite unverified acceptance. The native Pi adapter retains async run identity, maps status.json children to parent-owned Paseo rows, and stores exact native child IDs and snapshot IDs privately in the daemon. Controls remain disabled when those identities are missing, ambiguous or stale, or when a parent session is no longer active. The `agent.provider_subagents.control.request/response` protocol is strict and accepts only parent/row IDs, action and bounded steering text; native IDs/paths cannot be passed through. Authorized `workspace.write` requests route through the existing Pi bridge; replies distinguish Stop **accepted/stopping** from observed terminal state, and preserve Steer **queued/delivered**.
+
+Files cover the Pi adapter/bridge, provider-subagent store, agent manager, session routing, protocol schemas, daemon client, permissions and server capability flag. The optional descriptor `controlEligible` flag is an advisory visibility hint, not authority: every operation revalidates its target against the live extension status. No per-row status polling or model-message fallback was added. Scope excludes the UI rework (task 06) and Interrupt/Resume (task 07).
+
+**Verification:** focused code-level regression tests were added for multi-child native targeting, workflow identity mapping, ambiguous/missing targets, private target store, narrow protocol and stop/steer receipts. They have **not been executed** in this GitHub-only coding environment. There is no evidence here that the installed Pi + pi-subagents extension handshake, real parallel child stop/sibling survival, active-parent-turn restrictions, or acceptance screenshots pass. Task 04's live acceptance remains blocked and an active parent currently returns `busy` by design, not a model-token-free mid-turn control. Do not archive this task or claim end-to-end acceptance until the live checks pass.
+
+For a checkout with dependencies: `npm exec --workspace=@getpaseo/server -- vitest run src/server/agent/providers/pi/agent.test.ts src/server/agent/providers/pi/extensions/pi-subagents/index.test.ts src/server/agent/providers/pi/subagent-rpc-bridge.test.ts src/server/agent/provider-subagents/store.test.ts`; `npm exec --workspace=@getpaseo/protocol -- vitest run src/messages.provider-subagents.test.ts`; server/client/protocol typechecks; lint; format check; live one-child and two-child stop plus steer acceptance. Code was pushed regardless of check outcome, per explicit instruction.

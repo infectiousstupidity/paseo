@@ -296,7 +296,15 @@ export const piSubagents: PiExtension = {
               typeof parsed.data.sessionId === "string" && parsed.data.sessionId.length > 0 &&
               typeof nativeId === "string" && nativeId.length > 0 &&
               candidates.filter((aliases) => aliases.includes(nativeId)).length === 1
-                ? { runId: run.runId, childId: nativeId, index, sessionId: parsed.data.sessionId }
+                ? {
+                    runId: run.runId,
+                    childId: nativeId,
+                    // The upstream snapshot intentionally projects workflowKey/runId before
+                    // step:index; that projection ID is distinct from stop's canonical childId.
+                    snapshotId: step.workflowKey || step.runId || nativeId,
+                    index,
+                    sessionId: parsed.data.sessionId,
+                  }
                 : null;
             const targetKey = controlTarget ? JSON.stringify(controlTarget) : "";
             const file =

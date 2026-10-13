@@ -1,6 +1,6 @@
 # Pi subagent controls and compact panel — delivery plan
 
-Status: **ready; not implemented**. Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The checked-in [interactive V2 HTML mock](../mockups/paseo-subagents-v2.html) is the visual/interaction reference, not executable production UI. **Task 06 requires capturing that mock and the actual Electron app in matched states, comparing side by side, correcting layout and repeating**. Use Paseo's own components and tokens; do not port the HTML sample's CSS or fabricated demo data.
+Status: **04 and 05 implemented in code, live acceptance unproven; 06 and 07 pending**. Verified against Paseo main `afdb8157a1` and the public `nicobailon/pi-subagents` RPC implementation on 2026-10-13. This follows the completed [Pi subagent monitor](./pi-subagent-monitor.md). The checked-in [interactive V2 HTML mock](../mockups/paseo-subagents-v2.html) is the visual/interaction reference, not executable production UI. **Task 06 requires capturing that mock and the actual Electron app in matched states, comparing side by side, correcting layout and repeating**. Use Paseo's own components and tokens; do not port the HTML sample's CSS or fabricated demo data.
 
 ## Goal
 

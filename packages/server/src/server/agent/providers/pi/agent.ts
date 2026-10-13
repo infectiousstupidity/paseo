@@ -1643,6 +1643,7 @@ export class PiRpcAgentSession implements AgentSession {
     action: "status" | "stop" | "steer";
     runId: string;
     childId: string;
+    snapshotId: string;
     index: number;
     sessionId: string;
     message?: string;
@@ -1652,6 +1653,7 @@ export class PiRpcAgentSession implements AgentSession {
     if (this.closed || input.sessionId !== this.state.sessionId ||
         !validPiSubagentRunId(input.runId) || !this.observedAsyncRunIds.has(input.runId) ||
         !Number.isSafeInteger(input.index) || input.index < 0 || !input.childId ||
+        !input.snapshotId || input.snapshotId.length > 256 ||
         input.childId.length > 256 || /[\r\n]/.test(input.childId)) {
       return fail("Child target is not owned by the active parent Pi session.");
     }
@@ -1689,8 +1691,8 @@ export class PiRpcAgentSession implements AgentSession {
       (step as Record<string, unknown>).kind === "step");
     // Native status step index is authoritative; never derive it from a display row.
     const child = steps[input.index];
-    if (!child || child.id !== input.childId ||
-        steps.filter((step) => step.id === input.childId).length !== 1) {
+    if (!child || child.id !== input.snapshotId ||
+        steps.filter((step) => step.id === input.snapshotId).length !== 1) {
       return fail("Child identity changed or is ambiguous.");
     }
     const state = child.state;

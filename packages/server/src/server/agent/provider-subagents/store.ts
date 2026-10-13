@@ -11,6 +11,8 @@ import type {
 export interface ProviderSubagentControlTarget {
   runId: string;
   childId: string;
+  /** Native snapshot projection ID, which may differ from the upstream stop childId. */
+  snapshotId: string;
   index: number;
   sessionId: string;
 }
