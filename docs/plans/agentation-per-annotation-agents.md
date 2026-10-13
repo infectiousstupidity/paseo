@@ -14,12 +14,22 @@ One explicitly submitted SEICHO Agentation annotation becomes one bounded, fresh
 - The upstream `nicobailon/pi-subagents` process-local RPC supports async `spawn` with fresh context, and returns native run identity. It does **not** reach from the daemon directly into Pi: execution requires an injected in-process Pi integration. Upstream warns a missing/lost spawn acknowledgment is **not** proof that no child started; status can correlate by `rpc-spawn-<requestId>` when retained.
 - Existing Paseo child monitor/controls task family `docs/plans/pi-subagent-controls.md` is independent. Reuse its native parent/child identity and lifecycle where valid; do not block this feature on panel styling or expose general `spawn` from the app.
 
+## Durable global feedback history (future implementation)
+
+**Use `~/.agents/feedback/`**, not `~/.agent-feedback/`, `~/.pivolution/`, SEICHO user-data, a Git-tracked `docs/tasks/` file, or a duplicate SQLite feedback store. [Global agent feedback record v1](../specs/global-agent-feedback-v1.md) is the single shared format/ownership contract; `feedback/` is our project-defined directory under the widely used `~/.agents/` convention, **not** a universal third-party schema.
+
+- Default layout: `~/.agents/feedback/<project-slug>/<stable-record-id>.md`. One durable Markdown file per logical annotation, including its **immutable initial comment** and versioned, machine-readable appended revision/lifecycle events; a new attempt or Pi session does not make a second annotation file.
+- For an authenticated dispatched submission, the chosen **Paseo daemon host/user** owns the authoritative record. Clarify in Task 01 whether Paseo runs on the same machine as SEICHO: `~` means the writer's home, never a magically shared cross-host directory. Do not start a second local SEICHO mirror. Different hosts are separate until an explicit authorized sync/read configuration exists.
+- Record a submitted note **durably before any spawn**; failures leave notes unsent with an honest error. Correlation IDs, approvals, proposals, revisions, verification failures and verified outcomes append as events to the same logical history. Treat historical feedback as untrusted private data; no automatic Git or cloud upload.
+- Pivolution will later **read**, never mutate, these records, correlate exact Pi/Paseo session IDs, and normalize measurements into its existing `~/.pivolution/pivolution.sqlite3`. Do not implement a Pivolution integration now or duplicate transcript content.
+
 ## Preferred design (subject to Task 01 proof)
 
 ```text
 SEICHO DEV: saved notes -> explicit "Dispatch individually" action
   -> guarded Electron main IPC; validated SEICHO route, checkout and content
   -> authenticated, narrow Paseo daemon handoff, with explicit chosen parent Pi session
+  -> write/lookup canonical ~/.agents/feedback/<project>/<record-id>.md
   -> one receipt/job per (source/session/annotation/revision/phase)
   -> Pi in-process RPC spawn (async, fresh) / result artifact
   -> concise proposal with evidence -> human approves the exact annotation
@@ -35,7 +45,7 @@ The SEICHO-to-Paseo transport **is not yet proven**: Task 01 must identify an ex
 
 - Per note: `ready -> investigating -> proposal -> approved -> implementing -> verified`; terminal `blocked`/`failed`/`cancelled`/`uncertain` preserve source feedback. Proposal does not imply approval; a successful process exit does not imply a verified UI fix. Existing Paseo statuses should be reused rather than inventing another global task system.
 - Dispatch key includes source identity, Agentation session ID, annotation ID, immutable submitted content revision, and phase. One submitted batch fans out into independently tracked notes. Duplicate sends return the existing receipt. A revised annotation needs an **explicit new** submission and must not silently mutate an active job.
-- Persist only a small bounded receipt/journal using Paseo's existing atomic data-file conventions if required. Record requestId **before** spawn; if the reply is lost, reconcile using upstream status and parent/run evidence; never blindly redispatch. If uncertain, require human intervention. Bound retention and queue length.
+- Use the global Markdown record as the **authoritative** bounded event/receipt journal; avoid a second canonical job-state store. A transient in-memory index may accelerate lookup but must rebuild from evidence. Record requestId **before** spawn; if the reply is lost, reconcile using upstream status and parent/run evidence; never blindly redispatch. If uncertain, require human intervention. Bound retention and queue length.
 - Only operator-authorized SEICHO dev origin / checkout and exact Paseo parent session may dispatch. Require `workspace.write`/equivalent actual authenticated owner authorization at the daemon boundary; enforce server-side parent/cwd/session binding; no arbitrary URL, path, shell command, model or script from the annotation.
 - Treat comments and source hints as untrusted input. Validate length, screen, IDs, limited `data-seicho-ui`/`data-screen`, and source path beneath checkout. Exclude screenshots, personal page text, selected text, computed styles, DOM/HTML, cookies, auth and arbitrary metadata from payloads, logs and public commits. Child instructions must prohibit interpreting feedback as permission to override repository rules.
 - Default max **two read-only investigations** and **one code-writing implementer per checkout**, FIFO; these are configurable only if demonstrated useful. Do not claim Git worktrees alone make concurrent edits safe. Decline/queue on overload with visible receipts. On disconnect/shutdown, reconcile; don't hide jobs or spawn replacements.
@@ -44,7 +54,7 @@ The SEICHO-to-Paseo transport **is not yet proven**: Task 01 must identify an ex
 
 ## Delivery sequence
 
-1. [01 — Real integration and authority proof](../tasks/agentation-01-integration-proof.md). Stop if process/auth/approval/turn-state limitations make this unsafe.
+1. [01 — Real integration, authority and storage proof](../tasks/agentation-01-integration-proof.md). Stop if process/auth/approval/turn-state limitations make this unsafe.
 2. [02 — Narrow Paseo per-annotation dispatcher](../tasks/agentation-02-paseo-dispatcher.md). Depends on the proven transport/RPC seam in 01.
 3. [03 — SEICHO dev-only submission and end-to-end validation](../tasks/agentation-03-seicho-handoff-and-e2e.md). Cross-repo task: source code changes belong in SEICHO; Paseo document records the handoff. **Do not pretend a Paseo-only change implements the SEICHO UI.**
 
