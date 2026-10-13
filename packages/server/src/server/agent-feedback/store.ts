@@ -6,7 +6,7 @@ import path from "node:path";
 export type FeedbackPhase = "investigate" | "implement";
 export type FeedbackKind = "submitted" | "revision_submitted" | "spawn_requested" | "spawn_accepted"
   | "uncertain" | "proposal_ready" | "approved" | "implementation_started"
-  | "verified" | "verification_failed" | "failed" | "blocked" | "cancelled";
+  | "verification_passed" | "verification_failed" | "failed" | "blocked" | "cancelled";
 export interface FeedbackNote {
   sourceApp: "seicho-dev";
   sourceNamespace: string;
@@ -183,7 +183,7 @@ export class FeedbackStore {
       for (const request of requests) {
         const later = record.events.some(e => e.revision === request.revision &&
           ((phase === "investigate" && e.kind === "proposal_ready") ||
-           (phase === "implement" && ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind))));
+           (phase === "implement" && ["verification_passed", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind))));
         if (!later) { busy.push(record.recordId); break; }
       }
     }
