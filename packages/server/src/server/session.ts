@@ -102,6 +102,7 @@ import {
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
 import { PiRpcAgentSession } from "./agent/providers/pi/agent.js";
+import { feedbackDispatcher, assertSeichoParent, type FeedbackParent } from "./agent-feedback/dispatcher.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -2674,6 +2675,8 @@ export class Session {
         return this.handleProviderSubagentTimelineRequest(msg, source);
       case "agent.provider_subagents.control.request":
         return this.handleProviderSubagentControlRequest(msg, source);
+      case "agent.feedback.request":
+        return this.handleAgentFeedbackRequest(msg, source);
       case "session.events.set_subscription.request": {
         const owner = this.delivery.begin("events", undefined, async (id) => {
           this.eventSubscriptions.delete(id);
@@ -7998,6 +8001,79 @@ export class Session {
           error: error instanceof Error ? error.message : String(error),
         },
       });
+    }
+  }
+
+  /** Authenticated session request: no unauthenticated loopback or parent model prompt. */
+  private async handleAgentFeedbackRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.feedback.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      const parent = this.agentManager.getAgent(msg.parentAgentId);
+      if (!parent || parent.internal || parent.provider !== "pi" ||
+          !(parent.session instanceof PiRpcAgentSession) || !parent.config.cwd) {
+        throw new Error("An active SEICHO Pi parent is required");
+      }
+      const sessionId = parent.session.getFeedbackSessionId();
+      if (!sessionId) throw new Error("The parent Pi session is closed");
+      const session = parent.session;
+      const target: FeedbackParent = {
+        id: parent.id,
+        provider: "pi",
+        cwd: parent.config.cwd,
+        sessionId,
+        spawn: (params) => session.spawnAnnotationChild(params),
+      };
+      // A session-wide workspace.write grant was checked by authorization.allowsInbound.
+      // Reconfirm here in case callers reach this handler through a future internal route.
+      if (!this.authorization.allowsPermission("workspace.write")) {
+        throw new Error("Feedback dispatch requires workspace.write");
+      }
+      assertSeichoParent(target);
+      let records;
+      let proposal: string | undefined;
+      if (msg.action === "submit") {
+        if (!msg.sourceNamespace || !msg.screen || !msg.annotations)
+          throw new Error("Source namespace, screen and notes required");
+        records = await feedbackDispatcher.submit(target, msg.sourceNamespace, msg.annotations.map(
+          note => ({
+            sourceApp: "seicho-dev" as const,
+            sourceNamespace: msg.sourceNamespace!,
+            annotationId: note.id,
+            screen: msg.screen!,
+            comment: note.comment,
+          }),
+        ));
+      } else if (msg.action === "record_proposal") {
+        if (!msg.recordId || !msg.revision || !msg.proposal)
+          throw new Error("Record, revision and proposal required");
+        records = [feedbackDispatcher.recordProposal(msg.recordId, msg.revision, msg.proposal)];
+      } else if (msg.action === "approve") {
+        if (!msg.recordId || !msg.revision) throw new Error("Record and revision required");
+        records = [feedbackDispatcher.approve(target, msg.recordId, msg.revision)];
+      } else if (msg.action === "get") {
+        if (!msg.recordId) throw new Error("Record ID required");
+        const record = feedbackDispatcher.get(msg.recordId);
+        const revision = record.revisions.at(-1)!.digest;
+        const activity = record.events.filter(e => e.revision === revision);
+        const latest = activity.at(-1);
+        const runId = activity.findLast(e => e.kind === "spawn_accepted")?.runId;
+        records = [{ recordId: record.recordId, revision,
+          state: latest?.kind ?? "submitted", ...(runId ? { runId } : {}) }];
+        proposal = activity.findLast(e => e.kind === "proposal_ready")?.proposal;
+      } else {
+        throw new Error("Unsupported feedback action");
+      }
+      this.emitForSource({ type: "agent.feedback.response", payload: {
+        requestId: msg.requestId, success: true, error: null, records,
+        ...(proposal ? { proposal } : {}),
+      } }, source);
+    } catch (error) {
+      this.emitForSource({ type: "agent.feedback.response", payload: {
+        requestId: msg.requestId, success: false,
+        error: (error instanceof Error ? error.message : "Feedback request failed").slice(0, 240),
+      } }, source);
     }
   }
 
