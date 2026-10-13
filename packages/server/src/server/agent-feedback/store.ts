@@ -135,7 +135,7 @@ export class FeedbackStore {
       let record: FeedbackRecord;
       if (existsSync(file)) {
         record = this.load(id);
-        if (record.sourceNamespace !== note.sourceNamespace || record.annotationId !== note.annotationId)
+        if (record.sourceNamespace !== note.sourceNamespace || record.annotationId !== note.annotationId || record.screen !== note.screen)
           throw Error("Feedback identity collision");
         if (record.revisions.some((r) => r.digest === revision)) return { record, revision };
         record.revisions.push({ digest: revision, comment });
