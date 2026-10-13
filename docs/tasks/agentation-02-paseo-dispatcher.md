@@ -1,6 +1,6 @@
 # Agentation 02 — Paseo: isolated per-annotation job and Pi spawn
 
-Status: **blocked on [01](./agentation-01-integration-proof.md)**. [Plan](../plans/agentation-per-annotation-agents.md). Paseo repo only.
+Status: **implemented in code on main; automated and live acceptance UNVERIFIED (2026-10-13)**. Task 01 gates deliberately bypassed at user's request. [Plan](../plans/agentation-per-annotation-agents.md). Paseo repo only.
 
 ## Outcome
 
@@ -25,3 +25,36 @@ Create a narrowly opt-in, owner-authorized dispatcher that **durably records eac
 - Two proposals tracked separately; approving one causes exactly one fresh implementation child, other remains unmodified. A second approval is idempotent; same-checkout implementations don't overlap. No unauthorized Git or auto-resolution.
 - Parent/session shutdown, queued child, active child, lost evidence and plugin unavailable show truthful state without unexpected spawns. Re-ingestion/restart and revised feedback cannot duplicate a logical record, event or spawn; histories and session references remain readable after completion.
 - Add a few focused tests to existing Pi adapter/daemon protocol/auth/store tests; run relevant unit tests, typecheck, lint and format checks. Test actual Pi integration with 01's environment and record evidence. Avoid coverage inflation and unrelated feature work.
+
+## Implementation status (2026-10-13)
+
+Committed to `main` at the user's explicit direction to **ignore Task 01's required gates**. This is implementation, **not a claim that the Pi/Windows runtime or all acceptance checks passed**.
+
+Implemented:
+- Private, versioned canonical Markdown records in `~/.agents/feedback/seicho/<record-id>.md`, using a stable source namespace + annotation identity, immutable first feedback, submitted revisions, and append-only logical event history within atomic file replacements. Refuse symlinked directories/records, duplicate identities, untrusted extra note fields, path escape and unbounded files. Files are outside Git.
+- `FeedbackStore.reserve` persists a request **before** any outbound Pi invocation. A duplicate or lost acknowledgment does not automatically spawn again. Unknown requests remain uncertain rather than faking completion. Queue reservations happen only when a worker slot is available, not at form submission.
+- Narrow `agent.feedback.request` / `agent.feedback.response` schema with `workspace.write` authorization, an optional `server_info.features.agentFeedback` capability, exact parent Pi session binding and verified `infectiousstupidity/seicho` Git origin/cwd. Actions: `submit`, `get`, `record_proposal`, `approve`, `record_outcome`. No generic script/RPC URL/command field is accepted.
+- Direct Pi-process IPC socket inside the existing Paseo-injected Pi extension (no new process, no parent model prompt). Local random pipe/socket identity, secret token, bounded request/reply, session identity check, request correlation, cleanup and timeouts. Registers a constrained read-only source-inspection runtime agent and a separate implementation agent, requesting upstream Pi async `spawn` with `context: "fresh"`. Acknowledged native run IDs are linked to parent Pi status.
+- At most two investigations and one implementation attempt per SEICHO checkout, with FIFO in-process queue. Successful *spawn acknowledgments do not release slots*. Investigation slot release requires a recorded proposal; implementation release requires an explicit evidence-backed terminal outcome. Uncertain spawn records stay non-retryable. A daemon restart does not blindly replay queued or uncertain mutations.
+- Human approval requires the latest annotation revision and an explicitly recorded proposal. Verification is never asserted merely because Pi exited. No auto-resolve, commit, push, merge or model fallback.
+- Focused unit tests added for Markdown storage/idempotence/safety, two-note context isolation, duplicate submissions, approval and concurrency, and strict protocol shapes.
+
+### Not yet proven / follow-up
+
+- **Tests not executed here:** GitHub connector writes do not provide a checkout with Paseo's installed dependencies. No credible passing typecheck, lint, format or Vitest result is available. The local/CI implementer must run:
+  - `npm exec --workspace=@getpaseo/server -- vitest run src/server/agent-feedback/store.test.ts src/server/agent-feedback/dispatcher.test.ts src/server/agent/providers/pi/subagent-rpc-bridge.test.ts`
+  - `npm exec --workspace=@getpaseo/protocol -- vitest run src/messages.agent-feedback.test.ts`
+  - `npm run typecheck --workspace=@getpaseo/server`, `npm run typecheck --workspace=@getpaseo/protocol`, `npm run lint`, `npm run format:check`
+- **Live Pi acceptance remains unverified:** startup runtime-agent registration, installed upstream `spawn` reply identity, Windows named-pipe permissions, busy-parent execution, model-token neutrality, native child monitor/status, dropped replies, extension shutdown and restart.
+- **SEICHO UI integration is Task 03**, not included here. There is no direct SEICHO credential handoff or annotation UX in this Paseo-only slice. The new authenticated Paseo RPC is dormant until a supported client requests it.
+- Proposals are **explicitly recorded** through the authorized action after inspecting the linked Pi run; the code does not automatically extract a terminal child report and post back to the Agentation thread. A verified mapping of terminal native output to a trustworthy compact proposal is future work if needed.
+- No automatic cross-host sync: the record is stored on the **Paseo daemon user's host**, which may not be the SEICHO desktop host. Current retention and crash-lock clearance are conservative/manual.
+
+### Touched implementation
+
+- `packages/server/src/server/agent-feedback/{store.ts,dispatcher.ts}` and targeted tests
+- `packages/server/src/server/agent/providers/pi/{feedback-bridge.ts,agent.ts}`
+- `packages/server/src/server/session.ts`, `websocket-server.ts`, `authorization/operation-permissions.ts`
+- `packages/protocol/src/messages.ts`, `messages.agent-feedback.test.ts`
+
+Do not archive this task as verified until focused checks and real Pi/Electron acceptance pass. Do not use this code path as a replacement for SEICHO's existing Task export until Task 03 is implemented.
