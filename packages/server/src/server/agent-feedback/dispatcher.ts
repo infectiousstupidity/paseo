@@ -138,8 +138,9 @@ export class FeedbackDispatcher {
       throw Error("Explicit evidence is required");
     const record = this.store.load(recordId);
     if (record.revisions.at(-1)?.digest !== revision || !record.events.some(
-      e => e.revision === revision && e.kind === "spawn_requested" && e.phase === "implement"))
-      throw Error("No current implementation to assess");
+      e => e.revision === revision && e.kind === "spawn_accepted" && e.phase === "implement" &&
+        typeof e.runId === "string"))
+      throw Error("No confirmed implementation to assess");
     if (record.events.some(e => e.revision === revision &&
       ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind)))
       return getReceipt(record, revision);
