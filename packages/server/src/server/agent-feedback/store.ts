@@ -150,6 +150,28 @@ export class FeedbackStore {
       return { record, revision };
     });
   }
+
+  /**
+   * Claim one irreversible spawn attempt under the record lock.
+   * Replaying the same note after a lost reply NEVER starts another child.
+   */
+  reserve(id: string, revision: string, phase: FeedbackPhase, requestId: string,
+    parentAgentId: string, parentSessionId: string): boolean {
+    const file = this.file(id);
+    return this.atomic(file, () => {
+      const record = this.load(id);
+      if (record.revisions.at(-1)?.digest !== revision) throw Error("Stale feedback revision");
+      if (record.events.some((event) => event.revision === revision && event.phase === phase &&
+          event.kind === "spawn_requested")) return false;
+      if (phase === "implement" && !record.events.some((event) => event.revision === revision &&
+          event.kind === "approved")) throw Error("Implementation requires explicit approval");
+      record.events.push({ eventId: randomUUID(), at: new Date().toISOString(),
+        kind: "spawn_requested", phase, requestId, revision, parentAgentId, parentSessionId });
+      write(file, markdown(record), false);
+      return true;
+    });
+  }
+
   append(id: string, input: Omit<FeedbackEvent, "eventId" | "at"> & { eventId?: string }): FeedbackRecord {
     const file = this.file(id);
     return this.atomic(file, () => {
