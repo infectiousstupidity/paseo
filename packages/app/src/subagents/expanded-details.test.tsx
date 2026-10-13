@@ -176,7 +176,7 @@ describe("scoped Pi subagent panel controls", () => {
     expect(screen.getByTestId("subagents-track-stopping-worker-2")).toBeTruthy();
   });
 
-  it("preserves queued steering and read-only status without a parent model turn", async () => {
+  it("sends scoped status and steer RPCs and preserves queued delivery receipts", async () => {
     addDescriptor();
     const client = vi.fn(async (input: { action: string }) =>
       input.action === "steer"
@@ -186,7 +186,8 @@ describe("scoped Pi subagent panel controls", () => {
     renderDetails(client);
     fireEvent.click(screen.getByTestId("subagents-track-status-worker-2"));
     await waitFor(() => expect(client).toHaveBeenCalledTimes(1));
-    fireEvent.change(screen.getByTestId("subagents-track-steer-input-worker-2"), {
+    const steerInput = await screen.findByTestId("subagents-track-steer-input-worker-2");
+    fireEvent.change(steerInput, {
       target: { value: "Focus on tests" },
     });
     fireEvent.click(screen.getByTestId("subagents-track-steer-worker-2"));

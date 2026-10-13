@@ -115,6 +115,11 @@ export function SubagentsTrack({
   const groups = groupSubagentRows(rows);
 
   useEffect(() => {
+    setExpandedKey(null);
+    setStoppingKeys(new Set());
+  }, [serverId]);
+
+  useEffect(() => {
     // Stop remains pending after RPC acceptance until an observed terminal child update.
     setStoppingKeys((previous) => {
       const next = new Set([...previous].filter((key) =>
@@ -397,7 +402,11 @@ function SubagentsTrackRow({
       ) : null}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={expanded ? t("subagents.panel.collapseDetails", { label: displayLabel }) : t("subagents.panel.expandDetails", { label: displayLabel })}
+        accessibilityLabel={
+          expanded
+            ? t("subagents.panel.collapseDetails", { label: displayLabel })
+            : t("subagents.panel.expandDetails", { label: displayLabel })
+        }
         accessibilityState={{ expanded }}
         aria-expanded={expanded}
         testID={`subagents-track-details-${row.id}`}
@@ -405,7 +414,10 @@ function SubagentsTrackRow({
         hitSlop={8}
         style={row.kind === "paseo" ? styles.disclosureManaged : styles.disclosure}
       >
-        <ChevronDown size={ROW_ICON_SIZE} color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted} />
+        <ChevronDown
+          size={ROW_ICON_SIZE}
+          color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted}
+        />
       </Pressable>
       {expanded ? (
         <SubagentExpandedDetails

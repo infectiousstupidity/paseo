@@ -125,6 +125,9 @@ export function SubagentExpandedDetails({
       <Text style={styles.meta}>
         {row.provider}{age ? " · " + t("subagents.panel.startedAgo", { age }) : ""}
       </Text>
+      {row.kind === "provider" && row.subtitle ? (
+        <Text selectable style={styles.meta}>{row.subtitle}</Text>
+      ) : null}
       <View style={styles.actions}>
         <Button size="sm" variant="outline" onPress={onOpenSession} testID={"subagents-track-open-" + row.id}>
           {t("subagents.panel.openSession")}
