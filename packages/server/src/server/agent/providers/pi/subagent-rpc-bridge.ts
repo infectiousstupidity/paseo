@@ -69,6 +69,11 @@ export const piSubagentRpcRuntimeBridge = String.raw`
   const paseoSubagentRpcPending = new Set();
   let paseoSubagentRpcClosed = false;
 
+  pi.on("session_start", () => {
+    // Pi can reopen or switch sessions without recreating its loaded extensions.
+    paseoSubagentRpcClosed = false;
+  });
+
   pi.on("session_shutdown", () => {
     paseoSubagentRpcClosed = true;
     for (const cancel of paseoSubagentRpcPending) cancel();

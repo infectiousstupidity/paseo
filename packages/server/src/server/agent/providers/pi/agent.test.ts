@@ -10,11 +10,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { EventEmitter } from "node:events";
 import path from "node:path";
 import pino from "pino";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { describe, expect, onTestFinished, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 
 import type { AgentSession, AgentSessionConfig, AgentStreamEvent } from "../../agent-sdk-types.js";
 import {
@@ -3486,5 +3487,255 @@ describe("transformPiModels", () => {
         description: "openrouter/OpenAI: GPT-5.5",
       },
     ]);
+  });
+});
+
+
+/** Exercise the real injected extension command and its process-local bus with a fake Pi host. */
+async function installFakeSubagentRpcHost(
+  pi: FakePi,
+  onRequest?: (request: {
+    version: number;
+    requestId: string;
+    method: string;
+    params?: { runId: string };
+  }) => unknown,
+) {
+  const runtime = pi.latestSession();
+  const extensionPath = pi.recordedLaunches.at(-1)?.extensionPaths?.[0];
+  if (!extensionPath) throw new Error("Pi test has no injected extension");
+  const extension = (await import(pathToFileURL(extensionPath).href)) as {
+    default: (api: Record<string, unknown>) => void;
+  };
+  const bus = new EventEmitter();
+  const commandHandlers = new Map<
+    string,
+    (args: string, ctx: { ui: { notify: (message: string) => void } }) => Promise<void>
+  >();
+  const lifecycle = new Map<string, Array<() => void>>();
+  const requests: Array<{ version: number; requestId: string; method: string; params?: { runId: string } }> = [];
+  const notifications: string[] = [];
+  const events = {
+    on(name: string, listener: (value: unknown) => void) {
+      bus.on(name, listener);
+      return () => bus.off(name, listener);
+    },
+    emit(name: string, payload: unknown) {
+      bus.emit(name, payload);
+    },
+  };
+  if (onRequest) {
+    bus.on("subagents:rpc:v1:request", (request) => {
+      requests.push(request);
+      const reply = onRequest(request);
+      if (reply !== undefined) events.emit("subagents:rpc:v1:reply:" + request.requestId, reply);
+    });
+  } else {
+    bus.on("subagents:rpc:v1:request", (request) => requests.push(request));
+  }
+  extension.default({
+    on: (name: string, callback: () => void) => {
+      const handlers = lifecycle.get(name) ?? [];
+      handlers.push(callback);
+      lifecycle.set(name, handlers);
+    },
+    events,
+    registerCommand: (name: string, command: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+      commandHandlers.set(name, command.handler);
+    },
+    registerMcpServer: () => undefined,
+  });
+  const originalPrompt = runtime.prompt.bind(runtime);
+  runtime.prompt = async (message, images) => {
+    const ack = await originalPrompt(message, images);
+    const prefix = "/paseo_subagent_rpc ";
+    if (!message.startsWith(prefix)) return ack;
+    const handler = commandHandlers.get("paseo_subagent_rpc");
+    if (!handler) throw new Error("Internal bridge command was not registered");
+    await handler(message.slice(prefix.length), {
+      ui: {
+        notify: (notification) => {
+          notifications.push(notification);
+          runtime.emit({
+            type: "extension_ui_request",
+            id: "rpc-notification-" + notifications.length,
+            method: "notify",
+            message: notification,
+          });
+        },
+      },
+    });
+    return ack;
+  };
+  return {
+    bus,
+    requests,
+    notifications,
+    shutdown: () => {
+      for (const handler of lifecycle.get("session_shutdown") ?? []) handler();
+    },
+  };
+}
+
+function fakeSubagentReply(
+  request: { requestId: string; method: string },
+  sessionId: string,
+): Record<string, unknown> {
+  return {
+    version: 1,
+    requestId: request.requestId,
+    method: request.method,
+    success: true,
+    data: request.method === "ping"
+      ? {
+          version: 1,
+          methods: ["ping", "status", "manage", "stop"],
+          session: { sessionId },
+          capabilities: { status: true },
+        }
+      : { text: "Async run is running", details: { mode: "management", results: [] } },
+  };
+}
+
+describe("internal Pi subagent event-bus RPC", () => {
+  test("pings a compatible installed owner without a model turn or transcript markers", async () => {
+    const { pi, session, events } = await createSession();
+    const runtime = pi.latestSession();
+    const host = await installFakeSubagentRpcHost(pi, (request) =>
+      fakeSubagentReply(request, runtime.state.sessionId));
+    onTestFinished(() => session.close());
+
+    expect(await session.pingSubagents()).toMatchObject({
+      ok: true,
+      data: { version: 1, methods: ["ping", "status", "manage", "stop"] },
+    });
+    expect(runtime.prompts).toHaveLength(1);
+    expect(runtime.prompts[0]?.message).toMatch(/^\/paseo_subagent_rpc /);
+    expect(host.requests).toHaveLength(1);
+    expect(host.requests[0]).toMatchObject({ version: 1, method: "ping" });
+    expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
+    expect(events.timelineItems()).toEqual([]);
+    expect(runtime.stats.tokens?.total).toBe(0);
+  });
+
+  test("reads only a native async run observed in the exact parent session", async () => {
+    const { pi, session, events } = await createSession();
+    const runtime = pi.latestSession();
+    const host = await installFakeSubagentRpcHost(pi, (request) =>
+      fakeSubagentReply(request, runtime.state.sessionId));
+    onTestFinished(() => session.close());
+
+    expect(await session.statusSubagent("not-observed")).toMatchObject({
+      ok: false, reason: "invalid_target",
+    });
+    expect(await session.statusSubagent("/tmp/other-session/status.json")).toMatchObject({
+      ok: false, reason: "invalid_target",
+    });
+    expect(runtime.prompts).toHaveLength(0);
+
+    runtime.emit({
+      type: "tool_execution_start",
+      toolCallId: "native-subagent-call",
+      toolName: "subagent",
+      args: { agent: "reviewer", task: "Check the patch", async: true },
+    });
+    runtime.emit({
+      type: "tool_execution_end",
+      toolCallId: "native-subagent-call",
+      toolName: "subagent",
+      isError: false,
+      result: {
+        content: [{ type: "text", text: "Detached" }],
+        details: { mode: "single", runId: "run-123", asyncId: "run-123", results: [] },
+      },
+    });
+    expect(await session.statusSubagent("run-123")).toMatchObject({
+      ok: true, data: { text: "Async run is running" },
+    });
+    expect(host.requests).toHaveLength(1);
+    expect(host.requests[0]).toMatchObject({ method: "status", params: { runId: "run-123" } });
+    expect(runtime.prompts).toHaveLength(1);
+    expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
+    expect(events.timelineItems().some((item) =>
+      item.type === "notification" && item.message.includes("PASEO_SUBAGENT_RPC"))).toBe(false);
+  });
+
+  test("will not interrupt or queue an internal slash command into an active parent turn", async () => {
+    const { pi, session, events } = await createSession();
+    const runtime = pi.latestSession();
+    const host = await installFakeSubagentRpcHost(pi, (request) =>
+      fakeSubagentReply(request, runtime.state.sessionId));
+    onTestFinished(() => session.close());
+
+    await session.startTurn("parent is working");
+    expect(await session.pingSubagents()).toMatchObject({ ok: false, reason: "busy" });
+    expect(runtime.prompts.map((prompt) => prompt.message)).toEqual(["parent is working"]);
+    expect(runtime.steerCalls).toEqual([]);
+    expect(runtime.abortRequested).toBe(false);
+    runtime.finishTurn();
+    await events.nextTurnCompletion();
+    expect((await session.pingSubagents()).ok).toBe(true);
+    expect(host.requests).toHaveLength(1);
+  });
+
+  test("rejects unsupported protocol, mismatched envelopes and long errors", async () => {
+    const { pi, session, events } = await createSession();
+    const runtime = pi.latestSession();
+    let call = 0;
+    const host = await installFakeSubagentRpcHost(pi, (request) => {
+      call++;
+      if (call === 1) return { ...fakeSubagentReply(request, runtime.state.sessionId), version: 2 };
+      if (call === 2) return fakeSubagentReply(request, "some-other-parent");
+      if (call === 3) return { version: 1, requestId: request.requestId,
+        method: "stop", success: true, data: {} };
+      return { version: 1, requestId: request.requestId, method: request.method,
+        success: false, error: { code: "execution_failed", message: "x".repeat(25000) } };
+    });
+    onTestFinished(() => session.close());
+
+    expect(await session.pingSubagents()).toMatchObject({ ok: false, reason: "invalid_reply" });
+    expect(await session.pingSubagents()).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(await session.pingSubagents()).toMatchObject({ ok: false, reason: "invalid_reply" });
+    const failed = await session.pingSubagents();
+    expect(failed).toMatchObject({ ok: false, reason: "error" });
+    if (!failed.ok) expect(failed.message.length).toBeLessThanOrEqual(240);
+    expect(host.requests).toHaveLength(4);
+    for (const request of host.requests) {
+      expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + request.requestId)).toBe(0);
+    }
+    expect(events.timelineItems()).toEqual([]);
+  });
+
+  test("times out without an installed RPC owner, and removes the per-request listener", async () => {
+    vi.useFakeTimers();
+    try {
+      const { pi, session } = await createSession();
+      const host = await installFakeSubagentRpcHost(pi);
+      const pending = session.pingSubagents();
+      await vi.advanceTimersByTimeAsync(9_100);
+      expect(await pending).toMatchObject({ ok: false, reason: "unavailable" });
+      expect(host.requests).toHaveLength(1);
+      expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
+      await session.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("closes pending requests without leaking listeners or exposing late replies", async () => {
+    const { pi, session, events } = await createSession();
+    const runtime = pi.latestSession();
+    const host = await installFakeSubagentRpcHost(pi);
+    const pending = session.pingSubagents();
+    // The Pi prompt handler has registered the event listener before accepting the request.
+    await waitForImmediate();
+    expect(host.requests).toHaveLength(1);
+    host.shutdown();
+    await session.close();
+    expect(await pending).toMatchObject({ ok: false, reason: "closed" });
+    expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
+    runtime.emit({ type: "extension_ui_request", id: "late", method: "notify",
+      message: 'PASEO_SUBAGENT_RPC {"requestId":"old","method":"ping"}' });
+    expect(events.timelineItems()).toEqual([]);
   });
 });
