@@ -137,7 +137,9 @@ export class FeedbackStore {
         record = this.load(id);
         if (record.sourceNamespace !== note.sourceNamespace || record.annotationId !== note.annotationId || record.screen !== note.screen)
           throw Error("Feedback identity collision");
-        if (record.revisions.some((r) => r.digest === revision)) return { record, revision };
+        if (record.revisions.at(-1)?.digest === revision) return { record, revision };
+        // A -> B -> A is a new explicit submission, not a silent overwrite.
+        // Previously issued spawn request keys still remain non-retryable by digest.
         record.revisions.push({ digest: revision, comment });
         record.events.push({ eventId: randomUUID(), at: new Date().toISOString(), kind: "revision_submitted", revision });
       } else {
