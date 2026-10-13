@@ -66,7 +66,7 @@ function createOrRevise(home, input) {
   // Fixed timestamp for deterministic self-test. Production must use actual timestamps.
   const eventId = digest(recordId + '\n' + revision + '\nsubmitted');
   const event = { event_id: eventId, kind: 'submitted', revision };
-  const eventText = ````json\n${JSON.stringify(event)}\n```\n`;
+  const eventText = `\`\`\`json\n${JSON.stringify(event)}\n\`\`\`\n`;
   const lock = `${target}.lock`;
   let lockFd;
   try { lockFd = openSync(lock, 'wx', 0o600); } catch { throw Error('record busy'); }
@@ -77,7 +77,7 @@ function createOrRevise(home, input) {
       if (!old.includes(`record_id: ${JSON.stringify(recordId)}`)) throw Error('record identity mismatch');
       if (old.includes(JSON.stringify(event))) return { target, recordId, action: 'unchanged' };
       const revisionEvent = { ...event, kind: 'revision_submitted', event_id: digest(recordId + '\n' + revision + '\nrevision_submitted') };
-      const revised = `${old}\n## Revision\n\n${quote(input.comment)}\n\n```json\n${JSON.stringify(revisionEvent)}\n```\n`;
+      const revised = `${old}\n## Revision\n\n${quote(input.comment)}\n\n\`\`\`json\n${JSON.stringify(revisionEvent)}\n\`\`\`\n`;
       const tmp = writeTemp(project, revised);
       try { renameSync(tmp, target); } finally { if (existsSync(tmp)) unlinkSync(tmp); }
       return { target, recordId, action: 'revised' };
