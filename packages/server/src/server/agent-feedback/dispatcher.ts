@@ -132,7 +132,7 @@ export class FeedbackDispatcher {
 
   /** Only the authenticated operator can attest evidence, never child process exit. */
   recordOutcome(recordId: string, revision: string,
-    outcome: "verified" | "verification_failed" | "failed" | "blocked" | "cancelled",
+    outcome: "verification_passed" | "verification_failed" | "failed" | "blocked" | "cancelled",
     evidence: string): FeedbackReceipt {
     if (typeof evidence !== "string" || !evidence.trim() || evidence.length > 1000)
       throw Error("Explicit evidence is required");
@@ -142,7 +142,7 @@ export class FeedbackDispatcher {
         typeof e.runId === "string"))
       throw Error("No confirmed implementation to assess");
     if (record.events.some(e => e.revision === revision &&
-      ["verified", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind)))
+      ["verification_passed", "verification_failed", "failed", "blocked", "cancelled"].includes(e.kind)))
       return getReceipt(record, revision);
     this.store.append(recordId, { kind: outcome, revision, phase: "implement", evidence });
     if (this.implementing > 0) this.implementing--;
