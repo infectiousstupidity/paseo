@@ -1647,6 +1647,9 @@ export class PiRpcAgentSession implements AgentSession {
     try {
       const state = await this.runtimeSession.getState();
       if (this.closed) return { ok: false, reason: "closed", message: "Pi session closed." };
+      if (state.sessionId !== this.state.sessionId) {
+        return { ok: false, reason: "unavailable", message: "The parent Pi session identity changed." };
+      }
       if (state.isStreaming || state.isCompacting || this.activeTurnId) {
         return { ok: false, reason: "busy", message: "Parent Pi agent is busy." };
       }
@@ -2250,7 +2253,8 @@ export class PiRpcAgentSession implements AgentSession {
           this.activeTurnId
         ) {
           void this.completeNoTurnPrompt(this.activeTurnId);
-        } else if (this.activePromptRequestId === null) {
+        } else if (this.activeTurnId && this.activePromptRequestId === null) {
+          // Out-of-band internal Pi slash requests are not user turns.
           this.pendingPromptResults.set(requestId, agentInvoked);
         }
       }
