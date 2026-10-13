@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { Pressable, Text, View } from "react-native";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useTranslation } from "react-i18next";
 import { Archive, ChevronDown, Unlink } from "lucide-react-native";
@@ -194,10 +194,7 @@ export function SubagentsTrack({
   );
 }
 
-/**
- * Bulk archive, as a row above the list rather than an icon next to the count. The pill has no
- * header to hang an icon off, and a destructive-ish action reads better with its name attached.
- */
+/** Bulk archive lives below results: secondary to understanding and controlling active work. */
 function ArchiveFinishedRow({
   status,
   disabled,
@@ -402,6 +399,7 @@ function SubagentsTrackRow({
         accessibilityRole="button"
         accessibilityLabel={expanded ? t("subagents.panel.collapseDetails", { label: displayLabel }) : t("subagents.panel.expandDetails", { label: displayLabel })}
         accessibilityState={{ expanded }}
+        aria-expanded={expanded}
         testID={`subagents-track-details-${row.id}`}
         onPress={onToggleDetails}
         hitSlop={8}

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type ReactElement } from "react";
 import { Text, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
 import { canControlPiSubagent } from "./track-presentation";
@@ -35,6 +35,7 @@ export function SubagentExpandedDetails({
   onOpenSession,
 }: SubagentExpandedDetailsProps): ReactElement {
   const { t } = useTranslation();
+  const { theme } = useUnistyles();
   const [pending, setPending] = useState<NativeAction | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -51,7 +52,7 @@ export function SubagentExpandedDetails({
     // Advisory descriptor state is re-read at the click boundary and verified again by the
     // daemon against the live parent Pi session and its native async child snapshot.
     if (inFlight.current || !client || !eligible || row.kind !== "provider" ||
-        stopping || (action !== "status" && !instruction.trim() && action === "steer")) return;
+        (stopping && action !== "status") || (action === "steer" && !instruction.trim())) return;
     const current = useProviderSubagentStore.getState().descriptors.get(
       providerSubagentKey(serverId, row.parentAgentId, row.id),
     );
@@ -134,7 +135,7 @@ export function SubagentExpandedDetails({
             {t("subagents.panel.status")}
           </Button>
         ) : null}
-        {canMutate ? (
+        {canMutate && !confirmStop ? (
           <Button size="sm" variant="ghost" onPress={askStop}
             testID={"subagents-track-stop-" + row.id}>
             {t("subagents.panel.stop")}
@@ -152,7 +153,7 @@ export function SubagentExpandedDetails({
             multiline
             accessibilityLabel={t("subagents.panel.steer")}
             placeholder={t("subagents.panel.steerPlaceholder")}
-            placeholderTextColor="#888888"
+            placeholderTextColor={theme.colors.foregroundMuted}
             value={instruction}
             onChangeText={setInstruction}
             maxLength={360}
