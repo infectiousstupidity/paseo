@@ -1,6 +1,6 @@
 # Agentation 01 — Prove explicit dispatch and fresh Pi child spawn
 
-Status: **ready; evidence gate**. [Plan](../plans/agentation-per-annotation-agents.md). **Do not implement production wiring** until this gate passes.
+Status: **partially executed; LIVE GATE BLOCKED/UNVERIFIED (2026-10-13)**. [Plan](../plans/agentation-per-annotation-agents.md) · [Source audit and proof results](../evaluations/agentation-01-proof-status.md). **Do not implement production wiring** until this gate passes.
 
 ## Outcome
 
@@ -25,3 +25,11 @@ Demonstrate on the actual user's Windows/Paseo/Pi/SEICHO development environment
 - If direct Pi spawn cannot run in the intended parent state, authorization cannot be established, or the callback route would bypass SEICHO's explicit approval contract: **mark BLOCKED**, do not paper over with a parent chat prompt, generic RPC, independent Pi process, speculative HTTP listener or unsafe local token.
 - Focused tests may cover probe code only. No broad refactor, UI redesign, persistent daemon service, or Git/working-tree mutation.
 - Before starting Task 02, write the selected safe transport and actual API/capability constraints in the plan. Update the original bridge 04 *only if its own separately verified live gate passes*.
+
+## Current execution and handoff (2026-10-13)
+
+Reviewed current SEICHO/Paseo sources, upstream Agentation and pi-subagents APIs, and produced a standalone [storage probe](../../scripts/agentation-01-storage-proof.mjs). The disposable Linux Node 22.16.0 probe passed 5 focused tests for record creation/idempotence/revisions/namespace separation/unsafe paths/permissions. The source audit identified Agentation's optional `onSessionCreated` callback, but the installed package semantics and stable identity across routes/restarts have **not** been demonstrated. It also confirmed that SEICHO currently lacks a Paseo-authenticated handoff and Paseo's implemented Pi bridge does not offer `spawn`.
+
+**Blocking live evidence:** No access to the user's active Pi/Paseo daemon, installed pi-subagents extension, Windows Electron app, actual home directory or authenticated session was available in this execution environment. Therefore **no live spawn, busy-parent, parent-model usage, Windows file/permission, cross-app auth or lost-reply recovery test passed**. The full truth table, exact remaining checks and limitations are in [the evidence report](../evaluations/agentation-01-proof-status.md).
+
+**Next action:** Execute the live gate on the actual host with the required access. Keep Task 02 blocked. Do not substitute fake-Pi/unit tests for installed-runtime acceptance, promote the proof script into production, or start the dispatcher.
