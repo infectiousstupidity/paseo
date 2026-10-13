@@ -35,6 +35,11 @@ describe("Global agent feedback ledger", () => {
     expect(second.record.recordId).toBe(first.record.recordId);
     expect(second.record.original).toBe(note.comment);
     expect(second.record.events.map(e => e.kind)).toEqual(["submitted", "revision_submitted"]);
+    // Reverting A -> B -> A must preserve an explicit third submission in the history.
+    const reverted = store.submit(note);
+    expect(reverted.record.revisions).toHaveLength(3);
+    expect(reverted.record.events.filter(e => e.kind === "revision_submitted")).toHaveLength(2);
+    expect(store.submit(note).record.events).toHaveLength(3);
     expect(store.submit({ ...note, annotationId: "two" }).record.recordId).not.toBe(first.record.recordId);
     expect(store.submit({ ...note, sourceNamespace: "another-instance" }).record.recordId).not.toBe(first.record.recordId);
   });
