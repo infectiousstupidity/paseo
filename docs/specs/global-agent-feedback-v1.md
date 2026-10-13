@@ -14,6 +14,8 @@ Status: **design contract, not implemented** (2026-10-13). Used by [Agentation p
 
 One Markdown document per *source annotation identity*, not one per execution session, attempt, or updated comment. The first submitted snapshot is immutable; new explicit submissions become revision events in the **same** record. All structured fields and events are **versioned** and machine-readable; prose is for human review.
 
+**Unverified identity detail:** SEICHO's current `DevAnnotationBatch` exposes a screen and annotation IDs, not an assured Agentation session ID. The `source_session_id` below is illustrative only. Task 01 must establish a stable, genuinely available producer/session namespace (or an owner-issued persisted installation/source scope) before defining the exact identity key. Do not fabricate an Agentation session ID, silently collide records across app instances, or generate a fresh random namespace on every retry.
+
 Recommended minimal layout (illustrative; values are examples, not existing results):
 
 ````markdown
