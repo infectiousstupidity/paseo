@@ -1926,7 +1926,7 @@ export const AgentFeedbackRequestSchema = z.object({
   recordId: z.string().regex(/^[0-9a-f]{40}$/).optional(),
   revision: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(),
   proposal: z.string().min(1).max(3000).optional(),
-  outcome: z.enum(["verified", "verification_failed", "failed", "blocked", "cancelled"]).optional(),
+  outcome: z.enum(["verification_passed", "verification_failed", "failed", "blocked", "cancelled"]).optional(),
   evidence: z.string().min(1).max(1000).optional(),
 }).strict();
 
