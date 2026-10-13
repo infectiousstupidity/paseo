@@ -96,12 +96,25 @@ export interface SubagentRowPresentationData {
   statusBucket: SidebarStateBucket | null;
 }
 
+/**
+ * Display only, not a task rewrite: skip standalone repo/HEAD boilerplate lines while retaining
+ * the exact source description for the expanded pane. Do not infer a task from a filename/hash.
+ */
+export function compactSubagentTask(raw: string): string {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const content = lines.find((line) =>
+    !/^(?:(?:repository|repo|cwd|workspace|working directory|head|commit|branch)\s*[:=]|task\s*:?$)/i.test(line),
+  ) ?? lines[0] ?? raw;
+  const normalized = content.replace(/^[-*]\s+/, "").trim();
+  return normalized.length > 120 ? normalized.slice(0, 119).trimEnd() + "…" : normalized;
+}
+
 export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowPresentationData {
   // The task distinguishes siblings in a fan-out, so it names the row when present. Providers
   // own the compact secondary context because model, effort, and usage semantics differ.
   const description = resolveRowLabel(row.description);
   const title = resolveRowLabel(row.title);
-  const label = description ?? title;
+  const label = description ? compactSubagentTask(description) : title;
   const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
   const subtitle = providerSubtitle ?? (description ? title : null);
   const status = presentationStatus(row);

@@ -6,6 +6,7 @@ import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
   canControlPiSubagent,
+  compactSubagentTask,
   countFinishedSubagents,
   groupSubagentRows,
   orderSubagentRows,
@@ -151,6 +152,23 @@ describe("countFinishedSubagents", () => {
         row({ id: "finished", status: "idle" }),
       ]),
     ).toBe(1);
+  });
+});
+
+describe("compactSubagentTask", () => {
+  it("skips standalone repo/HEAD metadata without rewriting the actual task", () => {
+    expect(compactSubagentTask("Repo: /tmp/private/path\nHEAD: aabbcc\nReview the actual auth changes"))
+      .toBe("Review the actual auth changes");
+    expect(compactSubagentTask("Fix /src/auth.ts without breaking login"))
+      .toBe("Fix /src/auth.ts without breaking login");
+  });
+
+  it("bounds the row line but leaves full source available for inspection", () => {
+    const original = "Investigate " + "x".repeat(170);
+    const displayed = compactSubagentTask(original);
+    expect(displayed.length).toBeLessThanOrEqual(120);
+    expect(displayed.endsWith("…")).toBe(true);
+    expect(original).toHaveLength(182);
   });
 });
 
