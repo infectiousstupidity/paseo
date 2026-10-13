@@ -104,8 +104,20 @@ function addDescriptor(overrides: Partial<ProviderSubagentDescriptorPayload> = {
   });
 }
 
+interface ControlReceipt {
+  success: boolean;
+  state?: string;
+  runState?: string;
+  deliveryStatus?: string;
+  error?: string | null;
+}
+
+type TestControlMethod = (input: { action: string }) => Promise<ControlReceipt>;
+
 function renderDetails(
-  controlProviderSubagent = vi.fn(async () => ({ success: true, state: "running", runState: "running" })),
+  controlProviderSubagent: TestControlMethod = vi.fn(async () => ({
+    success: true, state: "running", runState: "running",
+  })),
   options: { stopping?: boolean; supportsControls?: boolean; row?: ProviderSubagentRow } = {},
 ) {
   const onStopAccepted = vi.fn();
