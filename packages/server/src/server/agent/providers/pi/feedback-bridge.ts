@@ -85,11 +85,13 @@ export function piFeedbackRuntimeBridge(target: FeedbackBridgeTarget): string {
       feedbackServer = createServer((socket) => {
         let buffer = "";
         let completed = false;
-        const deadline = setTimeout(() => {completed = true; socket.destroy();}, 10000);
+        let off;
+        const deadline = setTimeout(() => {off?.();completed = true; socket.destroy();}, 10000);
         function done(value) {
           if (completed) return;
           completed = true;
           clearTimeout(deadline);
+          off?.();
           socket.end(JSON.stringify(value).slice(0,16000)+"\n");
         }
         socket.on("data", (data) => {
@@ -111,7 +113,6 @@ export function piFeedbackRuntimeBridge(target: FeedbackBridgeTarget): string {
             done({ok:false,requestId:input?.requestId ?? "",reason:"unavailable"});return;
           }
           const replyEvent = "subagents:rpc:v1:reply:" + input.requestId;
-          let off;
           try {
             off = pi.events.on(replyEvent, (reply) => {
               off?.();
@@ -129,7 +130,8 @@ export function piFeedbackRuntimeBridge(target: FeedbackBridgeTarget): string {
             });
           } catch {off?.();done({ok:false,requestId:input.requestId,reason:"uncertain"});}
         });
-        socket.on("error", () => {completed=true;clearTimeout(deadline);});
+        socket.on("error", () => {completed=true;clearTimeout(deadline);off?.();});
+        socket.on("close", () => {clearTimeout(deadline);off?.();});
       });
       feedbackServer.listen(feedbackPath, () => {
         if (process.platform !== "win32") fs.chmodSync(feedbackPath,0o600);
