@@ -86,6 +86,17 @@ import type {
 } from "./rpc-types.js";
 import { PiUsagePoller, type PiUsagePollScheduler } from "./usage-poller.js";
 import {
+  PI_SUBAGENT_RPC_COMMAND,
+  PI_SUBAGENT_RPC_MARKER,
+  PI_SUBAGENT_RPC_MAX_BYTES,
+  PI_SUBAGENT_RPC_TIMEOUT_MS,
+  parsePiSubagentRpcReply,
+  piSubagentRpcRuntimeBridge,
+  validPiSubagentRunId,
+  type PiSubagentRpcMethod,
+  type PiSubagentRpcResult,
+} from "./subagent-rpc-bridge.js";
+import {
   mapToolDetail,
   parseToolArgs,
   parseToolResult,
@@ -144,6 +155,7 @@ function mapPiSlashCommands(
     handledCommands.map((command) => [command.name, { ...command }]),
   );
   for (const command of commands) {
+    if (command.name === PI_SUBAGENT_RPC_COMMAND) continue;
     const knownCommand = mappedCommands.get(command.name);
     mappedCommands.set(command.name, {
       name: command.name,
@@ -681,6 +693,7 @@ function createPiPaseoExtensionFile({
 	  }
 	  const submittedUserMessages = [];
 	  ${piExtensionRuntimeBridge}
+	  ${piSubagentRpcRuntimeBridge}
 
 	  function emitSubmittedUserEntries(ctx) {
 	    const entries = ctx.sessionManager.getEntries();
@@ -1213,6 +1226,14 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly contextUserEntries: PiCapturedEntry[] = [];
   private readonly treeUserEntriesById = new Map<string, PiCapturedEntry>();
   private readonly pendingExtensionResults = new Map<string, PendingExtensionResult>();
+  private readonly pendingSubagentRpc = new Map<
+    string,
+    {
+      method: PiSubagentRpcMethod;
+      settle: (result: PiSubagentRpcResult) => void;
+    }
+  >();
+  private readonly observedAsyncRunIds = new Set<string>();
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
@@ -1597,6 +1618,91 @@ export class PiRpcAgentSession implements AgentSession {
     this.activeToolCalls.clear();
   }
 
+  /** Internal only: slash-command execution must never send a model prompt. */
+  async pingSubagents(): Promise<PiSubagentRpcResult> {
+    return this.callSubagentRpc("ping");
+  }
+
+  /** Target must originate from this parent's observed native pi-subagents tool result. */
+  async statusSubagent(runId: string): Promise<PiSubagentRpcResult> {
+    if (!validPiSubagentRunId(runId) || !this.observedAsyncRunIds.has(runId)) {
+      return {
+        ok: false,
+        reason: "invalid_target",
+        message: "No matching native async subagent run was observed in this Pi session.",
+      };
+    }
+    return this.callSubagentRpc("status", runId);
+  }
+
+  private async callSubagentRpc(
+    method: PiSubagentRpcMethod,
+    runId?: string,
+  ): Promise<PiSubagentRpcResult> {
+    if (this.closed) return { ok: false, reason: "closed", message: "Pi session closed." };
+    if (this.activeTurnId || this.activeTurnStarted || this.state.isStreaming) {
+      // Mid-turn slash execution is not proven safe. Never steer or interrupt the parent.
+      return { ok: false, reason: "busy", message: "Parent Pi agent is running a turn." };
+    }
+    try {
+      const state = await this.runtimeSession.getState();
+      if (this.closed) return { ok: false, reason: "closed", message: "Pi session closed." };
+      if (state.isStreaming || state.isCompacting || this.activeTurnId) {
+        return { ok: false, reason: "busy", message: "Parent Pi agent is busy." };
+      }
+    } catch {
+      return { ok: false, reason: "unavailable", message: "Cannot read the parent Pi state." };
+    }
+
+    const requestId = randomUUID();
+    const resultPromise = new Promise<PiSubagentRpcResult>((resolve) => {
+      const timer = setTimeout(() => {
+        settle({ ok: false, reason: "timeout", message: "Pi subagent RPC notification timed out." });
+      }, PI_SUBAGENT_RPC_TIMEOUT_MS + 1000);
+      const settle = (result: PiSubagentRpcResult) => {
+        clearTimeout(timer);
+        this.pendingSubagentRpc.delete(requestId);
+        resolve(result);
+      };
+      this.pendingSubagentRpc.set(requestId, { method, settle });
+    });
+    const encoded = Buffer.from(JSON.stringify({
+      version: 1, requestId, method, ...(runId ? { runId } : {}),
+    })).toString("base64url");
+    try {
+      await this.runtimeSession.prompt(`/${PI_SUBAGENT_RPC_COMMAND} ${encoded}`);
+    } catch {
+      this.pendingSubagentRpc.get(requestId)?.settle({
+        ok: false, reason: "unavailable", message: "Pi rejected the internal RPC command.",
+      });
+    }
+    return resultPromise;
+  }
+
+  private rejectAllSubagentRpc(reason: "closed" | "unavailable"): void {
+    for (const pending of [...this.pendingSubagentRpc.values()]) {
+      pending.settle({
+        ok: false,
+        reason,
+        message: reason === "closed" ? "Pi session closed." : "Parent Pi process exited.",
+      });
+    }
+  }
+
+  private handleSubagentRpcNotification(message: string): boolean {
+    if (!message.startsWith(PI_SUBAGENT_RPC_MARKER)) return false;
+    // Consume even malformed/late internal markers, never showing them in the transcript.
+    if (!message.startsWith(`${PI_SUBAGENT_RPC_MARKER} `)) return true;
+    if (Buffer.byteLength(message, "utf8") > PI_SUBAGENT_RPC_MAX_BYTES + 512) return true;
+    const payload = parseExtensionMarkerPayload(message, PI_SUBAGENT_RPC_MARKER);
+    const requestId = payload?.requestId;
+    if (typeof requestId !== "string") return true;
+    const pending = this.pendingSubagentRpc.get(requestId);
+    if (!pending) return true;
+    pending.settle(parsePiSubagentRpcReply(payload, requestId, pending.method, this.state.sessionId));
+    return true;
+  }
+
   private async runPiTreeExtensionCommand(targetId: string): Promise<unknown> {
     const requestId = randomUUID();
     const resultPromise = this.waitForExtensionResult(requestId);
@@ -1611,6 +1717,7 @@ export class PiRpcAgentSession implements AgentSession {
     }
     this.closed = true;
     this.closeController.abort();
+    this.rejectAllSubagentRpc("closed");
     this.extensionHost.close();
     this.usagePoller.close();
     try {
@@ -2031,6 +2138,7 @@ export class PiRpcAgentSession implements AgentSession {
         return;
       }
       if (
+        this.handleSubagentRpcNotification(message) ||
         this.handleSubmittedUserEntryMarker(message) ||
         this.handleEntryCaptureMarker(message) ||
         this.handleCommandResultMarker(message)
@@ -2133,6 +2241,7 @@ export class PiRpcAgentSession implements AgentSession {
 
   private handleProcessExit(error: string): void {
     this.rejectAllExtensionResults(new Error(error));
+    this.rejectAllSubagentRpc("unavailable");
     this.interruptingTurn = null;
     if (!this.activeTurnId && !this.activeTurnStarted) {
       return;
@@ -2430,6 +2539,19 @@ export class PiRpcAgentSession implements AgentSession {
     result: PiToolResult,
     error: unknown,
   ): boolean {
+    // Only a native tool result observed in this parent may authorize a run identifier.
+    if (toolCall.toolName === "subagent" && status === "completed" &&
+        typeof toolCall.args === "object" && toolCall.args !== null &&
+        "async" in toolCall.args && toolCall.args.async === true &&
+        result && typeof result === "object" &&
+        "details" in result && result.details &&
+        typeof result.details === "object" && !Array.isArray(result.details)) {
+      const details = result.details as Record<string, unknown>;
+      if (details.mode !== "management" && typeof details.runId === "string" &&
+          validPiSubagentRunId(details.runId)) {
+        this.observedAsyncRunIds.add(details.runId);
+      }
+    }
     const turnId = this.currentTurnIdForEvent();
     const mapping = this.extensionHost.mapToolCall({
       callId: toolCallId,
