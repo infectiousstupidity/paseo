@@ -1,6 +1,6 @@
 # Agentation feedback -> independent Pi subagents
 
-Status: **proposed; proof gate not yet passed** (2026-10-13). Paseo owns dispatch and Pi execution; SEICHO owns its dev-only Agentation submission UI. Do not change existing watch mode or task export until the opt-in path is proven.
+Status: **proposed; Task 01 isolated storage probe passed, full live gate BLOCKED/UNVERIFIED** (2026-10-13). [Evidence](../evaluations/agentation-01-proof-status.md). Paseo owns dispatch and Pi execution; SEICHO owns its dev-only Agentation submission UI. Do not change existing watch mode or task export until the opt-in path is proven.
 
 ## Goal
 
