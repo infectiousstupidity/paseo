@@ -4,7 +4,7 @@ import { expect, test, type Page } from "../support/fixtures";
 import { runWorkspaceActionFromCommandCenter } from "../support/helpers/command-center-workspace-actions";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { seedWorkspace } from "../support/helpers/seed-client";
-import { openSubagentsTrack, seedParentWithSubagent } from "../support/helpers/subagents";
+import { openSubagentSessionFromTrack, openSubagentsTrack, seedParentWithSubagent } from "../support/helpers/subagents";
 
 const SETTINGS_KEY = "@paseo:app-settings";
 
@@ -50,7 +50,7 @@ test("a subagent opened from a right-pane parent stays with its parent when left
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toHaveCount(0);
@@ -73,7 +73,7 @@ test("the side preference opens a right-pane parent's subagent in the side pane"
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     const childPane = page
       .locator('[data-testid^="workspace-pane-"]')
@@ -100,13 +100,13 @@ test("opening an already-tabbed subagent reveals its left tab without a duplicat
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await page.keyboard.press("Meta+Alt+Shift+ArrowLeft");
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await right.getByTestId(`workspace-tab-agent_${pair.parent.id}`).click();
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toHaveCount(0);
