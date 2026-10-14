@@ -56,3 +56,32 @@ Implemented directly on `main` in scoped commits, without restarting any daemon 
 1. Run `npm run build:client` if needed, then `npm exec --workspace=@getpaseo/app -- vitest run src/subagents/expanded-details.test.tsx src/subagents/track-presentation.test.ts src/subagents/subagent-activity.test.ts src/subagents/select.test.ts`, `npm run typecheck --workspace=@getpaseo/app`, changed-file ESLint and `npm run format:check:files -- <changed paths>`; fix failures, then re-run the focused checks.
 2. Verify against a disposable installed Pi session with **one child and two parallel children**: eligibility, sibling isolation on Stop, confirmation cancellation, stopped-only-after-observation, Steer queued/delivered, status, busy/unsupported/wrong-session errors and other-provider navigation. Do not assume the Task 05 backend is already proven.
 3. Capture `docs/mockups/paseo-subagents-v2.html` and the **real Electron renderer** at matched desktop collapsed / expanded running / findings states, a 360-logical-pixel collapsed and expanded compact sheet, and Stop confirmation/pending/terminal where eligible. Record real screenshot artifact paths, dimensions, mismatches and iterations here. No standalone mock screenshot may substitute for the Electron renderer. Close this task only after that comparison passes.
+
+## October 14 inspector correction (code on main; live visual acceptance pending)
+
+The earlier "click row to open session" behavior was rejected after reviewing the real Electron
+panel. **Click anywhere on the worker row to expand/collapse it**, including its chevron.
+Only one row expands at a time; **Open session** in the expanded panel explicitly navigates
+to the native child transcript and closes the popover. Stop/Steer/Status remain separate,
+capability-gated controls with the original safety semantics.
+
+The subagent inspector alone uses an explicitly sized desktop popover (up to 860 logical px
+wide and 720 px / 80% viewport height, whichever is smaller). Other composer tracker popovers
+retain their existing defaults. Compact screens retain the existing sheet.
+
+Expanded hierarchy is observed activity/result → child identity + scoped actions → collapsed
+original task. The original user/agent prompt remains available verbatim but must not dominate
+the initial inspector viewport. Compact labels can extract worker IDs/round numbers literally
+from prompts, never synthesize outcomes.
+
+Actual Pi child model information comes only from the already-followed child JSONL session:
+assistant provider/model records or explicit model changes. Reasoning effort is shown only
+if a child-local thinking-level change was observed. Both fields are optional and may remain
+absent for old/unknown children. Model switches clear stale effort; no parent-model inference.
+These fields appear in the row and opened native session header.
+
+The corresponding source changes and regression/browser-test updates are committed. Full
+Windows/Electron build, live Pi semantics, desktop/360px screenshot comparison and keyboard
+acceptance have **not** been executed here. They remain required before declaring this
+visually accepted. The original V2 static mock predates these corrections; compare behavioral
+hierarchy and adjust the reference when capturing production evidence.

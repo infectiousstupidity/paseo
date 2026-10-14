@@ -44,3 +44,32 @@ No frequent status timers, heavy per-child transcripts, new stores, additional e
 ## Completion criteria
 
 Live Pi async child: target resolved → status read → Stop confirmed → accepted receipt → observed terminal state. A sibling stays running after a single-child Stop. Steer shows queued/delivered truthfully. Missing targets and unsupported versions never display controls. Other provider children still open normally. The V2 mock and real Electron panel must be screenshot-captured in matched desktop collapsed, desktop expanded running/findings and 360px states; compare, fix and recapture until the Task 06 visual gate passes. Document exact evidence paths and outstanding differences; no fake screenshots or unverified claims. Existing focused Pi adapter, daemon RPC, protocol, client, and app test files pass with relevant typechecks, lint, formatting. Never restart the active Paseo daemon on port 6767.
+
+## October 14 inspector correction (code on main; live visual acceptance pending)
+
+The earlier "click row to open session" behavior was rejected after reviewing the real Electron
+panel. **Click anywhere on the worker row to expand/collapse it**, including its chevron.
+Only one row expands at a time; **Open session** in the expanded panel explicitly navigates
+to the native child transcript and closes the popover. Stop/Steer/Status remain separate,
+capability-gated controls with the original safety semantics.
+
+The subagent inspector alone uses an explicitly sized desktop popover (up to 860 logical px
+wide and 720 px / 80% viewport height, whichever is smaller). Other composer tracker popovers
+retain their existing defaults. Compact screens retain the existing sheet.
+
+Expanded hierarchy is observed activity/result → child identity + scoped actions → collapsed
+original task. The original user/agent prompt remains available verbatim but must not dominate
+the initial inspector viewport. Compact labels can extract worker IDs/round numbers literally
+from prompts, never synthesize outcomes.
+
+Actual Pi child model information comes only from the already-followed child JSONL session:
+assistant provider/model records or explicit model changes. Reasoning effort is shown only
+if a child-local thinking-level change was observed. Both fields are optional and may remain
+absent for old/unknown children. Model switches clear stale effort; no parent-model inference.
+These fields appear in the row and opened native session header.
+
+The corresponding source changes and regression/browser-test updates are committed. Full
+Windows/Electron build, live Pi semantics, desktop/360px screenshot comparison and keyboard
+acceptance have **not** been executed here. They remain required before declaring this
+visually accepted. The original V2 static mock predates these corrections; compare behavioral
+hierarchy and adjust the reference when capturing production evidence.
