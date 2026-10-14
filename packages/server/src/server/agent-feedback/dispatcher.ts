@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { FeedbackStore, feedbackDigest, type FeedbackNote, type FeedbackRecord, type FeedbackPhase } from "./store.js";
+import { FeedbackStore, type FeedbackNote, type FeedbackRecord, type FeedbackPhase } from "./store.js";
 
 export interface FeedbackParent {
   id: string;

@@ -225,6 +225,7 @@ const OUTBOUND_PERMISSION = {
   "agent.config.apply.response": ["workspace.write", "hub.execute"],
   "agent.detach.response": "workspace.write",
   "agent.fork_context.response": "workspace.read",
+  "agent.feedback.response": "workspace.write",
   "agent.provider_subagents.list.response": "workspace.read",
   "agent.provider_subagents.timeline.get.response": "workspace.read",
   "agent.provider_subagents.control.response": "workspace.write",
