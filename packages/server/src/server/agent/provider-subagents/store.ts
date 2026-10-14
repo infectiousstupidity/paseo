@@ -47,6 +47,8 @@ export interface ProviderSubagentDescriptor {
   toolCallId: string | null;
   cwd: string | null;
   subtitle: string | null;
+  model: string | null;
+  thinkingOptionId: string | null;
   activity: ProviderSubagentActivity | null;
   /** Presence of an exact native target; actual control is always revalidated. */
   controlEligible?: boolean;
@@ -66,6 +68,8 @@ export type ProviderSubagentInputEvent =
       toolCallId?: string | null;
       cwd?: string | null;
       subtitle?: string | null;
+      model?: string | null;
+      thinkingOptionId?: string | null;
       activity?: ProviderSubagentActivity | null;
       parentSubagentId?: string | null;
       /** Native, session-owned target from verified Pi status.json, not display metadata. */
@@ -157,6 +161,8 @@ export class ProviderSubagentStore {
       toolCallId: stickyField(event.toolCallId, previous?.toolCallId),
       cwd: stickyField(event.cwd, previous?.cwd),
       subtitle: stickyField(event.subtitle, previous?.subtitle),
+      model: stickyField(event.model, previous?.model),
+      thinkingOptionId: stickyField(event.thinkingOptionId, previous?.thinkingOptionId),
       activity: stickyField(event.activity, previous?.activity),
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };

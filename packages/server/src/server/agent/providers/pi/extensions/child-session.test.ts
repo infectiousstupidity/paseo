@@ -192,6 +192,51 @@ describe("PiChildSessionFollower", () => {
     }
   });
 
+  test("projects only child-observed model and thinking changes", async () => {
+    dir = await mkdtemp(join(tmpdir(), "paseo-pi-follower-"));
+    file = join(dir, "child.jsonl");
+    const follower = new PiChildSessionFollower("child", file);
+    try {
+      const rows = [
+        { type: "model_change", provider: "openrouter", modelId: "qwen3.8-27b" },
+        { type: "message", message: {
+          role: "assistant", provider: "openrouter", model: "qwen3.8-27b",
+          content: [{ type: "text", text: "Working" }],
+        } },
+      ];
+      await writeFile(file, rows.map(row => JSON.stringify(row)).join("\\n") + "\\n");
+      expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
+        { model: "openrouter/qwen3.8-27b", thinkingOptionId: null },
+      ]);
+      expect(await follower.readNew()).toEqual([]);
+
+      await appendFile(file, JSON.stringify({ type: "thinking_level_change", thinkingLevel: "xhigh" }) + "\\n");
+      expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
+        { model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh" },
+      ]);
+
+      await appendFile(file, JSON.stringify({ type: "model_change",
+        provider: "openrouter", modelId: "different-model" }) + "\\n");
+      expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
+        { model: "openrouter/different-model", thinkingOptionId: null },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does not infer identity from the child prompt or tool output", async () => {
+    dir = await mkdtemp(join(tmpdir(), "paseo-pi-follower-"));
+    file = join(dir, "child.jsonl");
+    try {
+      await writeFile(file, assistantLine("Use qwen xhigh", "2026-01-01T00:00:00Z") + "\\n");
+      expect((await new PiChildSessionFollower("child", file).readNew())
+        .filter(event => event.type === "upsert")).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("returns no events for a missing file", async () => {
     const follower = new PiChildSessionFollower("child", join(tmpdir(), "does-not-exist.jsonl"));
     expect(await follower.readNew()).toEqual([]);

@@ -4761,6 +4761,9 @@ export const ProviderSubagentDescriptorPayloadSchema = z.object({
   // Compact provider-owned context for the shared track. Providers choose what belongs here and
   // format it for display; clients must not parse provider-specific facts out of this string.
   subtitle: z.string().nullable().optional(),
+  // Actual Pi child-session model/effort. Older daemons may omit both.
+  model: z.string().nullable().optional(),
+  thinkingOptionId: z.string().nullable().optional(),
   // COMPAT(providerSubagentActivity): optional so pre-existing clients ignore it and older
   // daemons simply omit it (clients then fall back to the streamed timeline tail).
   activity: ProviderSubagentActivitySchema.nullable().optional(),

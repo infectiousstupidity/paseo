@@ -37,17 +37,29 @@ export function mapPiChildSession(
   return new PiChildSessionFollower(id, file, maxBytes).readNew();
 }
 
+interface ChildSessionEntry {
+  type?: string;
+  message?: PiAgentMessage;
+  timestamp?: string;
+  provider?: string;
+  modelId?: string;
+  thinkingLevel?: string;
+}
+
 function mapChildLine(
   mapper: PiHistoryMapper,
   id: string,
   line: string,
+  observeEntry: (entry: ChildSessionEntry) => void,
 ): Extract<ProviderSubagentInputEvent, { type: "timeline" }>[] {
-  let entry: { message?: PiAgentMessage; timestamp?: string };
+  let entry: ChildSessionEntry;
   try {
-    entry = JSON.parse(line);
+    entry = JSON.parse(line) as ChildSessionEntry;
   } catch {
     return [];
   }
+  if (!entry || typeof entry !== "object") return [];
+  observeEntry(entry);
   if (!entry.message || typeof entry.message !== "object" || !("role" in entry.message)) return [];
   return mapper.mapMessages([entry.message]).flatMap((mapped) =>
     mapped.type === "timeline"
@@ -127,6 +139,10 @@ export class PiChildSessionFollower {
   private lastTool: ProviderSubagentActivity | null = null;
   /** Last activity actually reported, so unchanged activity never re-upserts. */
   private emitted: ProviderSubagentActivity | null = null;
+  private model: string | null = null;
+  private thinkingOptionId: string | null = null;
+  private emittedModel: string | null = null;
+  private emittedThinking: string | null = null;
   private readonly maxBytes: number;
 
   constructor(
@@ -204,7 +220,7 @@ export class PiChildSessionFollower {
     const events: ProviderSubagentInputEvent[] = [];
     let rowOffset = startOffset;
     for (const row of rows) {
-      const mapped = mapChildLine(this.mapper, this.id, row);
+      const mapped = mapChildLine(this.mapper, this.id, row, (entry) => this.observeSettings(entry));
       for (const event of mapped) this.trackActivity(event.item, event.timestamp);
       const withinByteCap = rowOffset < this.maxBytes;
       if (withinByteCap && this.items < MAX_ITEMS) {
@@ -217,12 +233,44 @@ export class PiChildSessionFollower {
     return events;
   }
 
-  /** Appends a descriptor upsert carrying the current activity, only when it changed. */
+  /** Observe only the child's persisted Pi settings, never the parent's configured model. */
+  private observeSettings(entry: ChildSessionEntry): void {
+    let nextModel: string | null = null;
+    if (entry.type === "model_change" && typeof entry.provider === "string" &&
+        typeof entry.modelId === "string") {
+      nextModel = `${entry.provider.trim()}/${entry.modelId.trim()}`;
+    } else if (entry.type === "message" && entry.message?.role === "assistant" &&
+        typeof entry.message.provider === "string" && typeof entry.message.model === "string") {
+      nextModel = `${entry.message.provider.trim()}/${entry.message.model.trim()}`;
+    }
+    if (nextModel && !nextModel.startsWith("/") && !nextModel.endsWith("/") &&
+        nextModel.length <= 200 && nextModel !== this.model) {
+      this.model = nextModel;
+      // A previously recorded effort cannot be assumed for a newly selected model.
+      this.thinkingOptionId = null;
+    }
+    if (entry.type === "thinking_level_change" && typeof entry.thinkingLevel === "string" &&
+        ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(entry.thinkingLevel)) {
+      this.thinkingOptionId = entry.thinkingLevel;
+    }
+  }
+
+  /** Upsert bounded activity and/or model settings only when an observed value changes. */
   private maybeReportActivity(events: ProviderSubagentInputEvent[]): void {
     const current = this.lastTool;
-    if (!current || sameActivity(current, this.emitted)) return;
+    const activityChanged = current !== null && !sameActivity(current, this.emitted);
+    const settingsChanged = this.model !== this.emittedModel ||
+      this.thinkingOptionId !== this.emittedThinking;
+    if (!activityChanged && !settingsChanged) return;
     this.emitted = current;
-    events.push({ type: "upsert", id: this.id, activity: current });
+    this.emittedModel = this.model;
+    this.emittedThinking = this.thinkingOptionId;
+    events.push({
+      type: "upsert",
+      id: this.id,
+      ...(activityChanged && current ? { activity: current } : {}),
+      ...(settingsChanged ? { model: this.model, thinkingOptionId: this.thinkingOptionId } : {}),
+    });
   }
 
   private trackActivity(item: AgentTimelineItem, timestamp?: string): void {
