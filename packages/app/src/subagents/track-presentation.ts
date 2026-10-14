@@ -106,7 +106,21 @@ export function compactSubagentTask(raw: string): string {
     !/^(?:(?:repository|repo|cwd|workspace|working directory|head|commit|branch)\s*[:=]|task\s*:?$)/i.test(line),
   ) ?? lines[0] ?? raw;
   const normalized = content.replace(/^[-*]\s+/, "").trim();
+  // Deterministic ID/role extraction from the user's actual worker prompt, not an LLM summary.
+  const worker = normalized.match(/^You are (.+?) worker (W\d+[a-z0-9-]*)\b/i);
+  if (worker) {
+    const review = normalized.match(/\b(?:review|fix) round\s+\d+/i)?.[0];
+    return [worker[2], worker[1], review].filter(Boolean).join(" · ");
+  }
   return normalized.length > 120 ? normalized.slice(0, 119).trimEnd() + "…" : normalized;
+}
+
+/** Provider-owned model/effort is shown only when the child's descriptor actually carries it. */
+export function subagentRuntimeLabel(row: SubagentRow): string | null {
+  if (row.kind !== "provider") return null;
+  const model = row.model?.trim();
+  const effort = row.thinkingOptionId?.trim();
+  return [model, effort].filter(Boolean).join(" · ") || null;
 }
 
 export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowPresentationData {

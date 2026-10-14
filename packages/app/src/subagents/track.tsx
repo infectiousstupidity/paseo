@@ -34,6 +34,7 @@ import {
   countFinishedSubagents,
   groupSubagentRows,
   resolveSubagentState,
+  subagentRuntimeLabel,
   type SubagentStateWord,
 } from "./track-presentation";
 
@@ -311,6 +312,9 @@ function SubagentsTrackRow({
   // noise next to a session that is one press away.
   const shownActivity = row.kind === "provider" ? activity : null;
   // Dense rows use one meaningful outcome/activity line; exact metadata is available on expansion.
+  const runtime = subagentRuntimeLabel(row);
+  const context = [presentation.subtitle, runtime,
+    age ? t("subagents.panel.startedAgo", { age }) : null].filter(Boolean).join(" · ");
   const metadata =
     shownActivity?.kind === "response" ? shownActivity.text
     : shownActivity?.kind === "tool" ? shownActivity.label
@@ -361,6 +365,11 @@ function SubagentsTrackRow({
               </Text>
             ) : null}
           </View>
+          {context ? (
+            <Text style={styles.rowMeta} numberOfLines={1} testID={`subagents-track-context-${row.id}`}>
+              {context}
+            </Text>
+          ) : null}
           {metadata ? (
             <Text
               style={styles.rowMeta}
@@ -380,7 +389,7 @@ function SubagentsTrackRow({
         </View>
       </>
     ),
-    [displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t, theme.colors.foreground, theme.colors.foregroundMuted],
+    [context, displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t, theme.colors.foreground, theme.colors.foregroundMuted],
   );
 
   return (

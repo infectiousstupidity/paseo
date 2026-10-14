@@ -33,6 +33,9 @@ export interface ProviderSubagentRow {
   description: string | null;
   /** Compact provider-owned context. The app displays it without interpreting its contents. */
   subtitle: string | null;
+  /** Observed child-local model and reasoning effort; never inherited from the parent. */
+  model?: string | null;
+  thinkingOptionId?: string | null;
   /**
    * Bounded current activity observed by the daemon (Task 03). Null when the daemon predates
    * the field or has not observed anything meaningful yet (the projection then falls back to
@@ -132,6 +135,8 @@ export function selectProviderSubagentsForParent(
       title: subagent.title,
       description: subagent.description,
       subtitle: subagent.subtitle ?? null,
+      model: subagent.model ?? null,
+      thinkingOptionId: subagent.thinkingOptionId ?? null,
       activity: subagent.activity ?? null,
       status: subagent.status,
       controlEligible: subagent.controlEligible === true,

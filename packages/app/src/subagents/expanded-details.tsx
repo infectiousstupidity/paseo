@@ -6,7 +6,7 @@ import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
-import { canControlPiSubagent } from "./track-presentation";
+import { canControlPiSubagent, subagentRuntimeLabel } from "./track-presentation";
 import type { SubagentRow } from "./select";
 import type { SubagentActivity } from "./subagent-activity";
 
@@ -45,6 +45,7 @@ export function SubagentExpandedDetails({
   const inFlight = useRef(false);
   const eligible = supportsControls && client !== null && canControlPiSubagent(row);
   const task = row.kind === "provider" ? (row.description || row.title) : row.title;
+  const runtimeLabel = subagentRuntimeLabel(row);
   const observed = activity?.kind === "response" ? activity.text
     : activity?.kind === "tool" ? activity.label : null;
   const isRunning = row.kind === "provider" && row.status === "running";
@@ -123,7 +124,8 @@ export function SubagentExpandedDetails({
       </Text>
       <Text style={styles.body}>{observed || t("subagents.panel.resultUnavailable")}</Text>
       <Text style={styles.meta}>
-        {row.provider}{age ? " · " + t("subagents.panel.startedAgo", { age }) : ""}
+        {[row.provider, runtimeLabel, age ? t("subagents.panel.startedAgo", { age }) : null]
+          .filter(Boolean).join(" · ")}
       </Text>
       {row.kind === "provider" && row.subtitle ? (
         <Text selectable style={styles.meta}>{row.subtitle}</Text>
