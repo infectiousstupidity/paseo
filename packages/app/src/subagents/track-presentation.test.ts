@@ -7,6 +7,7 @@ import {
   buildSubagentRowPresentationData,
   canControlPiSubagent,
   compactSubagentTask,
+  subagentRuntimeLabel,
   countFinishedSubagents,
   groupSubagentRows,
   orderSubagentRows,
@@ -163,12 +164,37 @@ describe("compactSubagentTask", () => {
       .toBe("Fix /src/auth.ts without breaking login");
   });
 
+  it("extracts only documented worker IDs and review rounds from long prompts", () => {
+    expect(compactSubagentTask(
+      "You are fix-round worker W15 for the Paseo workspace mock. Review round 4 (confirmed).",
+    )).toBe("W15 · fix-round · Review round 4");
+    expect(compactSubagentTask("You are implementation worker W1a for a bounded task."))
+      .toBe("W1a · implementation");
+  });
+
   it("bounds the row line but leaves full source available for inspection", () => {
     const original = "Investigate " + "x".repeat(170);
     const displayed = compactSubagentTask(original);
     expect(displayed.length).toBeLessThanOrEqual(120);
     expect(displayed.endsWith("…")).toBe(true);
     expect(original).toHaveLength(182);
+  });
+});
+
+describe("child model identity projection", () => {
+  const child: ProviderSubagentRow = {
+    kind: "provider", id: "child", parentAgentId: "parent", provider: "pi",
+    title: "worker", description: "Review", subtitle: null, activity: null,
+    status: "running", requiresAttention: false, createdAt: new Date(),
+  };
+
+  it("omits unavailable values and never borrows the parent model", () => {
+    expect(subagentRuntimeLabel(child)).toBeNull();
+    expect(subagentRuntimeLabel({ ...child, model: "openrouter/qwen3.8-27b" }))
+      .toBe("openrouter/qwen3.8-27b");
+    expect(subagentRuntimeLabel({
+      ...child, model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
+    })).toBe("openrouter/qwen3.8-27b · xhigh");
   });
 });
 

@@ -88,6 +88,22 @@ describe("ProviderSubagentStore", () => {
     expect(store.getControlTarget("parent-a", "call-1:3")).toBeNull();
   });
 
+  test("keeps observed child settings on activity-only updates and clears prior effort on model change", () => {
+    const store = new ProviderSubagentStore();
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      model: "openrouter/model-a", thinkingOptionId: "xhigh" });
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      activity: { kind: "tool", label: "read file.ts", at: "2026-10-14T00:00:00Z" } });
+    expect(store.get("parent", "child")).toMatchObject({
+      model: "openrouter/model-a", thinkingOptionId: "xhigh",
+    });
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      model: "openrouter/model-b", thinkingOptionId: null });
+    expect(store.get("parent", "child")).toMatchObject({
+      model: "openrouter/model-b", thinkingOptionId: null,
+    });
+  });
+
   test("limits oversized provider child tool output before storage", () => {
     const subagents = new ProviderSubagentStore();
     const output = "x".repeat(70 * 1024);

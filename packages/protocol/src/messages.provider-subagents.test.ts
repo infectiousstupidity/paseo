@@ -22,6 +22,26 @@ describe("provider subagent protocol", () => {
     }).payload).toMatchObject({ deliveryStatus: "queued" });
   });
 
+  test("accepts optional observed child model identity without requiring it for old daemons", () => {
+    const subagent = {
+      id: "child", parentAgentId: "parent", provider: "pi", title: "worker",
+      description: "Inspect code", status: "running",
+      createdAt: "2026-10-14T00:00:00Z", updatedAt: "2026-10-14T00:00:00Z",
+      toolCallId: null,
+    };
+    const response = (child: Record<string, unknown>) => ({
+      type: "agent.provider_subagents.list.response",
+      payload: { requestId: "r", parentAgentId: "parent", subagents: [child], error: null },
+    });
+    expect(SessionOutboundMessageSchema.safeParse(response(subagent)).success).toBe(true);
+    const parsed = SessionOutboundMessageSchema.parse(response({
+      ...subagent, model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
+    }));
+    expect(parsed.payload.subagents[0]).toMatchObject({
+      model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
+    });
+  });
+
   test("rejects unproven interrupt and resume controls at the wire boundary", () => {
     for (const action of ["interrupt", "resume"]) {
       const request = {
