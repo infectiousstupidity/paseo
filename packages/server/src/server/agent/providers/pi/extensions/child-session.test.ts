@@ -204,19 +204,19 @@ describe("PiChildSessionFollower", () => {
           content: [{ type: "text", text: "Working" }],
         } },
       ];
-      await writeFile(file, rows.map(row => JSON.stringify(row)).join("\\n") + "\\n");
+      await writeFile(file, rows.map(row => JSON.stringify(row)).join("\n") + "\n");
       expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
         { model: "openrouter/qwen3.8-27b", thinkingOptionId: null },
       ]);
       expect(await follower.readNew()).toEqual([]);
 
-      await appendFile(file, JSON.stringify({ type: "thinking_level_change", thinkingLevel: "xhigh" }) + "\\n");
+      await appendFile(file, JSON.stringify({ type: "thinking_level_change", thinkingLevel: "xhigh" }) + "\n");
       expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
         { model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh" },
       ]);
 
       await appendFile(file, JSON.stringify({ type: "model_change",
-        provider: "openrouter", modelId: "different-model" }) + "\\n");
+        provider: "openrouter", modelId: "different-model" }) + "\n");
       expect((await follower.readNew()).filter(event => event.type === "upsert")).toMatchObject([
         { model: "openrouter/different-model", thinkingOptionId: null },
       ]);
@@ -229,7 +229,7 @@ describe("PiChildSessionFollower", () => {
     dir = await mkdtemp(join(tmpdir(), "paseo-pi-follower-"));
     file = join(dir, "child.jsonl");
     try {
-      await writeFile(file, assistantLine("Use qwen xhigh", "2026-01-01T00:00:00Z") + "\\n");
+      await writeFile(file, assistantLine("Use qwen xhigh", "2026-01-01T00:00:00Z") + "\n");
       expect((await new PiChildSessionFollower("child", file).readNew())
         .filter(event => event.type === "upsert")).toEqual([]);
     } finally {

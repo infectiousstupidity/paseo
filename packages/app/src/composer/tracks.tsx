@@ -68,7 +68,7 @@ export interface ComposerTrackPillProps {
  * Size of the panel, not the pill: the pill is as wide as its label, the panel is not. The
  * ceiling is generous because the rows carry real content — a subagent's task description, a
  * task's active form — and there is nothing above the composer competing for the space. The
- * surface still shrinks to its content and clamps to the viewport.
+ * normal surface remains content-sized while the inspector takes a responsive width.
  */
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 620;

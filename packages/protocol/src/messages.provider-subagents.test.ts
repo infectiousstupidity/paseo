@@ -37,9 +37,9 @@ describe("provider subagent protocol", () => {
     const parsed = SessionOutboundMessageSchema.parse(response({
       ...subagent, model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
     }));
-    expect(parsed.payload.subagents[0]).toMatchObject({
+    expect(parsed).toMatchObject({ payload: { subagents: [{
       model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
-    });
+    }] } });
   });
 
   test("rejects unproven interrupt and resume controls at the wire boundary", () => {
