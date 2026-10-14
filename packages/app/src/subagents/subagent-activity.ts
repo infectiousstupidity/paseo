@@ -142,6 +142,7 @@ function responseExcerpt(text: string): string | null {
   for (const raw of lines) {
     const line = raw.replace(/\s+/g, " ").trim();
     if (!line || /^\`{3}|^~{3}/.test(line) || /^#{1,6}\s/.test(line) ||
+        /^(?:all done\.?(?:\s+summary of (?:the )?run:?)?|summary of (?:the )?run:?)$/i.test(line) ||
         /^[-*_]{3,}$/.test(line) || /^\*\*[^*]+\*\*:?$/.test(line)) continue;
     const cleaned = line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, "");
     if (cleaned) return excerpt(cleaned);

@@ -26,6 +26,7 @@ import {
   type SubagentActivity,
 } from "./subagent-activity";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
+import { useMenuContext } from "@/components/ui/menu";
 import { SubagentExpandedDetails } from "./expanded-details";
 import {
   buildSubagentPillPresentation,
@@ -151,6 +152,7 @@ export function SubagentsTrack({
       segments={pill.segments}
       accessibilityLabel={pill.accessibilityLabel}
       panelTitle={t("subagents.title")}
+      widePanel
     >
       {([
         ["attention", groups.attention, t("subagents.panel.needsAttention")],
@@ -296,6 +298,7 @@ function SubagentsTrackRow({
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
   const { theme } = useUnistyles();
+  const { selectItem } = useMenuContext("SubagentsTrackRow");
   const isCompact = useIsCompactFormFactor();
   const presentation = useRowPresentation(row, serverId);
   const displayLabel =
@@ -317,13 +320,15 @@ function SubagentsTrackRow({
   const [hovered, setHovered] = useState(false);
   const actionsAlwaysVisible = isNative || isCompact;
   const actionsVisible = actionsAlwaysVisible || hovered;
-  const handlePress = useCallback(() => {
-    if (row.kind === "provider") {
-      onOpenProviderSubagent(row.parentAgentId, row.id);
-    } else {
-      onOpenSubagent(row.id);
-    }
-  }, [onOpenProviderSubagent, onOpenSubagent, row]);
+  const handleOpenSession = useCallback(() => {
+    selectItem(() => {
+      if (row.kind === "provider") {
+        onOpenProviderSubagent(row.parentAgentId, row.id);
+      } else {
+        onOpenSubagent(row.id);
+      }
+    }, true);
+  }, [onOpenProviderSubagent, onOpenSubagent, row, selectItem]);
   const handleArchivePress = useCallback(() => {
     onArchiveSubagent(row.id);
   }, [onArchiveSubagent, row.id]);
@@ -366,9 +371,16 @@ function SubagentsTrackRow({
             </Text>
           ) : null}
         </View>
+        <View style={row.kind === "paseo" ? styles.disclosureManagedIcon : styles.disclosureIcon}>
+          <ChevronDown
+            size={18}
+            color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted}
+            style={expanded ? styles.disclosureOpen : undefined}
+          />
+        </View>
       </>
     ),
-    [displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t],
+    [displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t, theme.colors.foreground, theme.colors.foregroundMuted],
   );
 
   return (
@@ -379,8 +391,10 @@ function SubagentsTrackRow({
     >
       <ComposerTrackRow
         accessibilityLabel={[displayLabel, stateWord, metadata].filter(Boolean).join(", ")}
+        expanded={expanded}
         testID={`subagents-track-row-${row.id}`}
-        onPress={handlePress}
+        closeOnSelect={false}
+        onPress={onToggleDetails}
       >
         {renderRow}
       </ComposerTrackRow>
@@ -400,25 +414,6 @@ function SubagentsTrackRow({
           />
         </View>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          expanded
-            ? t("subagents.panel.collapseDetails", { label: displayLabel })
-            : t("subagents.panel.expandDetails", { label: displayLabel })
-        }
-        accessibilityState={{ expanded }}
-        aria-expanded={expanded}
-        testID={`subagents-track-details-${row.id}`}
-        onPress={onToggleDetails}
-        hitSlop={8}
-        style={row.kind === "paseo" ? styles.disclosureManaged : styles.disclosure}
-      >
-        <ChevronDown
-          size={ROW_ICON_SIZE}
-          color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted}
-        />
-      </Pressable>
       {expanded ? (
         <SubagentExpandedDetails
           row={row}
@@ -429,7 +424,7 @@ function SubagentsTrackRow({
           age={age}
           stopping={stopping}
           onStopAccepted={onStopAccepted}
-          onOpenSession={handlePress}
+          onOpenSession={handleOpenSession}
         />
       ) : null}
     </View>
@@ -553,30 +548,19 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: theme.fontSize.sm,
     color: theme.colors.foregroundMuted,
   },
-  disclosure: {
-    position: "absolute",
-    right: theme.spacing[2],
-    top: theme.spacing[2],
-    padding: theme.spacing[1],
-  },
-  disclosureManaged: {
-    position: "absolute",
-    right: 60,
-    top: theme.spacing[2],
-    padding: theme.spacing[1],
-  },
+  disclosureIcon: { alignItems: "center", justifyContent: "center" },
+  disclosureManagedIcon: { alignItems: "center", justifyContent: "center", marginRight: 64 },
+  disclosureOpen: { transform: [{ rotate: "180deg" }] },
   rowBody: {
-    paddingRight: 24,
+    paddingRight: theme.spacing[1],
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: "auto",
     minWidth: 0,
     gap: 2,
   },
-  // Room for the two action buttons on managed rows, so the state word never slides under them.
-  rowBodyWithActions: {
-    paddingRight: 80,
-  },
+  // Managed buttons remain separate hit targets; the disclosure glyph clears their overlay.
+  rowBodyWithActions: { paddingRight: theme.spacing[1] },
   rowLabelRow: {
     flexDirection: "row",
     alignItems: "center",

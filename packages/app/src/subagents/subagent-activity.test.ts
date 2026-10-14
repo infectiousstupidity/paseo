@@ -100,6 +100,11 @@ describe("deriveSubagentActivity", () => {
       .toEqual({ kind: "none" });
   });
 
+  it("ignores boilerplate completion preambles before reporting an actual result", () => {
+    expect(deriveSubagentActivity([assistant("All done. Summary of the run:\nFixed two layout defects.")], false))
+      .toEqual({ kind: "response", text: "Fixed two layout defects." });
+  });
+
   it("caps a long response at the excerpt limit", () => {
     const long = "x".repeat(200);
     expect(deriveSubagentActivity([assistant(long)], false)).toEqual({

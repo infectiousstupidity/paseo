@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactElement } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { ChevronDown } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -39,6 +40,7 @@ export function SubagentExpandedDetails({
   const [pending, setPending] = useState<NativeAction | null>(null);
   const [confirmStop, setConfirmStop] = useState(false);
   const [instruction, setInstruction] = useState("");
+  const [showTask, setShowTask] = useState(false);
   const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
   const inFlight = useRef(false);
   const eligible = supportsControls && client !== null && canControlPiSubagent(row);
@@ -116,8 +118,6 @@ export function SubagentExpandedDetails({
 
   return (
     <View style={styles.detail} testID={"subagents-track-expanded-" + row.id}>
-      <Text style={styles.label}>{t("subagents.panel.task")}</Text>
-      <Text selectable style={styles.body}>{task?.trim() || t("subagents.panel.resultUnavailable")}</Text>
       <Text style={styles.label}>
         {activity?.kind === "response" ? t("subagents.panel.outcome") : t("subagents.panel.activity")}
       </Text>
@@ -189,6 +189,27 @@ export function SubagentExpandedDetails({
           {feedback.text}
         </Text>
       ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t("subagents.panel.task")}
+        accessibilityState={{ expanded: showTask }}
+        aria-expanded={showTask}
+        onPress={() => setShowTask((value) => !value)}
+        style={styles.taskDisclosure}
+        testID={"subagents-track-original-task-toggle-" + row.id}
+      >
+        <Text style={styles.label}>{t("subagents.panel.task")}</Text>
+        <ChevronDown
+          size={16}
+          color={theme.colors.foregroundMuted}
+          style={showTask ? styles.taskChevronOpen : undefined}
+        />
+      </Pressable>
+      {showTask ? (
+        <Text selectable style={styles.body} testID={"subagents-track-original-task-" + row.id}>
+          {task?.trim() || t("subagents.panel.resultUnavailable")}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -204,6 +225,14 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.borderRadius.md,
     minWidth: 0,
   },
+  taskDisclosure: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 36,
+    paddingVertical: theme.spacing[2],
+  },
+  taskChevronOpen: { transform: [{ rotate: "180deg" }] },
   label: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
