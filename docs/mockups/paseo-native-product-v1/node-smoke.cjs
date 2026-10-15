@@ -16,7 +16,7 @@ test('mode A/B native workspace retained',()=>{action('mode:proposed');assert(st
 test('home and shared review',()=>{action('home');has('Needs you');has('REV-SEI-042');action('inspect-review');assert(state.inspector==='review');has('Approve verified result')});
 test('approve resolves single review',()=>{action('approve-review');assert(state.review==='approved');action('close-inspector');has('No pending human reviews')});
 test('project overview plan knowledge runs',()=>{action('project:seicho');has('Project Home');['Plan','Runs','Knowledge','Overview'].forEach(s=>{action('project-tab:'+s);has(s==='Plan'?'Dependencies':s==='Runs'?'Executions':s==='Knowledge'?'Ideas, notes':'Current outcome')})});
-test('queue reorder and blocked',()=>{action('project-tab:Plan');action('move:TASK-22:-1');assert(state.queue[0]==='TASK-22');action('move:TASK-23:-1');assert(state.queue.at(-1)==='TASK-23')});
+test('queue reorder and blocked',()=>{action('project-tab:Plan');action('move:TASK-24:-1');assert(state.queue[1]==='TASK-24');action('move:TASK-23:-1');assert(state.queue.at(-1)==='TASK-23')});
 test('authorization flow',()=>{action('task:TASK-22');action('authorize');has('Authorize simulated run');action('start-run');assert(state.run==='running');assert(state.route==='workspace')});
 test('diff anchored context and bundled comment',()=>{action('pane:diff');has('src/recipe-import.ts');action('line:17');assert(state.inspector==='context');has('a19c2f1');action('anchor:Comment');action('context-send');assert(state.feedback.length===1);assert(state.inspector==='')});
 test('standalone terminal',()=>{action('new-terminal');action('create-terminal');assert(state.standalone);assert(state.activeTab==='terminal');has('PS ~&gt;')});
