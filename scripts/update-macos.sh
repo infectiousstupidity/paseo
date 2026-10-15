@@ -5,7 +5,7 @@ set -euo pipefail
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 log() { printf '\n==> %s\n' "$*"; }
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ "$(uname -s)" == Darwin ]] || fail "This script only runs on macOS."
 [[ "$(uname -m)" == arm64 ]] || fail "This script builds natively for Apple Silicon (arm64)."
 for tool in git node npm ditto osascript pgrep open; do
@@ -19,7 +19,7 @@ fi
 node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)' || \
   fail "Node.js 22 or newer is required (current: $(node --version))."
 
-if [[ -n "\${PASEO_APP_PATH:-}" ]]; then
+if [[ -n "${PASEO_APP_PATH:-}" ]]; then
   APP_PATH="$PASEO_APP_PATH"
 elif [[ -d /Applications/Paseo.app ]]; then
   APP_PATH=/Applications/Paseo.app
@@ -43,7 +43,7 @@ npm ci
 log "Building Paseo for Apple Silicon ($COMMIT)"
 PASEO_LOCAL_BUILD_COMMIT="$COMMIT" \
 CSC_IDENTITY_AUTO_DISCOVERY=false \
-NODE_OPTIONS="\${NODE_OPTIONS:---max-old-space-size=4096}" \
+NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
 npm run build:desktop -- \
   --publish never --mac --arm64 --dir \
   -c.mac.identity=- \
