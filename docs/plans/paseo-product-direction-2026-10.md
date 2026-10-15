@@ -1,6 +1,6 @@
 # Paseo: product direction and experience contract
 
-Status: **accepted product direction / planning capture**, 2026-10-15. Not an implementation specification, not a claim that capabilities below already work. The native application and Shiori integration must be inspected and tested before slicing Tasks.
+Status: **accepted product direction / planning capture**, 2026-10-15. Not an implementation specification, not a claim that capabilities below already work. **Next design step:** [Paseo native HTML prototype Task 01](../tasks/paseo-native-html-prototype-01.md) reconstructs current UI from fork source and user screenshots first, then builds a screenshot-validated Current/Proposed interactive comparison. Production application changes remain out of scope. The native application and Shiori integration must be inspected and tested before slicing Tasks.
 
 **Product outcome:** Paseo becomes the single everyday interface for turning ideas into verified products. It is a project partner, execution cockpit, review environment and development workspace. It must retain effortless standalone agent/terminal use. Shiori owns project/task/orchestration truth, Paseo owns native sessions/panes/hosts/desktop UI, SEICHO owns the broader personal project registry, and Pivolution owns retrospective analysis.
 
