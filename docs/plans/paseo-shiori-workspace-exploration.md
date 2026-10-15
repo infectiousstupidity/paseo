@@ -4,7 +4,7 @@
 **Updated:** 2026-10-13  
 **Purpose:** Record the intended daily experience, design direction, existing building blocks, and unanswered questions. Update this document as decisions change. Create separate implementation plans and Tasks only after the workflows and contracts are settled.
 
-## Outcome we want
+> **2026-10-15 direction update:** The broader first-class, project-centric Paseo experience is captured in [Paseo product direction](paseo-product-direction-2026-10.md); the next interactive prototype must satisfy the [new prototype contract](../design/paseo-next-prototype-contract.md). This document remains useful for earlier boundary research (native panes, Shiori truth, review, usage), but any exploratory navigation sketch here is **not** an approved complete Paseo shell. Previous Shiori-centric/v5 HTML references are not sufficient feature-parity targets. Do not begin a new mock or implementation slice until the coordinated repo docs and feature inventory have been reconciled.\n\n## Outcome we want
 
 An integrated coding and project workspace where it is obvious **where I am, what I am doing, and what needs me next**. Navigate projects and their features visually; work with agents; review and approve output; keep decisions and documents up to date without searching old sessions or repeatedly explaining context.
 
