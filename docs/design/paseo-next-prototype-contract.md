@@ -1,8 +1,8 @@
 # Next Paseo interactive prototype: design and acceptance contract
 
-Status: **design brief / proposal**, 2026-10-15. Do not implement the mock or any application changes as part of this capture. Source of requirements: [Paseo product direction](../plans/paseo-product-direction-2026-10.md). Read that first. Earlier standalone Shiori-style workspace mock and old v5 references are **rejected as the global Paseo shell**; do not reuse their navigation or pretend that they document native Paseo features. Preserve worthwhile interaction ideas only after reconciliation against real code.
+Status: **design acceptance contract**, 2026-10-15. The design-capture phase is complete; the isolated HTML prototype is authorized by [Task 01](../tasks/paseo-native-html-prototype-01.md). Do not implement production Paseo/Shiori application changes. Source of requirements: [Paseo product direction](../plans/paseo-product-direction-2026-10.md). Read that first. Earlier standalone Shiori-style workspace mock and old v5 references are **rejected as the global Paseo shell**; do not reuse their navigation or pretend that they document native Paseo features. Preserve worthwhile interaction ideas only after reconciliation against real code.
 
-## Outcome
+**Mandatory starting point:** This is **not** a standalone new UI design. Start from the real current Paseo code and user-supplied screenshots. First build screenshot-validated **Current Paseo**, then an incremental **Proposed Paseo** using the *same shell*, with a context-retaining A/B toggle. See [the execution task](../tasks/paseo-native-html-prototype-01.md) for screenshot inputs, exact paths, fidelity evidence, mock-only boundaries, acceptance and handoff. Current installed screenshots determine real rendered appearance; current fork source determines native controls and behavior; this contract determines proposed design goals. Missing images lower baseline confidence and must be called out, not imagined.\n\n## Outcome
 
 Build **one working interactive prototype** of a coherent Paseo shell that makes the intended idea -> prototype -> plan -> execute -> verify -> finish workflow obvious. Use existing Paseo UI structure, not a bespoke second tab manager or isolated Shiori app. A user should understand current location and required next action without knowing which subsystem owns data.
 
@@ -58,7 +58,7 @@ Prototype can have lightweight fixtures for Shiori data and host telemetry, but 
 - Avoid non-operational visual decoration, AI-dashboard-looking grids, giant blank space, tooltip-only critical actions, tiny chevrons, and multiple similar review or workspaces pages.
 - Never use rejected old v5 or disconnected Shiori mock as acceptance target. Read actual Paseo fork before deciding where native buttons, pane targets, session controls and settings paths belong.
 
-## Deliverables **after** this design-capture phase
+## Prototype deliverables
 
 1. Information architecture and navigation map (global vs Project vs workspace vs inspector vs tool).
 2. One interactive prototype implementing S1–S14 with meaningful clickable paths and at least blocked/review/idle/running/error states.
