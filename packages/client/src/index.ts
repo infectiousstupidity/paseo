@@ -376,6 +376,8 @@ export interface PaseoAgentHandle {
    * rejecting.
    */
   commands(options?: PaseoAgentCommandsOptions): Promise<PaseoAgentCommandsResult>;
+  /** Interrupt the active foreground turn. Resolves only when the daemon acknowledges cancellation. */
+  cancel(): Promise<void>;
   archive(): Promise<{ archivedAt: string }>;
   detach(): Promise<void>;
   subscribe(handler: (update: PaseoAgentUpdate) => void): () => void;
@@ -971,6 +973,7 @@ function createAgentHandleFactory(
         return result;
       },
       commands: (options) => daemonClient.listCommands({ agentId: id, ...options }),
+      cancel: () => daemonClient.cancelAgent(id),
       archive: async () => {
         const result = await daemonClient.archiveAgent(id);
         if (current) {
