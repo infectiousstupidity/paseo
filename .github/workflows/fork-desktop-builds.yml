@@ -1,4 +1,4 @@
-name: Fork Desktop Builds
+name: Fork Windows Desktop Builds
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 # Only the newest push to main needs a build. Manual runs can also be replaced.
 concurrency:
-  group: fork-desktop-builds-${{ github.ref }}
+  group: fork-windows-builds-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -17,41 +17,10 @@ permissions:
 env:
   ONNXRUNTIME_NODE_INSTALL: skip
   EP_GH_IGNORE_TIME: "true"
-  # Labels these as local builds, disabling the upstream desktop auto-updater.
+  # Mark the fork build as local so upstream auto-updates cannot replace it.
   PASEO_LOCAL_BUILD_COMMIT: ${{ github.sha }}
 
 jobs:
-  macos-arm64:
-    name: macOS / Apple Silicon
-    runs-on: macos-14
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          registry-url: https://npm.pkg.github.com
-          scope: "@boudra"
-      - name: Install dependencies
-        run: node scripts/npm-retry.mjs ci
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build unsigned macOS ARM64 DMG
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          NODE_OPTIONS: --max-old-space-size=4096
-        run: >-
-          npm run build:desktop -- --publish never --mac --arm64
-          -c.mac.identity=null -c.mac.notarize=false -c.mac.hardenedRuntime=false
-      - name: Upload macOS installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: paseo-fork-macos-arm64
-          path: packages/desktop/release/Paseo-*-arm64.dmg
-          if-no-files-found: error
-          retention-days: 14
-
   windows-x64:
     name: Windows / x64
     runs-on: windows-2022
