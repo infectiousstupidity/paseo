@@ -1,7 +1,10 @@
 import type { StreamItem } from "@/types/stream";
 
 /** Submitted prompts from the currently loaded session timeline, oldest first. */
-export function getPromptHistory(tail: readonly StreamItem[], head: readonly StreamItem[]): string[] {
+export function getPromptHistory(
+  tail: readonly StreamItem[],
+  head: readonly StreamItem[],
+): string[] {
   const prompts: string[] = [];
   const seen = new Set<string>();
   for (const item of [...tail, ...head]) {
