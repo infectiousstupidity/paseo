@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { UserMessageItem, StreamItem } from "@/types/stream";
-import { getPromptHistory, navigatePromptHistory, type PromptHistoryCursor } from "./prompt-history";
+import {
+  getPromptHistory,
+  navigatePromptHistory,
+  type PromptHistoryCursor,
+} from "./prompt-history";
 
 const user = (id: string, text: string, clientMessageId?: string): UserMessageItem => ({
   kind: "user_message",
