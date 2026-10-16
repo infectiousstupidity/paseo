@@ -5,8 +5,8 @@
 // through every route, section, pane and action. It asserts on the rendered HTML string.
 // No browser, no build step, no new dependency.
 //
-//   node docs/mockups/paseo-mock-smoke.mjs                 # render + dead-end + scenarios
-//   node docs/mockups/paseo-mock-smoke.mjs --strict-language  # also fail on jargon (S13)
+//   node docs/mockups/paseo-mock-smoke.mjs  # render + dead-end + scenarios + language
+// --strict-language is still accepted; language checks always run.
 //
 // See docs/plans/paseo-mock-feedback-slices-2026-10.md (slice S0).
 
@@ -18,8 +18,6 @@ import { Script } from "node:vm";
 const here = dirname(fileURLToPath(import.meta.url));
 const mockPath = join(here, "paseo-mock.html");
 const html = readFileSync(mockPath, "utf8");
-
-const STRICT_LANGUAGE = process.argv.includes("--strict-language");
 
 // ---------------------------------------------------------------- extract script
 
@@ -132,8 +130,11 @@ if (!api?.state || typeof api.action !== "function" || typeof api.render !== "fu
 }
 const { state: st, action } = api;
 
+// Check every visited state, including scenarios, dialogs, toasts and control probes.
+const renderedCopy = new Set();
 const render = () => {
   api.render();
+  renderedCopy.add(userVisibleText(appEl.innerHTML));
   return appEl.innerHTML;
 };
 
@@ -339,10 +340,10 @@ page("schedules:form:sequence", () => {
   const seq = st.sequences[st.sequences.length - 1];
   action("schedules");
   action("scheduleNew");
-  action("scheduleField:name:Gå gjennom oppgavene");
+  action("scheduleField:name:Go through the tasks");
   action(`scheduleTarget:sequence:${seq.id}`);
   action("scheduleField:mode:weekdays");
-  action("scheduleDay:fredag");
+  action("scheduleDay:Friday");
   return render();
 });
 page("schedules:sequence", () => {
@@ -431,7 +432,7 @@ page("schedules:onFinish:resumed", () => {
 const beforeWorkspacePages = snapshot();
 action("workspace:seicho");
 const workspaceA = st.currentLayoutKey;
-const workspaceB = createWorkspace("Ordlisten", "anon2", "ordliste");
+const workspaceB = createWorkspace("Glossary", "anon2", "glossary");
 page("project:seicho/two-workspaces", () => (action("project:seicho"), render()));
 page("workspace:second-layout", () => {
   action("workspaceSwitch:" + workspaceB);
@@ -443,9 +444,9 @@ page("workspace:second-layout", () => {
 page("workspace:first-restored", () => (action("workspaceSwitch:" + workspaceA), render()));
 page("modal:new-workspace", () => (action("workspaceNew:seicho"), render()));
 page("modal:new-workspace-ready", () => {
-  workspaceField("name", "Utprøving");
+  workspaceField("name", "Try it out");
   workspaceField("host", "anon3");
-  workspaceField("branch", "utproving");
+  workspaceField("branch", "try-it-out");
   return render();
 });
 restore(beforeWorkspacePages);
@@ -740,14 +741,14 @@ const scenarios = [
     run: () => {
       const a = st.currentLayoutKey,
         before = workspaceBytes(a);
-      const b = createWorkspace("Ordlisten", "anon2", "ordliste");
+      const b = createWorkspace("Glossary", "anon2", "glossary");
       const records = st.projects.find((p) => p.id === "seicho").workspaces;
       const record = records.find((w) => w.id === b);
       return (
         records.length === 2 &&
-        record.name === "Ordlisten" &&
+        record.name === "Glossary" &&
         record.host === "anon2" &&
-        record.branch === "ordliste" &&
+        record.branch === "glossary" &&
         st.layouts[b].kind === "leaf" &&
         workspaceBytes(a) === before
       );
@@ -760,7 +761,7 @@ const scenarios = [
     run: () => {
       const a = st.currentLayoutKey,
         before = workspaceBytes(a);
-      const b = createWorkspace("Ordlisten");
+      const b = createWorkspace("Glossary");
       const original = firstLeaf().id;
       action("paneSplit:right:" + original);
       const splitBuilt = leaves().length === 2;
@@ -801,10 +802,10 @@ const scenarios = [
       });
       resizeSplit(layoutRoot(), "ArrowRight");
       action("newTerminal:attached");
-      activeTab().terminal.lines.push("Eksempel på pågående arbeid");
+      activeTab().terminal.lines.push("Example of ongoing work");
       const aBytes = workspaceBytes(a),
         history = JSON.stringify(st.sessionHistory);
-      const b = createWorkspace("Ordlisten");
+      const b = createWorkspace("Glossary");
       action("paneSplit:down:" + firstLeaf().id);
       resizeSplit(layoutRoot(), "ArrowUp");
       action("paneAdd:" + firstLeaf().id + ":browser");
@@ -813,7 +814,7 @@ const scenarios = [
       const aRestored =
         workspaceBytes(a) === aBytes &&
         layoutRoot().ratio === 0.55 &&
-        activeTab().terminal.lines[0] === "Eksempel på pågående arbeid";
+        activeTab().terminal.lines[0] === "Example of ongoing work";
       switchWorkspace(b);
       return (
         aRestored &&
@@ -838,7 +839,7 @@ const scenarios = [
     run: () => {
       const a = st.currentLayoutKey,
         aPane = firstLeaf().id;
-      const b = createWorkspace("Ordlisten");
+      const b = createWorkspace("Glossary");
       action("paneSplit:right:" + firstLeaf().id);
       const bPane = leaves()[1].id;
       switchWorkspace(a);
@@ -863,12 +864,12 @@ const scenarios = [
       const count = st.projects.find((p) => p.id === "seicho").workspaces.length;
       action("workspaceSave");
       const required = render().includes('role="alert"') && st.modal === "workspace";
-      workspaceField("name", "Ordlisten");
-      workspaceField("branch", "ordliste");
+      workspaceField("name", "Glossary");
+      workspaceField("branch", "glossary");
       workspaceField("host", "annen maskin");
       action("workspaceSave");
       const invalidHost =
-        st.workspaceError === "Fyll ut navn, maskin og navn på gren eller arbeidskopi." &&
+        st.workspaceError === "Enter a name, computer and branch or working copy name." &&
         st.projects.find((p) => p.id === "seicho").workspaces.length === count;
       workspaceField("host", "anon3");
       action("workspaceSave");
@@ -890,11 +891,11 @@ const scenarios = [
       workspaceField("branch", "main");
       action("workspaceSave");
       const explained =
-        st.workspaceError === "Velg et navn som ikke er brukt i prosjektet." &&
+        st.workspaceError === "Choose a name not already used in this project." &&
         render().includes('role="alert"');
-      workspaceField("name", "Ordlisten");
+      workspaceField("name", "Glossary");
       action("workspaceSave");
-      return explained && workspaceForTest(st.currentLayoutKey).name === "Ordlisten";
+      return explained && workspaceForTest(st.currentLayoutKey).name === "Glossary";
     },
     expect: (ok) => ok === true,
   },
@@ -902,16 +903,16 @@ const scenarios = [
     name: "S12 modal fields survive full rendering and are escaped in the result",
     setup: () => action("workspaceNew:seicho"),
     run: () => {
-      workspaceField("name", '<Ny & "to">');
+      workspaceField("name", '<New & "two">');
       workspaceField("host", "anon2");
-      workspaceField("branch", "gren & kopi");
+      workspaceField("branch", "branch & copy");
       const form = render();
       action("workspaceSave");
       return (
-        form.includes('value="&lt;Ny &amp; &quot;to&quot;&gt;"') &&
+        form.includes('value="&lt;New &amp; &quot;two&quot;&gt;"') &&
         form.includes('value="anon2" selected') &&
-        workspaceForTest(st.currentLayoutKey).name === '<Ny & "to">' &&
-        render().includes("gren &amp; kopi")
+        workspaceForTest(st.currentLayoutKey).name === '<New & "two">' &&
+        render().includes("branch &amp; copy")
       );
     },
     expect: (ok) => ok === true,
@@ -921,12 +922,12 @@ const scenarios = [
     setup: () => action("workspace:seicho"),
     run: () => {
       const a = st.currentLayoutKey,
-        b = createWorkspace("Ordlisten");
+        b = createWorkspace("Glossary");
       action("project:seicho");
       const projectHTML = render();
       const buttons = [...projectHTML.matchAll(/data-action="workspaceNew:seicho"/g)].length;
       action("workspaceNew:seicho");
-      const form = render().includes('aria-label="Nytt arbeidsområde"');
+      const form = render().includes('aria-label="New workspace"');
       action("modal:close");
       switchWorkspace(a);
       const workHTML = render();
@@ -945,7 +946,7 @@ const scenarios = [
     setup: () => action("workspace:seicho"),
     run: () => {
       const a = st.currentLayoutKey,
-        b = createWorkspace("Ordlisten");
+        b = createWorkspace("Glossary");
       action("focus:shiori");
       const out = render();
       return (
@@ -961,7 +962,7 @@ const scenarios = [
     setup: () => action("workspace:seicho"),
     run: () => {
       const a = st.currentLayoutKey;
-      const b = createWorkspace("Ordlisten", "anon2", "ordliste");
+      const b = createWorkspace("Glossary", "anon2", "glossary");
       action("newTerminal:attached");
       const terminal = activeTab();
       const bBytes = workspaceBytes(b);
@@ -987,13 +988,13 @@ const scenarios = [
       const parent = st.taskRuns.find((r) => r.id === "RUN-TASK-24");
       action("schedules");
       const before = scheduleRow(render(), "schedule-3");
-      parent.name = "Nytt navn på kjøringen";
+      parent.name = "New run name";
       const after = scheduleRow(render(), "schedule-3");
       return (
-        before.includes(`Når Kjøring · ${parent.id} · Arbeid med ordlisten er ferdig`) &&
-        after.includes(`Når Kjøring · ${parent.id} · ${parent.name} er ferdig`) &&
-        after.includes(`Oppgave · ${api.task("TASK-21").name}`) &&
-        after.includes("Venter på at kjøringen blir ferdig.")
+        before.includes(`When Run · ${parent.id} · Work on the glossary finishes`) &&
+        after.includes(`When Run · ${parent.id} · ${parent.name} finishes`) &&
+        after.includes(`Task · ${api.task("TASK-21").name}`) &&
+        after.includes("Waiting for the run to finish.")
       );
     },
     expect: (ok) => ok === true,
@@ -1010,7 +1011,7 @@ const scenarios = [
       action("authorizeRun");
       action("finishRun");
       action("scheduleNew");
-      action("scheduleField:name:En annen kjøring");
+      action("scheduleField:name:Another run");
       action("scheduleTarget:task:TASK-24");
       action("scheduleField:mode:onFinish");
       action("scheduleField:parentRef:RUN-TASK-21");
@@ -1037,13 +1038,13 @@ const scenarios = [
         unchanged &&
         other.trigger.parentRef === "RUN-TASK-21" &&
         JSON.stringify(other.lastRuns) === otherHistory &&
-        otherRow.includes("Kjøringen var allerede ferdig da tidsplanen ble lagt til.") &&
-        result.at === "man 19. okt. 09:22" &&
-        result.outcome.includes("ingenting kjørte") &&
+        otherRow.includes("The run was already finished when the schedule was added.") &&
+        result.at === "Mon 19 Oct 09:22" &&
+        result.outcome.includes("nothing ran") &&
         scheduleList(row, "schedule-history")[0] === `${result.at} · ${result.outcome}` &&
-        row.includes("Ferdig registrert én gang") &&
-        sidebar.includes("Ferdig registrert én gang") &&
-        st.toast.includes("allerede ferdig. Resultatet legges ikke til på nytt.")
+        row.includes("Completion recorded once") &&
+        sidebar.includes("Completion recorded once") &&
+        st.toast.includes("already finished. The result is not added again.")
       );
     },
     expect: (ok) => ok === true,
@@ -1070,11 +1071,11 @@ const scenarios = [
         api.task("TASK-24").status === "done" &&
         JSON.stringify(s.lastRuns) === before &&
         paused.includes('aria-checked="false"') &&
-        paused.includes("Resultatet ble ikke lagt til.") &&
-        sidebar.includes("Resultatet ble ikke lagt til.") &&
+        paused.includes("The result was not added.") &&
+        sidebar.includes("The result was not added.") &&
         s.enabled === true &&
         resumed.includes('aria-checked="true"') &&
-        resumed.includes("Det legges heller ikke til når du fortsetter.")
+        resumed.includes("It will not be added when you resume either.")
       );
     },
     expect: (ok) => ok === true,
@@ -1102,17 +1103,17 @@ const scenarios = [
         s = st.schedules.find((record) => record.id === "schedule-2");
       } else {
         action("scheduleCreate");
-        action("scheduleField:name:Fra kjøringen");
+        action("scheduleField:name:From the run");
         action("scheduleField:mode:onFinish");
         action("scheduleSave");
         s = st.schedules[st.schedules.length - 1];
       }
-      parent.name = "Endret kjøring etter at den ble lagt til";
+      parent.name = "Run renamed after it was added";
       action("schedules");
       const target = s.targets.find((t) => t.kind === "run" && t.ref === parent.id);
       return (
         JSON.stringify(Object.keys(target).sort()) === JSON.stringify(["kind", "ref"]) &&
-        scheduleRow(render(), s.id).includes(`Kjøring · ${parent.id} · ${parent.name}`) &&
+        scheduleRow(render(), s.id).includes(`Run · ${parent.id} · ${parent.name}`) &&
         s.targets.filter((t) => t.kind === "run" && t.ref === parent.id).length === 1
       );
     },
@@ -1146,7 +1147,7 @@ const scenarios = [
           s = st.schedules.find((schedule) => schedule.id === "schedule-2");
         } else {
           action("scheduleCreate");
-          action("scheduleField:name:Fra arbeidet");
+          action("scheduleField:name:From the work");
           action("scheduleSave");
           s = st.schedules[st.schedules.length - 1];
         }
@@ -1154,7 +1155,7 @@ const scenarios = [
         action("schedules");
         if (record) {
           const oldName = record.name;
-          record.name = "Endret etter at tidsplanen ble laget";
+          record.name = "Renamed after the schedule was created";
           const follows = scheduleRow(render(), s.id).includes(record.name);
           record.name = oldName;
           if (!follows) throw new Error("schedule copied the work instead of referencing it");
@@ -1188,7 +1189,7 @@ const scenarios = [
         action("sequenceNew");
         action(`scheduleAdd:sequence:${st.selectedSequence}`);
         action("scheduleCreate");
-        action("scheduleField:name:Etter kjøringen uten klokke");
+        action("scheduleField:name:After the run without a clock");
         action("scheduleField:mode:onFinish");
         action("scheduleField:parentRef:RUN-TASK-24");
         const form = render();
@@ -1210,9 +1211,9 @@ const scenarios = [
           s.trigger.mode === "onFinish" &&
           s.lastRuns.length === 1 &&
           paused.lastRuns.length === 0 &&
-          paused.finishNote.includes("mens tidsplanen var på pause") &&
-          row.includes("Ferdig registrert én gang") &&
-          scheduleStripMarkup(render()).includes("Ferdig registrert én gang")
+          paused.finishNote.includes("while the schedule was paused") &&
+          row.includes("Completion recorded once") &&
+          scheduleStripMarkup(render()).includes("Completion recorded once")
         );
       } finally {
         sandbox.Date = realDate;
@@ -1234,7 +1235,7 @@ const scenarios = [
       return (
         seqOf(id).steps.find((step) => step.ref === "TASK-24").status === "done" &&
         s.lastRuns.length === 1 &&
-        scheduleRow(render(), s.id).includes("Ferdig registrert én gang")
+        scheduleRow(render(), s.id).includes("Completion recorded once")
       );
     },
     expect: (ok) => ok === true,
@@ -1266,12 +1267,12 @@ const scenarios = [
         action("scheduleToggle:schedule-1");
         action("scheduleToggle:schedule-1");
         action("scheduleNew");
-        action("scheduleField:name:Uten klokke");
+        action("scheduleField:name:Without a clock");
         action("scheduleTarget:run:RUN-S21");
         action("scheduleSave");
         render();
         return (
-          workState() === before && st.schedules[st.schedules.length - 1].name === "Uten klokke"
+          workState() === before && st.schedules[st.schedules.length - 1].name === "Without a clock"
         );
       } finally {
         sandbox.Date = realDate;
@@ -1295,7 +1296,7 @@ const scenarios = [
         s.targets.filter((t) => t.kind === "run").length === 2 &&
         s.targets.filter((t) => t.kind === "task").length === 1 &&
         JSON.stringify(targets) === JSON.stringify(expected) &&
-        row.includes(`Oppgave · ${taskName}`) &&
+        row.includes(`Task · ${taskName}`) &&
         JSON.stringify(scheduleList(row, "schedule-next")) === JSON.stringify(s.nextFires) &&
         JSON.stringify(scheduleList(row, "schedule-history")) ===
           JSON.stringify(s.lastRuns.map((r) => `${r.at} · ${r.outcome}`))
@@ -1317,7 +1318,7 @@ const scenarios = [
       if (
         s.enabled !== false ||
         !pausedRow.includes('aria-checked="false"') ||
-        !pausedStrip.includes(`data-schedule-status="${s.id}">${s.name} · På pause`)
+        !pausedStrip.includes(`data-schedule-status="${s.id}">${s.name} · Paused`)
       )
         throw new Error("paused flag, switch and sidebar disagree");
       action(`scheduleToggle:${s.id}`);
@@ -1326,7 +1327,7 @@ const scenarios = [
       return (
         s.enabled === true &&
         scheduleRow(render(), s.id).includes('aria-checked="true"') &&
-        activeStrip.includes(`data-schedule-status="${s.id}">${s.name} · Aktiv`) &&
+        activeStrip.includes(`data-schedule-status="${s.id}">${s.name} · Active`) &&
         JSON.stringify(s) === before
       );
     },
@@ -1340,21 +1341,21 @@ const scenarios = [
       action("scheduleNew");
       if (st.modal !== "schedule" || !render().includes('id="schedule-name"'))
         throw new Error("new schedule did not open its form");
-      action("scheduleField:name:  Morgenarbeid  ");
+      action("scheduleField:name:  Morning work  ");
       action("scheduleTarget:run:RUN-S21");
       action("scheduleTarget:run:implementer");
       action("scheduleTarget:task:TASK-24");
       action("scheduleField:mode:weekdays");
       action("scheduleField:at:08:30");
-      action("scheduleDay:onsdag");
-      action("scheduleDay:fredag");
-      action("scheduleDay:mandag");
+      action("scheduleDay:Wednesday");
+      action("scheduleDay:Friday");
+      action("scheduleDay:Monday");
       action("scheduleSave");
       const s = st.schedules[st.schedules.length - 1];
       const row = scheduleRow(render(), s.id);
       return (
         st.schedules.length === count + 1 &&
-        s.name === "Morgenarbeid" &&
+        s.name === "Morning work" &&
         s.enabled === true &&
         JSON.stringify(s.targets) ===
           JSON.stringify([
@@ -1363,7 +1364,7 @@ const scenarios = [
             { kind: "task", ref: "TASK-24" },
           ]) &&
         JSON.stringify(s.trigger) ===
-          JSON.stringify({ mode: "weekdays", at: "08:30", days: ["onsdag", "fredag"] }) &&
+          JSON.stringify({ mode: "weekdays", at: "08:30", days: ["Wednesday", "Friday"] }) &&
         row.includes(s.name) &&
         row.includes("08:30") &&
         scheduleList(row, "schedule-next").length === 3 &&
@@ -1377,20 +1378,18 @@ const scenarios = [
     setup: () => action("schedules"),
     run: () => {
       action("scheduleNew");
-      action("scheduleField:name:Ordlisten");
+      action("scheduleField:name:Glossary");
       action("scheduleTarget:task:TASK-24");
       action(`scheduleField:mode:${mode}`);
-      action(
-        mode === "time" ? "scheduleField:at:tir 20. okt. 09:00" : "scheduleField:every:8 timer",
-      );
+      action(mode === "time" ? "scheduleField:at:Tue 20 Oct 09:00" : "scheduleField:every:8 hours");
       action("scheduleSave");
       const s = st.schedules[st.schedules.length - 1];
       return (
         s.trigger.mode === mode &&
         s.targets.length === 1 &&
         s.trigger[mode === "time" ? "at" : "every"] ===
-          (mode === "time" ? "tir 20. okt. 09:00" : "8 timer") &&
-        scheduleRow(render(), s.id).includes(mode === "time" ? "tir 20. okt. 09:00" : "8 timer")
+          (mode === "time" ? "Tue 20 Oct 09:00" : "8 hours") &&
+        scheduleRow(render(), s.id).includes(mode === "time" ? "Tue 20 Oct 09:00" : "8 hours")
       );
     },
     expect: (ok) => ok === true,
@@ -1400,23 +1399,23 @@ const scenarios = [
     setup: () => action("schedules"),
     run: () => {
       action("scheduleNew");
-      action("scheduleField:name:Behold dette navnet");
+      action("scheduleField:name:Keep this name");
       action("scheduleSave");
       const out = render();
       if (
         st.modal !== "schedule" ||
         !st.scheduleError ||
         !out.includes('role="alert"') ||
-        !out.includes('value="Behold dette navnet"')
+        !out.includes('value="Keep this name"')
       )
         throw new Error("form lost its input or validation error");
       action("scheduleTarget:task:TASK-24");
       render();
-      if (st.scheduleDraft.name !== "Behold dette navnet")
+      if (st.scheduleDraft.name !== "Keep this name")
         throw new Error("target selection lost the name");
       action("scheduleSave");
       const s = st.schedules[st.schedules.length - 1];
-      return s.name === "Behold dette navnet" && scheduleRow(render(), s.id).includes(s.name);
+      return s.name === "Keep this name" && scheduleRow(render(), s.id).includes(s.name);
     },
     expect: (ok) => ok === true,
   },
@@ -1428,7 +1427,7 @@ const scenarios = [
       const seq = st.sequences[st.sequences.length - 1];
       action("schedules");
       action("scheduleNew");
-      action("scheduleField:name:Oppgavene i rekkefølge");
+      action("scheduleField:name:Tasks in sequence");
       action(`scheduleTarget:sequence:${seq.id}`);
       action("scheduleSave");
       const s = st.schedules[st.schedules.length - 1];
@@ -1439,7 +1438,7 @@ const scenarios = [
       action(`seqMove:${seq.id}:0:down`);
       seq.steps.push({ kind: "task", ref: "TASK-24", gate: "auto", status: "pending" });
       seq.steps[0].ref = "TASK-25";
-      seq.name = "Endret rekkefølge";
+      seq.name = "Renamed sequence";
       action("schedules");
       return (
         JSON.stringify(order()) === JSON.stringify(seq.steps.map((step) => step.ref)) &&
@@ -1456,15 +1455,15 @@ const scenarios = [
       for (const s of st.schedules) {
         const row = scheduleRow(render(), s.id);
         if (
-          !row.includes("Dette er et eksempel. Ingenting kjøres.") ||
-          !row.includes("Neste tre tidspunkter (eksempler)") ||
-          !row.includes("Siste tre resultater (eksempler)")
+          !row.includes("This is an example. Nothing runs.") ||
+          !row.includes("Next three times (examples)") ||
+          !row.includes("Last three results (examples)")
         )
           throw new Error("row implies real execution");
       }
       action("workspace:seicho");
       action("inspect:shioriHome");
-      return scheduleStripMarkup(render()).includes("Bare eksempler. Ingenting kjøres.");
+      return scheduleStripMarkup(render()).includes("Examples only. Nothing runs.");
     },
     expect: (ok) => ok === true,
   },
@@ -1959,11 +1958,11 @@ const scenarios = [
     setup: () => action("workspace"),
     run: () => {
       const tab = activeTab();
-      tab.draft = "What does the review gate actually check?";
+      tab.draft = "What does the approval step actually check?";
       action("sideChat");
       return (
         st.sideChats.length === 1 &&
-        st.sideChats[0].title === "What does the review gate actually check?" &&
+        st.sideChats[0].title === "What does the approval step actually check?" &&
         tab.messages.length === 0 &&
         render().includes('class="side-drawer"') &&
         render().includes("About SEICHO") &&
@@ -2986,32 +2985,146 @@ for (const scenario of scenarios) {
 
 // ---------------------------------------------------------------- 6. language guard
 
+// Match words, not substrings such as "investigate". Keep technical attributes out
+// of this scan: action values, selectors and classes are not UI copy.
 const JARGON = [
-  "provenance",
-  "verification receipt",
-  "deterministic check",
-  "orchestrator",
-  "specialist",
-  "artifact",
-  "canonical",
-  "projection",
-  "reconcile",
-  "fixture-r",
-  "vertical slice",
+  /\bprovenance\b/i,
+  /\bverification receipt(s)?\b/i,
+  /\breceipts?\b/i,
+  /\bdeterministic checks?\b/i,
+  /\bobserved changes\b/i,
+  /\borchestrat\w*\b/i,
+  /\bspecialists?\b/i,
+  /\bchild agents?\b/i,
+  /fixture-r/i,
+  /\bgates?\b/i,
+  /\bdelivery\b/i,
+  /\bbundles?\b/i,
+  /\bartifacts?\b/i,
+  /\breconcil\w*\b/i,
+  /\bvertical slices?\b/i,
+  /\bstale\b/i,
+  /\btranscripts?\b/i,
+  /\bprojections?\b/i,
+  /\bcanonical\b/i,
 ];
 
-const visibleText = pages
-  .map((p) => p.out.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " "))
-  .join(" ")
-  .toLowerCase();
+const NORWEGIAN = [
+  /[æøå]/i,
+  /\b(?:tidsplan(?:en|er)?|eksempl(?:er|et)|eksempel|ingenting|navn|maskin|velg|gren(?:er)?|arbeidskopi|kopi|navnet|skjema|lukk|avbryt)\b/i,
+  /\b(?:ny|nytt|fortsett|aktiv|hva|neste|siste|resultater|ukedager|ukentlig|gjennomgang|ordlisten)\b/i,
+  /\b(?:forslag|klart|ventet|godkjenning|hoppet|steg|beskjed|oppgave|oppgaver|ferdig|registrert)\b/i,
+  /\b(?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag|tidspunkt|tidspunkter|klokkeslett|mellomrom)\b/i,
+  /\b(?:man|tir|ons|tor|fre) \d{1,2}\. okt\./i,
+  /\b\d+ timer\b/i,
+];
 
-const jargonHits = JARGON.filter((word) => visibleText.includes(word));
-if (jargonHits.length) {
-  const line = `jargon still on screen: ${jargonHits.join(", ")}`;
-  if (STRICT_LANGUAGE) fail(line);
-  else
-    console.log("\x1b[33mWARN\x1b[0m", line, "(fatal with --strict-language, fixed in slice S13)");
+function userVisibleText(out) {
+  // Include accessible labels, tooltips, placeholders and input values as well as
+  // text nodes. Data attributes (including the unchanged weekday action values)
+  // are deliberately excluded. Decode after stripping tags so code stays text.
+  const attributes = [
+    ...out.matchAll(/\b(?:aria-label|title|placeholder|alt|value)="([^"]*)"/g),
+  ].map((match) => match[1]);
+  return [out.replace(/<[^>]+>/g, " "), ...attributes]
+    .join(" ")
+    .replace(/&#(x[0-9a-f]+|[0-9]+);/gi, (_, code) =>
+      String.fromCodePoint(
+        code[0].toLowerCase() === "x" ? parseInt(code.slice(1), 16) : Number(code),
+      ),
+    )
+    .replace(
+      /&(amp|lt|gt|quot|apos|nbsp|aelig|oslash|aring);/gi,
+      (_, name) =>
+        ({
+          amp: "&",
+          lt: "<",
+          gt: ">",
+          quot: '"',
+          apos: "'",
+          nbsp: " ",
+          aelig: "æ",
+          oslash: "ø",
+          aring: "å",
+        })[name.toLowerCase()],
+    )
+    .replace(/\s+/g, " ");
 }
+
+const visibleText = [...renderedCopy].join(" ");
+const jargonHits = JARGON.flatMap((pattern) => visibleText.match(pattern)?.[0] || []);
+const norwegianHits = NORWEGIAN.flatMap((pattern) => visibleText.match(pattern)?.[0] || []);
+check(
+  "plain English: no jargon in rendered copy",
+  jargonHits.length === 0,
+  uniq(jargonHits).join(", "),
+);
+check(
+  "one language: no Norwegian in rendered copy",
+  norwegianHits.length === 0,
+  uniq(norwegianHits).join(", "),
+);
+
+// Positive detection checks keep the guard itself from silently losing coverage.
+for (const sample of [
+  "PROVENANCE",
+  "Verification receipts",
+  "receipt",
+  "deterministic checks",
+  "observed changes",
+  "orchestrator",
+  "specialist",
+  "child agent",
+  "fixture-r2",
+  "gate",
+  "gates",
+  "delivery",
+  "bundle",
+  "artifact",
+  "reconcile",
+  "reconciliation",
+  "vertical slices",
+  "stale",
+  "transcript",
+  "projection",
+  "canonical",
+]) {
+  check(
+    `language guard detects jargon: ${sample}`,
+    JARGON.some((pattern) => pattern.test(userVisibleText(`<p>${sample}</p>`))),
+  );
+}
+for (const sample of [
+  "Ny tidsplan",
+  "Navn",
+  "Fortsett",
+  "Forslag klart",
+  "mandag",
+  "man 19. okt. 07:00",
+  "6 timer",
+  "&#248;",
+  "&aring;",
+]) {
+  check(
+    `language guard detects Norwegian: ${sample}`,
+    NORWEGIAN.some((pattern) => pattern.test(userVisibleText(`<p>${sample}</p>`))),
+  );
+}
+for (const attribute of ["aria-label", "title", "placeholder", "alt", "value"]) {
+  check(
+    `language guard reads ${attribute}`,
+    userVisibleText(`<input ${attribute}="provenance">`).includes("provenance"),
+  );
+}
+check(
+  "language guard keeps readable text with technical selectors",
+  userVisibleText(
+    '<button data-action="bundle" class="review-receipt">Save feedback</button>',
+  ).trim() === "Save feedback",
+);
+console.log(
+  `Language guards: jargon + Norwegian checked across ${renderedCopy.size} distinct rendered states (default-on)`,
+);
 
 // ---------------------------------------------------------------- 7. size guard
 
@@ -3093,7 +3206,7 @@ function execChips(out) {
 }
 
 // Only the two execution surfaces: the Runs-page frame around the compact row, and the
-// execution dock. Other pages still carry S13 jargon and are checked by the language guard.
+// execution dock. All other rendered copy is checked by the default-on language guard.
 function executionWords(out) {
   const from = out.indexOf("RUN-S21");
   const frameEnd = out.indexOf('<div class="two-col">');

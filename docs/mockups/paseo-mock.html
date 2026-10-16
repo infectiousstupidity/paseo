@@ -5038,7 +5038,7 @@
             id: "seicho",
             name: "SEICHO",
             short: "S",
-            detail: "Recipe ingestion reliability",
+            detail: "Recipe import reliability",
             workspaces: [
               {
                 id: "seicho-main",
@@ -5102,7 +5102,7 @@
             id: "infrastructure",
             name: "Infrastructure",
             short: "I",
-            detail: "Inference and homelab",
+            detail: "Local models and home computers",
             workspaces: [
               {
                 id: "infrastructure-benchmarks",
@@ -5196,15 +5196,15 @@
           },
           {
             id: "TASK-21",
-            name: "Recipe ingestion QA",
-            description: "Deterministic checks passed. Awaiting visual approval.",
+            name: "Recipe import checks",
+            description: "Automatic checks passed. Awaiting visual approval.",
             status: "needs_review",
             requires: ["TASK-20"],
           },
           {
             id: "TASK-22",
             name: "Release recipe import changes",
-            description: "Waiting for QA approval and terminology completion",
+            description: "Waiting for review approval and terminology completion",
             status: "blocked",
             requires: ["TASK-21", "TASK-24"],
           },
@@ -5225,7 +5225,7 @@
           {
             id: "foundation",
             name: "01 / FOUNDATION",
-            title: "MVP scope",
+            title: "First version scope",
             leadsTo: "Design tokens",
             outcome:
               "Agree what the first release has to do, and settle the rules every later part builds on.",
@@ -5256,7 +5256,7 @@
                 action: "modal:prototype",
               },
               {
-                label: "Recipe ingestion notes",
+                label: "Recipe import notes",
                 note: "Saved on the project knowledge page",
                 action: "section:knowledge",
               },
@@ -5265,7 +5265,7 @@
           },
           {
             id: "ingestion",
-            name: "02 / INGESTION",
+            name: "02 / IMPORT",
             title: "URL parse",
             leadsTo: "Translation rules",
             outcome: "Take a recipe address and turn it into clean, complete content.",
@@ -5295,7 +5295,7 @@
           {
             id: "quality",
             name: "03 / QUALITY",
-            title: "QA checks",
+            title: "Quality checks",
             leadsTo: "Evidence review",
             outcome: "Prove an imported recipe is correct before it is allowed near a release.",
             scope: [
@@ -5550,43 +5550,43 @@
         st.schedules = [
           {
             id: "schedule-1",
-            name: "Ukentlig gjennomgang",
+            name: "Weekly review",
             targets: [
               { kind: "run", ref: "RUN-S21" },
               { kind: "run", ref: "implementer" },
               { kind: "task", ref: "TASK-24" },
             ],
-            trigger: { mode: "weekdays", at: "07:00", days: ["mandag", "onsdag", "fredag"] },
+            trigger: { mode: "weekdays", at: "07:00", days: ["Monday", "Wednesday", "Friday"] },
             enabled: true,
-            nextFires: ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
+            nextFires: ["Mon 19 Oct 07:00", "Wed 21 Oct 07:00", "Fri 23 Oct 07:00"],
             lastRuns: [
-              { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
-              { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
-              { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
+              { at: "Fri 16 Oct 07:00", outcome: "Suggestion ready" },
+              { at: "Wed 14 Oct 07:00", outcome: "Waited for approval" },
+              { at: "Mon 12 Oct 07:00", outcome: "Skipped" },
             ],
           },
           {
             id: "schedule-2",
-            name: "Se over ordlisten",
+            name: "Review the glossary",
             targets: [{ kind: "task", ref: "TASK-24" }],
-            trigger: { mode: "cadence", every: "6 timer" },
+            trigger: { mode: "cadence", every: "6 hours" },
             enabled: true,
-            nextFires: ["man 19. okt. 07:00", "man 19. okt. 13:00", "man 19. okt. 19:00"],
+            nextFires: ["Mon 19 Oct 07:00", "Mon 19 Oct 13:00", "Mon 19 Oct 19:00"],
             lastRuns: [
-              { at: "fre 16. okt. 19:00", outcome: "Forslag klart" },
-              { at: "fre 16. okt. 13:00", outcome: "Ventet på godkjenning" },
-              { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
+              { at: "Fri 16 Oct 19:00", outcome: "Suggestion ready" },
+              { at: "Fri 16 Oct 13:00", outcome: "Waited for approval" },
+              { at: "Fri 16 Oct 07:00", outcome: "Suggestion ready" },
             ],
           },
         ];
         // The task surface's sample run has a record before it starts, so a schedule can
         // point at it while waiting. Completion belongs to that record, not to the clock.
         st.taskRuns = [
-          { id: "RUN-TASK-24", taskRef: "TASK-24", name: "Arbeid med ordlisten", completed: false },
+          { id: "RUN-TASK-24", taskRef: "TASK-24", name: "Work on the glossary", completed: false },
         ];
         st.schedules.push({
           id: "schedule-3",
-          name: "Etter arbeidet med ordlisten",
+          name: "After the glossary work",
           targets: [{ kind: "task", ref: "TASK-21" }],
           trigger: { mode: "onFinish", parentRef: "RUN-TASK-24" },
           enabled: true,
@@ -5710,9 +5710,9 @@
                 fresh: !workspace.sampleSession,
                 label: workspace.sampleSession
                   ? project === "seicho"
-                    ? "Pi · Recipe ingestion"
+                    ? "Pi · Recipe import"
                     : "Pi · Session"
-                  : "Ny samtale · eksempel",
+                  : "New conversation · example",
               });
               if (!workspace.sampleSession) {
                 st.layouts[key] = leaf([a]);
@@ -5912,7 +5912,7 @@
         }
         function projectRow(p, active = true) {
           const exp = st.expanded.includes(p.id);
-          return `<div class="project-entry"><div class="project-row" draggable="true" data-drag-project="${p.id}"><button class="project-icon ${p.id}" aria-label="Open ${esc(p.name)}" data-action="project:${p.id}">${esc(p.short)}</button><button class="project-content" data-action="project:${p.id}"><span class="project-row-head">${esc(p.name)}${p.id === "shiori" && st.review === "pending" ? '<span class="status needs_review">Review</span>' : ""}</span><span class="project-row-sub">${esc(projectStatus(p))}</span></button><div class="project-actions">${!active ? btn(ico("plus", "xs"), "activate:" + p.id, "bare-icon", `aria-label="Activate ${esc(p.name)}"`) : ""}<button class="bare-icon" data-action="focus:${p.id}" aria-label="Make ${esc(p.name)} focus" title="Make focus">${ico("star", "xs")}</button><button class="bare-icon" data-action="expand:${p.id}" aria-expanded="${exp}" aria-label="${exp ? "Collapse" : "Expand"} ${esc(p.name)} workspaces">${ico(exp ? "down" : "chevron", "xs")}</button></div></div>${exp ? `<div class="project-children">${p.workspaces.map((w) => `<button data-action="workspaceSwitch:${w.id}">${ico("git", "xs")} ${esc(w.name)} · eksempel</button>`).join("")}${btn("Nytt arbeidsområde", "workspaceNew:" + p.id, "btn small quiet")}<button data-action="project:${p.id}">${ico("layers", "xs")} Project home</button>${p.id === "shiori" ? '<button data-action="review:shiori">Review · SHI-118</button>' : ""}</div>` : ""}</div>`;
+          return `<div class="project-entry"><div class="project-row" draggable="true" data-drag-project="${p.id}"><button class="project-icon ${p.id}" aria-label="Open ${esc(p.name)}" data-action="project:${p.id}">${esc(p.short)}</button><button class="project-content" data-action="project:${p.id}"><span class="project-row-head">${esc(p.name)}${p.id === "shiori" && st.review === "pending" ? '<span class="status needs_review">Review</span>' : ""}</span><span class="project-row-sub">${esc(projectStatus(p))}</span></button><div class="project-actions">${!active ? btn(ico("plus", "xs"), "activate:" + p.id, "bare-icon", `aria-label="Activate ${esc(p.name)}"`) : ""}<button class="bare-icon" data-action="focus:${p.id}" aria-label="Make ${esc(p.name)} focus" title="Make focus">${ico("star", "xs")}</button><button class="bare-icon" data-action="expand:${p.id}" aria-expanded="${exp}" aria-label="${exp ? "Collapse" : "Expand"} ${esc(p.name)} workspaces">${ico(exp ? "down" : "chevron", "xs")}</button></div></div>${exp ? `<div class="project-children">${p.workspaces.map((w) => `<button data-action="workspaceSwitch:${w.id}">${ico("git", "xs")} ${esc(w.name)} · example</button>`).join("")}${btn("New workspace", "workspaceNew:" + p.id, "btn small quiet")}<button data-action="project:${p.id}">${ico("layers", "xs")} Project home</button>${p.id === "shiori" ? '<button data-action="review:shiori">Review · SHI-118</button>' : ""}</div>` : ""}</div>`;
         }
         function sidebar() {
           const focus = getProject(st.focus);
@@ -5922,12 +5922,12 @@
             ["home", "Home", "home"],
             ["projects", "Projects", "folder"],
             ["history", "History", "history"],
-            ["schedules", "Tidsplaner", "clock"],
+            ["schedules", "Schedules", "clock"],
           ];
           const query = st.priorityQuery.toLowerCase();
           const pendingReviews =
             (task("TASK-21").status === "needs_review" ? 1 : 0) + (st.review === "pending" ? 1 : 0);
-          return `<aside id="app-nav" class="sidebar ${st.sidebarOpen ? "open" : ""}" aria-label="Navigation"${innerWidth <= 720 && !st.sidebarOpen ? ' inert aria-hidden="true"' : ""}><div class="brandbar"><span class="mark">P</span><span class="brand">Paseo</span></div><div class="sidebar-scroll"><nav class="nav-group">${nav.map(([key, label, ic]) => `<button class="nav-item ${st.route === key ? "active" : ""}" data-action="${key}"${st.route === key ? ' aria-current="page"' : ""}>${ico(ic)}<span>${label}</span>${key === "home" && pendingReviews ? `<span class="nav-count">${pendingReviews}</span>` : ""}</button>`).join("")}</nav><div class="sidebar-rule"></div><div class="side-section-title"><span class="label">Focus project</span><button data-action="focus-picker" aria-label="Choose focus project">${ico("edit", "xs")} Change</button></div>${!query || focus.name.toLowerCase().includes(query) ? `<div class="focus-project"><div class="focus-head"><div class="focus-label"><span>Current priority</span>${ico("star", "sm")}</div><div class="focus-row">${projIcon(focus)}<button class="focus-name" data-action="project:${focus.id}">${esc(focus.name)}</button></div><p class="focus-sub">${esc(focus.detail)}</p></div>${focus.id === "seicho" && task("TASK-21").status === "needs_review" ? `<button class="focus-alert" data-action="review:qa"><span><strong>Recipe QA awaits your review</strong><br><span class="dim">TASK-21 · Decision gate</span></span>${chevron}</button>` : `<button class="focus-alert" data-action="project:${focus.id}"><span>${esc(projectStatus(focus))}</span>${chevron}</button>`}<div class="focus-workspace">${ico("git", "xs")}<button data-action="expand:${focus.id}" aria-expanded="${st.expanded.includes(focus.id)}">Arbeidsområder · ${focus.workspaces.length}</button></div>${st.expanded.includes(focus.id) ? `<div class="project-children">${focus.workspaces.map((w) => btn(esc(w.name) + " · eksempel", "workspaceSwitch:" + w.id)).join("")}${btn("Nytt arbeidsområde", "workspaceNew:" + focus.id, "btn small quiet")}</div>` : ""}</div>` : ""}<div class="side-section-title"><span class="label">Active projects</span><button data-action="priority-help">${active.length} ${ico("more", "xs")}</button></div><div class="project-section dropzone" data-drop-zone="active">${
+          return `<aside id="app-nav" class="sidebar ${st.sidebarOpen ? "open" : ""}" aria-label="Navigation"${innerWidth <= 720 && !st.sidebarOpen ? ' inert aria-hidden="true"' : ""}><div class="brandbar"><span class="mark">P</span><span class="brand">Paseo</span></div><div class="sidebar-scroll"><nav class="nav-group">${nav.map(([key, label, ic]) => `<button class="nav-item ${st.route === key ? "active" : ""}" data-action="${key}"${st.route === key ? ' aria-current="page"' : ""}>${ico(ic)}<span>${label}</span>${key === "home" && pendingReviews ? `<span class="nav-count">${pendingReviews}</span>` : ""}</button>`).join("")}</nav><div class="sidebar-rule"></div><div class="side-section-title"><span class="label">Focus project</span><button data-action="focus-picker" aria-label="Choose focus project">${ico("edit", "xs")} Change</button></div>${!query || focus.name.toLowerCase().includes(query) ? `<div class="focus-project"><div class="focus-head"><div class="focus-label"><span>Current priority</span>${ico("star", "sm")}</div><div class="focus-row">${projIcon(focus)}<button class="focus-name" data-action="project:${focus.id}">${esc(focus.name)}</button></div><p class="focus-sub">${esc(focus.detail)}</p></div>${focus.id === "seicho" && task("TASK-21").status === "needs_review" ? `<button class="focus-alert" data-action="review:qa"><span><strong>Recipe checks await your review</strong><br><span class="dim">TASK-21 · Approval step</span></span>${chevron}</button>` : `<button class="focus-alert" data-action="project:${focus.id}"><span>${esc(projectStatus(focus))}</span>${chevron}</button>`}<div class="focus-workspace">${ico("git", "xs")}<button data-action="expand:${focus.id}" aria-expanded="${st.expanded.includes(focus.id)}">Workspaces · ${focus.workspaces.length}</button></div>${st.expanded.includes(focus.id) ? `<div class="project-children">${focus.workspaces.map((w) => btn(esc(w.name) + " · example", "workspaceSwitch:" + w.id)).join("")}${btn("New workspace", "workspaceNew:" + focus.id, "btn small quiet")}</div>` : ""}</div>` : ""}<div class="side-section-title"><span class="label">Active projects</span><button data-action="priority-help">${active.length} ${ico("more", "xs")}</button></div><div class="project-section dropzone" data-drop-zone="active">${
             active
               .filter((p) => !query || p.name.toLowerCase().includes(query))
               .map((p) => projectRow(p))
@@ -5939,7 +5939,7 @@
                   .map((p) => projectRow(p, false))
                   .join("")}</div>`
               : ""
-          }</div><div class="sidebar-bottom"><div class="usage-line"><span>Codex · 5-hour</span><span>76.5% remaining · stale</span></div><div class="usage-track"><span style="width:76.5%"></span></div><div class="usage-line"><span>Codex · weekly</span><span>43% remaining</span></div><div class="usage-track"><span style="width:43%"></span></div><div class="foot-actions"><button data-action="addProject" aria-label="Add project" title="Add project">${ico("folder")}</button><button data-action="tools" aria-label="Tools and skills" title="Tools and skills">${ico("grid")}</button><button data-action="usage" aria-label="Usage" title="Usage">${ico("bolt")}</button><button data-action="hosts" aria-label="Hosts" title="Hosts">${ico("network")}</button><button data-action="help" aria-label="Help" title="Help">${ico("info")}</button><button data-action="settings" aria-label="Settings" title="Settings">${ico("settings")}</button></div></div></aside>`;
+          }</div><div class="sidebar-bottom"><div class="usage-line"><span>Codex · 5-hour</span><span>76.5% remaining · out of date</span></div><div class="usage-track"><span style="width:76.5%"></span></div><div class="usage-line"><span>Codex · weekly</span><span>43% remaining</span></div><div class="usage-track"><span style="width:43%"></span></div><div class="foot-actions"><button data-action="addProject" aria-label="Add project" title="Add project">${ico("folder")}</button><button data-action="tools" aria-label="Tools and skills" title="Tools and skills">${ico("grid")}</button><button data-action="usage" aria-label="Usage" title="Usage">${ico("bolt")}</button><button data-action="hosts" aria-label="Hosts" title="Hosts">${ico("network")}</button><button data-action="help" aria-label="Help" title="Help">${ico("info")}</button><button data-action="settings" aria-label="Settings" title="Settings">${ico("settings")}</button></div></div></aside>`;
         }
         function topbar() {
           const contextProject =
@@ -5958,7 +5958,7 @@
                     home: "Home",
                     projects: "Projects",
                     history: "History",
-                    schedules: "Tidsplaner",
+                    schedules: "Schedules",
                     tools: "Tools",
                     hosts: "Hosts",
                     usage: "Usage",
@@ -5972,7 +5972,7 @@
           return `<div class="pagehead"><div class="left">${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</div>${actions ? `<div class="buttons">${actions}</div>` : ""}</div>`;
         }
         function projectHeader(p) {
-          return `<div class="pagehead"><div class="left"><div class="eyebrow">PROJECT / ${esc(workspaceFor(p.id).host)} / ${esc(workspaceFor(p.id).name.toUpperCase())}</div><h1 style="display:flex;gap:12px;align-items:center">${projIcon(p)} ${esc(p.name)}</h1><p>${esc(p.detail)}</p></div><div class="buttons">${btn("Nytt arbeidsområde", "workspaceNew:" + p.id, "btn quiet")}${btn(ico("edit", "sm") + " Capture", "capture", "btn quiet")}${btn(ico("plus", "sm") + " Agent", "newAgent:attached", "btn quiet")}${btn(ico("arrow", "sm") + " Open workspace", "workspace:" + p.id, "btn primary")}</div></div><nav class="tabs" aria-label="Project navigation">${[
+          return `<div class="pagehead"><div class="left"><div class="eyebrow">PROJECT / ${esc(workspaceFor(p.id).host)} / ${esc(workspaceFor(p.id).name.toUpperCase())}</div><h1 style="display:flex;gap:12px;align-items:center">${projIcon(p)} ${esc(p.name)}</h1><p>${esc(p.detail)}</p></div><div class="buttons">${btn("New workspace", "workspaceNew:" + p.id, "btn quiet")}${btn(ico("edit", "sm") + " Capture", "capture", "btn quiet")}${btn(ico("plus", "sm") + " Agent", "newAgent:attached", "btn quiet")}${btn(ico("arrow", "sm") + " Open workspace", "workspace:" + p.id, "btn primary")}</div></div><nav class="tabs" aria-label="Project navigation">${[
             ["overview", "Overview"],
             ["plan", "Plan"],
             ["runs", "Runs"],
@@ -5998,7 +5998,7 @@
         function deliveryDiagram() {
           let passed = task("TASK-21").status === "done",
             ready = task("TASK-22").status === "ready" || task("TASK-22").status === "done";
-          return `<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">Delivery pathway · 4 stages</div><h3>From captured recipe to verified release</h3><p>Select a stage to inspect the actual task or decision behind it</p></div>${btn("Dependency map " + ico("arrow", "xs"), "section:plan", "btn small quiet")}</div><svg class="diagram-svg" viewBox="0 0 1100 180" role="group" aria-label="Recipe ingestion delivery: Intake, Normalize, Verify, Publish"><path class="edge" d="M251 91H301"/><path class="edge focal" d="M528 91H578"/><path class="edge ${passed ? "" : "blocked"}" d="M805 91H855"/>${svgNode(3, 42, 248, 101, "01 / INTAKE", "Capture recipe", "URL parser · Done", "task:TASK-20", "done")}${svgNode(301, 42, 227, 101, "02 / NORMALIZE", "Normalize content", task("TASK-24").status === "done" ? "Vocabulary · Done" : "Vocabulary · Ready", "task:TASK-24", task("TASK-24").status === "done" ? "done" : "")}${svgNode(578, 42, 227, 101, "03 / REVIEW", "Verify correctness", passed ? "Approved" : "Human review required", "review:qa", passed ? "done" : "active")}${svgNode(855, 42, 242, 101, "04 / RELEASE", "Publish safely", ready ? "Ready for execution" : "Waiting on prerequisites", "task:TASK-22", ready ? "" : "blocked")}<text x="582" y="160" class="gate">${passed ? "APPROVED WITH EVIDENCE" : "REVIEW GATE · NO AUTOMATIC APPROVAL"}</text></svg><div class="mobile-diagram-list">${[
+          return `<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">Steps to release · 4 stages</div><h3>From captured recipe to verified release</h3><p>Select a stage to inspect the actual task or decision behind it</p></div>${btn("Dependency map " + ico("arrow", "xs"), "section:plan", "btn small quiet")}</div><svg class="diagram-svg" viewBox="0 0 1100 180" role="group" aria-label="Recipe import steps: Intake, Normalize, Verify, Publish"><path class="edge" d="M251 91H301"/><path class="edge focal" d="M528 91H578"/><path class="edge ${passed ? "" : "blocked"}" d="M805 91H855"/>${svgNode(3, 42, 248, 101, "01 / INTAKE", "Capture recipe", "URL parser · Done", "task:TASK-20", "done")}${svgNode(301, 42, 227, 101, "02 / NORMALIZE", "Normalize content", task("TASK-24").status === "done" ? "Vocabulary · Done" : "Vocabulary · Ready", "task:TASK-24", task("TASK-24").status === "done" ? "done" : "")}${svgNode(578, 42, 227, 101, "03 / REVIEW", "Verify correctness", passed ? "Approved" : "Human review required", "review:qa", passed ? "done" : "active")}${svgNode(855, 42, 242, 101, "04 / RELEASE", "Publish safely", ready ? "Ready for execution" : "Waiting on prerequisites", "task:TASK-22", ready ? "" : "blocked")}<text x="582" y="160" class="gate">${passed ? "APPROVED WITH EVIDENCE" : "APPROVAL STEP · NO AUTOMATIC APPROVAL"}</text></svg><div class="mobile-diagram-list">${[
             ["01", "Capture recipe", "done", "task:TASK-20"],
             ["02", "Normalize content", task("TASK-24").status, "task:TASK-24"],
             ["03", "Verify correctness", task("TASK-21").status, "review:qa"],
@@ -6010,14 +6010,14 @@
             )
             .join(
               "",
-            )}</div><div class="diagram-foot"><span>Current release gate: ${passed ? "Review approved" : "Visual QA decision required"}.</span><span>Each node points to one task record, not a copy of it.</span></div></div>`;
+            )}</div><div class="diagram-foot"><span>Current release approval step: ${passed ? "Review approved" : "Visual review decision required"}.</span><span>Each node points to one task record, not a copy of it.</span></div></div>`;
         }
         function projectOverview() {
           let qa = task("TASK-21");
-          return `<div class="projecthero"><div><div class="eyebrow">CURRENT OUTCOME / RECIPE INGESTION</div><h2>Reliable Norwegian recipe imports</h2><p>Turn an incoming recipe into a correctly normalized, verified Mealie entry. Finish the proof and approval before releasing the import flow.</p><div class="hero-meta"><span>${ico("check", "sm")} Parser verified</span><span>${ico("git", "sm")} seicho/main</span><span>${ico("clock", "sm")} 1 approval gate</span></div></div><div class="hero-action"><div class="top">${ico("alert", "sm")} Decision required ${status(qa.status)}</div><div><h3>${qa.status === "done" ? "QA accepted — next eligible work" : "Inspect the recipe QA evidence"}</h3><p>${qa.status === "done" ? "The review gate is resolved. Continue the terminology task to unlock release." : "The deterministic checks passed. Visual and Norwegian-language acceptance is yours to decide."}</p></div>${btn(qa.status === "done" ? "Open plan " + ico("arrow", "sm") : "Review TASK-21 " + ico("arrow", "sm"), qa.status === "done" ? "section:plan" : "review:qa", "btn primary")}</div></div>${deliveryDiagram()}<div class="overview-layout"><div class="overview-column"><div class="section-label"><h2>Work in motion</h2><small>What actually needs attention</small></div><button class="list-row" data-action="review:qa"><span class="rail attn"></span><div class="info"><strong>TASK-21 · Recipe ingestion QA</strong><p>${qa.status === "done" ? "Approved with evidence; no longer needs review." : "Checks passed. The release is not approved until you decide."}</p></div>${status(qa.status)}${chevron}</button><button class="list-row" data-action="task:TASK-24"><span class="rail good"></span><div class="info"><strong>TASK-24 · Ingredient terminology</strong><p>No prerequisites. Ready to run when you authorize it.</p></div>${status(task("TASK-24").status)}${chevron}</button><button class="list-row" data-action="section:plan"><span class="rail"></span><div class="info"><strong>Next work and dependencies</strong><p>Explore the graph, execution order, prerequisites and blocked tasks</p></div>${chevron}</button><div class="plain-section" style="margin-top:29px"><div class="section-label"><h2>Recent decisions</h2><small>Durable project knowledge</small></div><div class="note-line"><strong>Native Paseo workspaces stay intact.</strong> Project Home is an extra view over the same workspaces, not a replacement for the agent, terminal, and Git tabs.</div><button class="subtle-link" data-action="section:knowledge">Browse knowledge ${ico("arrow", "xs")}</button></div></div><div class="overview-column"><div class="plain-section"><div class="section-label"><h2>Project context</h2></div><div class="context-unit">${ico("git")}<div><strong>Git repository</strong><br><span>seicho/main · ANON-PC · working tree sample</span></div></div><div class="context-unit">${ico("split")}<div><strong>Native workspaces</strong><br><span>main + isolated task worktrees</span></div></div><div class="context-unit">${ico("document")}<div><strong>Knowledge</strong><br><span>Notes, questions, decisions and references</span></div></div></div><div class="plain-section"><div class="section-label"><h2>Quick capture</h2></div><p class="section-caption">Capture a thought without starting an agent or creating executable work</p><div class="capture-strip">${btn("Idea", "capture:idea", "btn small quiet")}${btn("Note", "capture:note", "btn small quiet")}${btn("Question", "capture:question", "btn small quiet")}</div></div><div class="plain-section"><div class="section-label"><h2>Execution policies</h2></div><div class="kv"><span>Git finalization</span><b>Manual approval</b><span>Tasks that change things</span><b>One at a time</b><span>Evidence</span><b>Required to mark Done</b></div></div></div></div>`;
+          return `<div class="projecthero"><div><div class="eyebrow">CURRENT OUTCOME / RECIPE IMPORT</div><h2>Reliable Norwegian recipe imports</h2><p>Turn an incoming recipe into a correctly normalized, verified Mealie entry. Finish the proof and approval before releasing the import flow.</p><div class="hero-meta"><span>${ico("check", "sm")} Parser verified</span><span>${ico("git", "sm")} seicho/main</span><span>${ico("clock", "sm")} 1 approval step</span></div></div><div class="hero-action"><div class="top">${ico("alert", "sm")} Decision required ${status(qa.status)}</div><div><h3>${qa.status === "done" ? "Quality checks accepted — next eligible work" : "Inspect the recipe check results"}</h3><p>${qa.status === "done" ? "The approval step is resolved. Continue the terminology task to unlock release." : "The automatic checks passed. Visual and Norwegian-language acceptance is yours to decide."}</p></div>${btn(qa.status === "done" ? "Open plan " + ico("arrow", "sm") : "Review TASK-21 " + ico("arrow", "sm"), qa.status === "done" ? "section:plan" : "review:qa", "btn primary")}</div></div>${deliveryDiagram()}<div class="overview-layout"><div class="overview-column"><div class="section-label"><h2>Work in motion</h2><small>What actually needs attention</small></div><button class="list-row" data-action="review:qa"><span class="rail attn"></span><div class="info"><strong>TASK-21 · Recipe import checks</strong><p>${qa.status === "done" ? "Approved with evidence; no longer needs review." : "Checks passed. The release is not approved until you decide."}</p></div>${status(qa.status)}${chevron}</button><button class="list-row" data-action="task:TASK-24"><span class="rail good"></span><div class="info"><strong>TASK-24 · Ingredient terminology</strong><p>No prerequisites. Ready to run when you authorize it.</p></div>${status(task("TASK-24").status)}${chevron}</button><button class="list-row" data-action="section:plan"><span class="rail"></span><div class="info"><strong>Next work and dependencies</strong><p>Explore the graph, execution order, prerequisites and blocked tasks</p></div>${chevron}</button><div class="plain-section" style="margin-top:29px"><div class="section-label"><h2>Recent decisions</h2><small>Durable project knowledge</small></div><div class="note-line"><strong>Native Paseo workspaces stay intact.</strong> Project Home is an extra view over the same workspaces, not a replacement for the agent, terminal, and Git tabs.</div><button class="subtle-link" data-action="section:knowledge">Browse knowledge ${ico("arrow", "xs")}</button></div></div><div class="overview-column"><div class="plain-section"><div class="section-label"><h2>Project context</h2></div><div class="context-unit">${ico("git")}<div><strong>Git repository</strong><br><span>seicho/main · ANON-PC · working tree sample</span></div></div><div class="context-unit">${ico("split")}<div><strong>Native workspaces</strong><br><span>main + isolated task worktrees</span></div></div><div class="context-unit">${ico("document")}<div><strong>Knowledge</strong><br><span>Notes, questions, decisions and references</span></div></div></div><div class="plain-section"><div class="section-label"><h2>Quick capture</h2></div><p class="section-caption">Capture a thought without starting an agent or creating executable work</p><div class="capture-strip">${btn("Idea", "capture:idea", "btn small quiet")}${btn("Note", "capture:note", "btn small quiet")}${btn("Question", "capture:question", "btn small quiet")}</div></div><div class="plain-section"><div class="section-label"><h2>Execution policies</h2></div><div class="kv"><span>Merge and commit</span><b>Manual approval</b><span>Tasks that change things</span><b>One at a time</b><span>Evidence</span><b>Required to mark Done</b></div></div></div></div>`;
         }
         function diagramDependencies() {
-          return `<svg class="diagram-svg" viewBox="0 0 1100 440" role="group" aria-label="Task dependency graph with release gate, selectable task nodes">${svgDef()}<text x="18" y="29" class="caption">01 / FOUNDATIONS</text><text x="400" y="29" class="caption">02 / VERIFICATION & DESIGN</text><text x="792" y="29" class="caption">03 / RELEASE GATE</text><path class="edge focal" d="M278 130H404" marker-end="url(#arrF)"/><path class="edge ${task("TASK-21").status === "done" ? "" : "blocked"}" d="M674 130H730Q738 130 738 138V212Q738 220 746 220H792" marker-end="url(#arr)"/><path class="edge ${task("TASK-24").status === "done" ? "" : "blocked"}" d="M278 321H698Q706 321 706 313V268Q706 260 714 260H792" marker-end="url(#arr)"/><path class="edge" d="M540 174V276" stroke-dasharray="5 5" opacity=".3"/>${svgNode(18, 79, 260, 100, "TASK-20 · DONE", "URL parser", "Field extraction verified", "task:TASK-20", "done")}${svgNode(404, 79, 270, 100, "TASK-21 · REVIEW", "Ingestion QA", task("TASK-21").status === "done" ? "Approved" : "Human acceptance required", "review:qa", task("TASK-21").status === "done" ? "done" : "active")}${svgNode(18, 270, 260, 100, `TASK-24 · ${task("TASK-24").status.toUpperCase()}`, "Terminology", "Independent task", "task:TASK-24", task("TASK-24").status === "done" ? "done" : "")}${svgNode(404, 270, 270, 100, "TASK-25 · PLANNED", "Import UI", "Awaiting design acceptance", "task:TASK-25", "")}${svgNode(792, 182, 290, 100, `TASK-22 · ${task("TASK-22").status.toUpperCase()}`, "Safe release", task("TASK-22").status === "ready" ? "Eligible after both gates" : "Blocked by two prerequisites", "task:TASK-22", task("TASK-22").status === "ready" ? "active" : task("TASK-22").status === "done" ? "done" : "blocked")}<text class="gate" x="754" y="155">REVIEW GATE</text><text class="gate" x="725" y="362">BOTH PREREQUISITES REQUIRED</text><text class="caption" x="18" y="414">Solid = real task · Dashed = proposed work · Select a node to inspect it</text></svg>`;
+          return `<svg class="diagram-svg" viewBox="0 0 1100 440" role="group" aria-label="Task dependency graph with release approval step, selectable task nodes">${svgDef()}<text x="18" y="29" class="caption">01 / FOUNDATIONS</text><text x="400" y="29" class="caption">02 / VERIFICATION & DESIGN</text><text x="792" y="29" class="caption">03 / RELEASE APPROVAL</text><path class="edge focal" d="M278 130H404" marker-end="url(#arrF)"/><path class="edge ${task("TASK-21").status === "done" ? "" : "blocked"}" d="M674 130H730Q738 130 738 138V212Q738 220 746 220H792" marker-end="url(#arr)"/><path class="edge ${task("TASK-24").status === "done" ? "" : "blocked"}" d="M278 321H698Q706 321 706 313V268Q706 260 714 260H792" marker-end="url(#arr)"/><path class="edge" d="M540 174V276" stroke-dasharray="5 5" opacity=".3"/>${svgNode(18, 79, 260, 100, "TASK-20 · DONE", "URL parser", "Field extraction verified", "task:TASK-20", "done")}${svgNode(404, 79, 270, 100, "TASK-21 · REVIEW", "Import checks", task("TASK-21").status === "done" ? "Approved" : "Human acceptance required", "review:qa", task("TASK-21").status === "done" ? "done" : "active")}${svgNode(18, 270, 260, 100, `TASK-24 · ${task("TASK-24").status.toUpperCase()}`, "Terminology", "Independent task", "task:TASK-24", task("TASK-24").status === "done" ? "done" : "")}${svgNode(404, 270, 270, 100, "TASK-25 · PLANNED", "Import UI", "Awaiting design acceptance", "task:TASK-25", "")}${svgNode(792, 182, 290, 100, `TASK-22 · ${task("TASK-22").status.toUpperCase()}`, "Safe release", task("TASK-22").status === "ready" ? "Eligible after both approval steps" : "Blocked by two prerequisites", "task:TASK-22", task("TASK-22").status === "ready" ? "active" : task("TASK-22").status === "done" ? "done" : "blocked")}<text class="gate" x="754" y="155">APPROVAL STEP</text><text class="gate" x="725" y="362">BOTH PREREQUISITES REQUIRED</text><text class="caption" x="18" y="414">Solid = real task · Dashed = proposed work · Select a node to inspect it</text></svg>`;
         }
         function diagramWorkstreams() {
           let rel = task("TASK-22");
@@ -6038,10 +6038,10 @@
             })
             .join(
               "",
-            )}<rect x="18" y="256" width="1060" height="64" rx="3" fill="#1d2938"/><text x="34" y="278" class="caption">MVP / THE SMALLEST WORKING PATH</text><text x="34" y="303" class="name">URL → metric Norwegian recipe → verified Mealie draft</text><path d="M18 339H1078" stroke="#9cb7ef" stroke-width="2"/><rect x="911" y="324" width="167" height="27" fill="#172338"/><text x="924" y="342" class="gate" fill="#bad0f7">RELEASE CUT</text><rect x="18" y="364" width="1060" height="65" rx="4" fill="#171d29" stroke="#3a465d"/><text x="34" y="386" class="caption">NEXT / NOT IN THE CURRENT RELEASE</text><text x="34" y="410" class="name">Interactive import editor, history, richer review + suggestions</text></svg>`;
+            )}<rect x="18" y="256" width="1060" height="64" rx="3" fill="#1d2938"/><text x="34" y="278" class="caption">FIRST VERSION / THE SMALLEST WORKING PATH</text><text x="34" y="303" class="name">URL → metric Norwegian recipe → verified Mealie draft</text><path d="M18 339H1078" stroke="#9cb7ef" stroke-width="2"/><rect x="911" y="324" width="167" height="27" fill="#172338"/><text x="924" y="342" class="gate" fill="#bad0f7">RELEASE CUT</text><rect x="18" y="364" width="1060" height="65" rx="4" fill="#171d29" stroke="#3a465d"/><text x="34" y="386" class="caption">NEXT / NOT IN THE CURRENT RELEASE</text><text x="34" y="410" class="name">Interactive import editor, history, richer review + suggestions</text></svg>`;
         }
         function diagramStructure() {
-          return `<svg class="diagram-svg" viewBox="0 0 1100 430" role="group" aria-label="SEICHO project hierarchy from outcome to feature and work items">${svgDef()}<path class="edge" d="M550 110V150Q550 158 542 158H273Q265 158 265 166V195"/><path class="edge" d="M550 158H831Q839 158 839 166V195"/><path class="edge" d="M265 287V314H124V338"/><path class="edge" d="M265 314H410V338"/><path class="edge" d="M839 287V314H682V338"/><path class="edge" d="M839 314H975V338"/>${svgNode(370, 20, 360, 90, "PROJECT", "SEICHO", "Canonical project identity", "project:seicho", "active")}${svgNode(122, 195, 286, 92, "FEATURE 01", "Recipe ingestion", "Reliable end-to-end import", "section:plan", "")}${svgNode(696, 195, 286, 92, "FEATURE 02", "Personal planner", "Upcoming vertical slice", "task:TASK-25", "")}${svgNode(18, 338, 212, 82, "TASK", "Parser + terminology", "Done + Ready", "task:TASK-24", "done")}${svgNode(304, 338, 212, 82, "TASK", "QA + release", "Review + Blocked", "review:qa", "active")}${svgNode(572, 338, 212, 82, "IDEA", "Capture and clarify", "Draft context", "capture:idea", "")}${svgNode(868, 338, 212, 82, "REFERENCE", "Prototype v2", "Pending acceptance", "modal:prototype", "")}</svg>`;
+          return `<svg class="diagram-svg" viewBox="0 0 1100 430" role="group" aria-label="SEICHO project hierarchy from outcome to feature and work items">${svgDef()}<path class="edge" d="M550 110V150Q550 158 542 158H273Q265 158 265 166V195"/><path class="edge" d="M550 158H831Q839 158 839 166V195"/><path class="edge" d="M265 287V314H124V338"/><path class="edge" d="M265 314H410V338"/><path class="edge" d="M839 287V314H682V338"/><path class="edge" d="M839 314H975V338"/>${svgNode(370, 20, 360, 90, "PROJECT", "SEICHO", "Main project identity", "project:seicho", "active")}${svgNode(122, 195, 286, 92, "FEATURE 01", "Recipe import", "Reliable end-to-end import", "section:plan", "")}${svgNode(696, 195, 286, 92, "FEATURE 02", "Personal planner", "Upcoming part of the feature", "task:TASK-25", "")}${svgNode(18, 338, 212, 82, "TASK", "Parser + terminology", "Done + Ready", "task:TASK-24", "done")}${svgNode(304, 338, 212, 82, "TASK", "Quality checks + release", "Review + Blocked", "review:qa", "active")}${svgNode(572, 338, 212, 82, "IDEA", "Capture and clarify", "Draft context", "capture:idea", "")}${svgNode(868, 338, 212, 82, "REFERENCE", "Prototype v2", "Pending acceptance", "modal:prototype", "")}</svg>`;
         }
         // Sample execution hierarchy: one main agent plus the helper agents it started.
         // The compact Runs-page form and the full tree in the inspector read these same
@@ -6119,7 +6119,7 @@
             .join("")}</svg>`;
         }
         function diagramKnowledge() {
-          return `<svg class="diagram-svg" viewBox="0 0 1100 290" role="group" aria-label="Knowledge and evidence provenance map">${svgDef()}<path class="edge" d="M220 122H280"/><path class="edge focal" d="M515 122H575"/><path class="edge" d="M810 122H870"/>${svgNode(5, 65, 215, 112, "SOURCE", "Recipe URL", "Original recipe content", "task:TASK-20", "")}${svgNode(280, 65, 235, 112, "RULES", "Term glossary", "Metric + Norwegian", "task:TASK-24", "")}${svgNode(575, 65, 235, 112, "EVIDENCE", "QA receipt", "3 checks + visual review", "review:qa", "active")}${svgNode(870, 65, 225, 112, "DECISION", "Accept release", "Human approval", "review:qa", "blocked")}<text x="12" y="236" class="caption">Linked provenance: select a node for its task, source, decision.</text></svg>`;
+          return `<svg class="diagram-svg" viewBox="0 0 1100 290" role="group" aria-label="Map of where knowledge and evidence came from">${svgDef()}<path class="edge" d="M220 122H280"/><path class="edge focal" d="M515 122H575"/><path class="edge" d="M810 122H870"/>${svgNode(5, 65, 215, 112, "SOURCE", "Recipe URL", "Original recipe content", "task:TASK-20", "")}${svgNode(280, 65, 235, 112, "RULES", "Term glossary", "Metric + Norwegian", "task:TASK-24", "")}${svgNode(575, 65, 235, 112, "EVIDENCE", "Quality checks", "3 checks + visual review", "review:qa", "active")}${svgNode(870, 65, 225, 112, "DECISION", "Accept release", "Human approval", "review:qa", "blocked")}<text x="12" y="236" class="caption">Where this came from: select a node for its task, source, decision.</text></svg>`;
         }
         function planContent() {
           let chosen = st.planLens;
@@ -6158,14 +6158,14 @@
                       `<button data-action="${t.id === "TASK-21" ? "review:qa" : "task:" + t.id}"><span class="label">${t.id}</span><strong>${esc(t.name)}</strong>${status(t.status)}</button>`,
                   )
                   .join("")
-          }</div><div class="diagram-foot"><span>${chosen === "dependencies" ? "The release task needs two prerequisites: QA approval and terminology" : chosen === "workstreams" ? "Each column is one part of the plan. Open it to see what is still being planned." : "This is a projection over project, feature and task records."}</span><span>${chosen === "workstreams" ? "Click a column, or use the list on a phone." : "Click a node or use the queue below."}</span></div></div><div class="plan-layout"><div><div class="section-label"><h2>Eligible work and task order</h2><small>Use ↑ ↓ on a task to change its order</small></div><div class="task-list">${st.taskOrder
+          }</div><div class="diagram-foot"><span>${chosen === "dependencies" ? "The release task needs two things first: review approval and ingredient wording" : chosen === "workstreams" ? "Each column is one part of the plan. Open it to see what is still being planned." : "This is a view of project, feature and task records."}</span><span>${chosen === "workstreams" ? "Click a column, or use the list on a phone." : "Click a node or use the queue below."}</span></div></div><div class="plan-layout"><div><div class="section-label"><h2>Eligible work and task order</h2><small>Use ↑ ↓ on a task to change its order</small></div><div class="task-list">${st.taskOrder
             .map((id, i) => {
               const t = task(id);
               return `<div class="task-row ${st.inspector === "task" && st.selectedTask === t.id ? "active" : ""}"><span class="task-index">${String(i + 1).padStart(2, "0")}</span><button class="task-desc" data-action="task:${t.id}"><strong>${t.id} · ${esc(t.name)}</strong><span>${esc(t.description)}</span></button>${status(t.status)}<div class="task-reorder"><button data-action="move:${t.id}:up" aria-label="Move ${t.id} earlier" ${i === 0 ? "disabled" : ""}>↑</button><button data-action="move:${t.id}:down" aria-label="Move ${t.id} later" ${i === st.taskOrder.length - 1 ? "disabled" : ""}>↓</button></div>${btn("Inspect", "task:" + t.id, "btn small quiet")}</div>`;
             })
             .join(
               "",
-            )}</div></div><aside class="aside-panel"><h3>Design reference</h3><p>Recipe ingestion / v2. Accepting the source and accepting the screenshot are separate choices.</p><div class="thumb-ui"><div class="windowbar">Recipe import · prototype preview</div><div class="bar" style="width:90%"></div><div class="bar short"></div><div class="bar" style="width:66%"></div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${btn("Inspect", "modal:prototype", "btn small quiet")}${btn(st.acceptedDesign ? "Accepted v2" : "Accept v2", "acceptDesign", "btn small primary")}</div><div class="divider"></div><h3>Execution policy</h3><div class="check-list"><div>${ico("shield", "sm")} Only authorized tasks may execute</div><div>${ico("git", "sm")} Git reconciliation after review</div><div>${ico("eye", "sm")} Screenshot proof is required</div></div><div class="divider"></div><h3>Queue integrity</h3><p>Reordering changes priority; it does not remove dependencies. Blocked tasks remain blocked.</p></aside></div>`;
+            )}</div></div><aside class="aside-panel"><h3>Design reference</h3><p>Recipe import / v2. Accepting the source and accepting the screenshot are separate choices.</p><div class="thumb-ui"><div class="windowbar">Recipe import · prototype preview</div><div class="bar" style="width:90%"></div><div class="bar short"></div><div class="bar" style="width:66%"></div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${btn("Inspect", "modal:prototype", "btn small quiet")}${btn(st.acceptedDesign ? "Accepted v2" : "Accept v2", "acceptDesign", "btn small primary")}</div><div class="divider"></div><h3>Execution policy</h3><div class="check-list"><div>${ico("shield", "sm")} Only authorized tasks may execute</div><div>${ico("git", "sm")} Merge and commit after review</div><div>${ico("eye", "sm")} Screenshot proof is required</div></div><div class="divider"></div><h3>Queue integrity</h3><p>Reordering changes priority; it does not remove dependencies. Blocked tasks remain blocked.</p></aside></div>`;
         }
         // A part of the plan names the Runs page's sample run (RUN-S21) by id. Its status
         // comes from the same execution tree; task-surface runs live separately in st.taskRuns.
@@ -6235,14 +6235,9 @@
             "Add this run to a sequence",
             "sequenceAddRun:RUN-S21",
             "btn quiet",
-          )}${btn("Legg til i en tidsplan", "scheduleAdd:run:RUN-S21", "btn quiet")}${btn("Open execution tree", "inspect:agents", "btn")}</div></div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
-            ["09:12", "Implementation completed", "Observed code modifications recorded", "done"],
-            [
-              "09:18",
-              "Deterministic checks passed",
-              "3 checks / no visual acceptance implied",
-              "done",
-            ],
+          )}${btn("Add to a schedule", "scheduleAdd:run:RUN-S21", "btn quiet")}${btn("Open execution tree", "inspect:agents", "btn")}</div></div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
+            ["09:12", "Implementation completed", "Visible changes recorded", "done"],
+            ["09:18", "Automatic checks passed", "3 checks / no visual acceptance implied", "done"],
             ["09:22", "Reviewer findings available", "No critical code findings", "done"],
             [
               "Now",
@@ -6257,13 +6252,13 @@
             )
             .join(
               "",
-            )}</section><aside class="aside-panel"><h3>Recorded evidence</h3><p>Sample data shows the intended structure. No model, repository, or host was contacted.</p><div class="metric-list"><span>Host</span><strong>ANON-PC · sample</strong><span>Provider</span><strong>Pi + Qwen</strong><span>Token metrics</span><strong>Unavailable</strong><span>Git finalization</span><strong>Awaiting decision</strong></div><div class="divider"></div>${btn("Open review", "review:qa", "btn primary")}</aside></div></div>`;
+            )}</section><aside class="aside-panel"><h3>Recorded evidence</h3><p>Sample data shows the intended structure. No model, repository, or host was contacted.</p><div class="metric-list"><span>Host</span><strong>ANON-PC · sample</strong><span>Provider</span><strong>Pi + Qwen</strong><span>Usage counts</span><strong>Unavailable</strong><span>Merge and commit</span><strong>Awaiting decision</strong></div><div class="divider"></div>${btn("Open review", "review:qa", "btn primary")}</aside></div></div>`;
         }
         function knowledgeContent() {
           return `<div style="margin-top:30px">${pageHead("Knowledge and decisions", "", "PROJECT / KNOWLEDGE", btn("Capture new", "capture", "btn primary"))}<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">TRACEABLE CONTEXT</div><h3>From source to decision</h3></div></div>${diagramKnowledge()}<div class="mobile-diagram-list">${[
             ["Original source", "task:TASK-20"],
             ["Term glossary", "task:TASK-24"],
-            ["QA review", "review:qa"],
+            ["Quality review", "review:qa"],
           ]
             .map(
               ([t, a]) =>
@@ -6271,7 +6266,7 @@
             )
             .join(
               "",
-            )}</div></div><div class="two-col"><div><div class="section-label"><h2>Accepted decisions</h2></div><div class="decision-card"><strong>Norwegian metric ingest</strong><p>Maintain normalized units, curated vocabulary and source traceability</p></div><div class="decision-card"><strong>Manual verification before release</strong><p>Automated checks are not human acceptance</p></div></div><aside class="aside-panel"><h3>Notes and questions</h3><p>Ideas and captured comments are stored as project context. They do not become executable work on their own</p>${
+            )}</div></div><div class="two-col"><div><div class="section-label"><h2>Accepted decisions</h2></div><div class="decision-card"><strong>Norwegian recipe import with metric units</strong><p>Use consistent units and wording, with links back to the source</p></div><div class="decision-card"><strong>Manual verification before release</strong><p>Automated checks are not human acceptance</p></div></div><aside class="aside-panel"><h3>Notes and questions</h3><p>Ideas and captured comments are stored as project context. They do not become executable work on their own</p>${
             st.knowledgeNotes.length
               ? `<div class="knowledge-notes">${st.knowledgeNotes
                   .map(
@@ -6293,10 +6288,10 @@
           return `<main class="view"><div class="screen project">${projectHeader(p)}${p.id === "seicho" ? (st.section === "overview" ? projectOverview() : st.section === "plan" ? planContent() : st.section === "slice" ? sliceContent() : st.section === "runs" ? runsContent() : st.section === "sequences" ? sequencesContent() : knowledgeContent()) : genericProject(p)}</div></main>`;
         }
         function genericProject(p) {
-          return `<div class="projecthero"><div><div class="eyebrow">CURRENT FOCUS</div><h2>${esc(p.detail)}</h2><p></p><div class="hero-meta"><span>${ico("git", "sm")} ${esc(workspaceFor(p.id).name)} / ${esc(workspaceFor(p.id).host)} · eksempel</span><span>${ico("clock", "sm")} ${esc(projectStatus(p))}</span></div></div><div class="hero-action"><div class="top">Project context</div><h3>${esc(p.name)}</h3><p>Open the existing native workspace for source and sessions.</p>${btn("Open workspace", "workspace:" + p.id, "btn primary")}</div></div><div class="overview-layout"><section><div class="section-label"><h2>Work in motion</h2></div><button class="list-row" data-action="workspace:${p.id}"><span class="rail"></span><div class="info"><strong>${esc(p.detail)}</strong><p>Linked active workspace</p></div>${chevron}</button>${p.id === "shiori" ? `<button class="list-row" data-action="review:shiori"><span class="rail attn"></span><div class="info"><strong>Reviewer result presentation</strong><p>Changes require your review</p></div>${status("needs_review")}${chevron}</button>` : ""}</section><aside class="aside-panel"><h3>Project context</h3><div class="kv"><span>Repository</span><strong>${esc(p.id)}</strong><span>Maskin (eksempel)</span><strong>${esc(workspaceFor(p.id).host)}</strong><span>Gren (eksempel)</span><strong>${esc(workspaceFor(p.id).branch)}</strong></div><div class="divider"></div>${btn("Capture note", "capture", "btn small quiet")}</aside></div>`;
+          return `<div class="projecthero"><div><div class="eyebrow">CURRENT FOCUS</div><h2>${esc(p.detail)}</h2><p></p><div class="hero-meta"><span>${ico("git", "sm")} ${esc(workspaceFor(p.id).name)} / ${esc(workspaceFor(p.id).host)} · example</span><span>${ico("clock", "sm")} ${esc(projectStatus(p))}</span></div></div><div class="hero-action"><div class="top">Project context</div><h3>${esc(p.name)}</h3><p>Open the existing native workspace for source and sessions.</p>${btn("Open workspace", "workspace:" + p.id, "btn primary")}</div></div><div class="overview-layout"><section><div class="section-label"><h2>Work in motion</h2></div><button class="list-row" data-action="workspace:${p.id}"><span class="rail"></span><div class="info"><strong>${esc(p.detail)}</strong><p>Linked active workspace</p></div>${chevron}</button>${p.id === "shiori" ? `<button class="list-row" data-action="review:shiori"><span class="rail attn"></span><div class="info"><strong>Reviewer result presentation</strong><p>Changes require your review</p></div>${status("needs_review")}${chevron}</button>` : ""}</section><aside class="aside-panel"><h3>Project context</h3><div class="kv"><span>Repository</span><strong>${esc(p.id)}</strong><span>Computer (example)</span><strong>${esc(workspaceFor(p.id).host)}</strong><span>Branch (example)</span><strong>${esc(workspaceFor(p.id).branch)}</strong></div><div class="divider"></div>${btn("Capture note", "capture", "btn small quiet")}</aside></div>`;
         }
         function homePage() {
-          return `<main class="view"><div class="screen">${pageHead("Home", "", "PASEO", btn("Capture", "capture", "btn quiet"))}<div class="home-grid"><div><section class="home-focus"><div class="eyebrow">Focus</div><h2>${esc(getProject(st.focus).name)} <span style="font-size:14px;color:#b1c5e7;font-weight:500">/ ${esc(getProject(st.focus).detail)}</span></h2>${btn("Open focus project " + ico("arrow", "sm"), "project:" + st.focus, "btn small primary")}</section><div class="section-label"><h2>Needs you</h2></div>${task("TASK-21").status === "needs_review" ? `<button class="attention-item" data-action="review:qa"><span class="status needs_review">Review</span><div class="info"><strong>SEICHO · Recipe ingestion QA</strong><p>Automated checks passed. Visual and language acceptance still requires your decision.</p></div>${chevron}</button>` : ""}${st.review === "pending" ? `<button class="attention-item" data-action="review:shiori"><span class="status needs_review">Review</span><div class="info"><strong>Shiori · Reviewer results presentation</strong><p>Inspect the summary and code evidence, then approve or request changes.</p></div>${chevron}</button>` : ""}<div class="section-label" style="margin-top:30px"><h2>Next eligible work</h2></div>${st.taskList
+          return `<main class="view"><div class="screen">${pageHead("Home", "", "PASEO", btn("Capture", "capture", "btn quiet"))}<div class="home-grid"><div><section class="home-focus"><div class="eyebrow">Focus</div><h2>${esc(getProject(st.focus).name)} <span style="font-size:14px;color:#b1c5e7;font-weight:500">/ ${esc(getProject(st.focus).detail)}</span></h2>${btn("Open focus project " + ico("arrow", "sm"), "project:" + st.focus, "btn small primary")}</section><div class="section-label"><h2>Needs you</h2></div>${task("TASK-21").status === "needs_review" ? `<button class="attention-item" data-action="review:qa"><span class="status needs_review">Review</span><div class="info"><strong>SEICHO · Recipe import checks</strong><p>Automated checks passed. Visual and language acceptance still requires your decision.</p></div>${chevron}</button>` : ""}${st.review === "pending" ? `<button class="attention-item" data-action="review:shiori"><span class="status needs_review">Review</span><div class="info"><strong>Shiori · Reviewer results presentation</strong><p>Inspect the summary and code evidence, then approve or request changes.</p></div>${chevron}</button>` : ""}<div class="section-label" style="margin-top:30px"><h2>Next eligible work</h2></div>${st.taskList
             .filter((t) => t.status === "ready" || t.status === "running")
             .map(
               (t) =>
@@ -6304,7 +6299,7 @@
             )
             .join(
               "",
-            )}</div><div><div class="section-label"><h2>Current operations</h2></div><div class="portfolio-track"><div class="portfolio-stat"><strong>3</strong><span>Focused + active</span></div><div class="portfolio-stat"><strong>1</strong><span>Running agent</span></div><div class="portfolio-stat"><strong>${Number(st.review === "pending") + Number(task("TASK-21").status === "needs_review")}</strong><span>Review gates</span></div></div><div class="plain-section" style="margin-top:28px"><div class="section-label"><h2>Running across projects</h2></div><button class="list-row" data-action="workspace:shiori"><span class="rail"></span><div class="info"><strong>Shiori · Reviewer UX</strong><p>Running on ANON-PC · Pi orchestrator · activity observed</p></div><span class="status running">Running</span>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Recent verified outcomes</h2></div><button class="list-row" data-action="project:food-core"><span class="rail good"></span><div class="info"><strong>food-core · URL importer</strong><p>9 deterministic checks passed, evidence recorded</p></div>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Usage and capacity</h2></div><div class="kv"><span>Codex · 5-hour</span><strong>76.5% · stale</strong><span>Codex · weekly</span><strong>43% · stale</strong><span>Usage data</span><strong>Stale sample · decide on the Usage page</strong></div>${btn("Inspect usage", "usage", "btn small quiet")}</div></div></div></div></main>`;
+            )}</div><div><div class="section-label"><h2>Current operations</h2></div><div class="portfolio-track"><div class="portfolio-stat"><strong>3</strong><span>Focused + active</span></div><div class="portfolio-stat"><strong>1</strong><span>Running agent</span></div><div class="portfolio-stat"><strong>${Number(st.review === "pending") + Number(task("TASK-21").status === "needs_review")}</strong><span>Approval steps</span></div></div><div class="plain-section" style="margin-top:28px"><div class="section-label"><h2>Running across projects</h2></div><button class="list-row" data-action="workspace:shiori"><span class="rail"></span><div class="info"><strong>Shiori · Reviewer UX</strong><p>Running on ANON-PC · Pi main agent · recent activity</p></div><span class="status running">Running</span>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Recent verified outcomes</h2></div><button class="list-row" data-action="project:food-core"><span class="rail good"></span><div class="info"><strong>food-core · URL importer</strong><p>9 automatic checks passed, evidence recorded</p></div>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Usage and capacity</h2></div><div class="kv"><span>Codex · 5-hour</span><strong>76.5% · out of date</strong><span>Codex · weekly</span><strong>43% · out of date</strong><span>Usage data</span><strong>Out-of-date sample · decide on the Usage page</strong></div>${btn("Inspect usage", "usage", "btn small quiet")}</div></div></div></div></main>`;
         }
         function projectsPage() {
           return `<main class="view"><div class="screen compact">${pageHead("Projects", "Priority is your choice. Activity and review indicators come from the actual project state.", "GLOBAL / PROJECT INDEX", btn("Add project", "addProject", "btn primary"))}<div class="sheet"><div class="sheet-head"><h3>Portfolio</h3><span class="small dim">Move between Focus, Active and Passive using project actions</span></div><table class="simple-table"><thead><tr><th>Project</th><th>Priority</th><th>Current activity</th><th>Actions</th></tr></thead><tbody>${st.projects.map((p) => `<tr><td><button data-action="project:${p.id}" style="display:flex;align-items:center;gap:10px;font-weight:700">${projIcon(p)} ${esc(p.name)}</button></td><td>${p.id === st.focus ? "Focus" : st.active.includes(p.id) ? "Active" : "Passive"}</td><td class="dim">${esc(projectStatus(p))}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">${btn("Set focus", "focus:" + p.id, "btn small quiet")}${btn(st.active.includes(p.id) ? "Make passive" : "Make active", st.active.includes(p.id) ? "deactivate:" + p.id : "activate:" + p.id, "btn small quiet")}</div></td></tr>`).join("")}</tbody></table></div></div></main>`;
@@ -6366,7 +6361,7 @@
             terminal: "Terminal",
             browser: "Browser",
           };
-          return `<section class="dev-pane"><div class="pane-top"><strong>${ico(name === "diff" ? "git" : name === "files" ? "folder" : name === "browser" ? "globe" : "terminal", "sm")} ${heads[name]}</strong></div>${name === "diff" ? diffPanel() : name === "files" ? `<div class="dev-content file-tree">${["src/recipe-import.ts", "src/normalize.ts", "src/evidence.ts", "docs/recipe-qa.md", "docs/design-reference.md"].map((f) => `<button data-action="support:diff">${ico("file", "sm")}${f}${chevron}</button>`).join("")}${btn("Import artifact", "modal:import", "btn small quiet")}</div>` : name === "terminal" ? `<div class="dev-content terminal-content">PowerShell 7.5 · ANON-PC (sample)<br><span style="color:#9ba6b8">PS D:\DEVELOPMENT\seicho&gt;</span> git status --short<br> M src/recipe-import.ts<br> M src/normalize.ts<br><span style="color:#b5d2bf">3 checks passed (sample)</span><br>_</div>` : `<div class="dev-content"><div class="browser-placeholder"><div class="eyebrow">PREVIEW / RECIPE IMPORT</div><h2>Import recipe</h2><p class="section-caption">The preview and visual reference are samples. Inspect the design before accepting it.</p><div class="thumb-ui"><div class="bar" style="width:88%"></div><div class="bar short"></div><div class="bar" style="width:65%"></div></div>${btn("Annotate reference", "modal:prototype", "btn primary")}</div></div>`}</section>`;
+          return `<section class="dev-pane"><div class="pane-top"><strong>${ico(name === "diff" ? "git" : name === "files" ? "folder" : name === "browser" ? "globe" : "terminal", "sm")} ${heads[name]}</strong></div>${name === "diff" ? diffPanel() : name === "files" ? `<div class="dev-content file-tree">${["src/recipe-import.ts", "src/normalize.ts", "src/evidence.ts", "docs/recipe-qa.md", "docs/design-reference.md"].map((f) => `<button data-action="support:diff">${ico("file", "sm")}${f}${chevron}</button>`).join("")}${btn("Import file", "modal:import", "btn small quiet")}</div>` : name === "terminal" ? `<div class="dev-content terminal-content">PowerShell 7.5 · ANON-PC (sample)<br><span style="color:#9ba6b8">PS D:\DEVELOPMENT\seicho&gt;</span> git status --short<br> M src/recipe-import.ts<br> M src/normalize.ts<br><span style="color:#b5d2bf">3 checks passed (sample)</span><br>_</div>` : `<div class="dev-content"><div class="browser-placeholder"><div class="eyebrow">PREVIEW / RECIPE IMPORT</div><h2>Import recipe</h2><p class="section-caption">The preview and visual reference are samples. Inspect the design before accepting it.</p><div class="thumb-ui"><div class="bar" style="width:88%"></div><div class="bar short"></div><div class="bar" style="width:65%"></div></div>${btn("Annotate reference", "modal:prototype", "btn primary")}</div></div>`}</section>`;
         }
         // The sample session's turns (slice S8). One list feeds the rail markers and the
         // conversation blocks, so the rail can never disagree with what is on screen.
@@ -6429,7 +6424,7 @@
             prompt: "Have a second agent read the change with fresh eyes.",
             did: "Read the changed lines and raised two notes about word choice.",
             files: ["src/recipe-import.ts", "src/normalize.ts"],
-            checks: "Typecheck passed",
+            checks: "Code type checks passed",
             elapsed: "0m 47s",
           },
           {
@@ -6438,7 +6433,7 @@
             prompt: "Fix the two notes the review raised.",
             did: "Fixed both notes and kept the draft waiting for review.",
             files: ["src/normalize.ts"],
-            checks: "Typecheck passed",
+            checks: "Code type checks passed",
             elapsed: "0m 58s",
           },
           {
@@ -6609,16 +6604,16 @@
         }
         function sessionMain(tab = null) {
           if (st.agentIsNew) {
-            return `<div class="session-content fresh-agent"><div class="eyebrow">NEW SESSION / ${esc(st.sessionHost)} / ${st.standalone ? "STANDALONE" : "PROJECT " + esc(getProject(st.project).name).toUpperCase()}</div><h1>${st.standalone ? "Independent session" : "New project session"}</h1><p class="lead">${st.standalone ? "No project or repository attached." : "Attached to " + esc(getProject(st.project).name) + "."} Choose how to proceed in the composer below.</p>${st.agentMessages.length ? `<div class="fresh-transcript">${st.agentMessages.map((m) => `<div class="message user"><div class="who">You · locally saved draft</div>${esc(m.text)}</div>`).join("")}</div>` : `<div class="session-overview"><div class="eyebrow">EMPTY SESSION</div><h3>No messages yet</h3><p>Write your first message in the composer</p></div>`}<div class="context-summary">${ico("shield", "sm")} ${esc(st.sessionProvider)} / ${esc(st.sessionModel)} / ${esc(st.sessionReasoning)} · mock configuration</div>${sideChatChips()}</div>`;
+            return `<div class="session-content fresh-agent"><div class="eyebrow">NEW SESSION / ${esc(st.sessionHost)} / ${st.standalone ? "STANDALONE" : "PROJECT " + esc(getProject(st.project).name).toUpperCase()}</div><h1>${st.standalone ? "Independent session" : "New project session"}</h1><p class="lead">${st.standalone ? "No project or repository attached." : "Attached to " + esc(getProject(st.project).name) + "."} Choose how to proceed in the composer below.</p>${st.agentMessages.length ? `<div class="fresh-transcript">${st.agentMessages.map((m) => `<div class="message user"><div class="who">You · locally saved draft</div>${esc(m.text)}</div>`).join("")}</div>` : `<div class="session-overview"><div class="eyebrow">EMPTY SESSION</div><h3>No messages yet</h3><p>Write your first message in the composer</p></div>`}<div class="context-summary">${ico("shield", "sm")} ${esc(st.sessionProvider)} / ${esc(st.sessionModel)} / ${esc(st.sessionReasoning)} · example settings</div>${sideChatChips()}</div>`;
           }
           if (st.standalone) {
             return `<div class="session-content"><div class="eyebrow">STANDALONE / NO PROJECT ATTACHED</div><h1>Independent Pi session</h1><p class="lead">No repository or project has been attached. Start with a question or attach a project when needed.</p><div class="session-overview"><div class="eyebrow">Ready · no project context</div><h3>Start a new conversation</h3><p></p></div><div class="section-label" style="margin-top:30px"><h2>Context</h2></div><p class="section-caption">Host: ANON-PC · Provider: Pi · Model: Qwen 3.8 27B</p>${sideChatChips()}${mainChatMessages(tab)}</div>`;
           }
           if (st.workspaceView === "activity")
-            return `<div class="session-content"><div class="eyebrow">OBSERVED EXECUTION / ${esc(st.runName)}</div><h1>Activity</h1><p class="lead"></p>${activityVisibility()}<div class="event"><h4>Read docs/recipe-qa.md</h4><p>Source inspected · read-only</p></div><div class="event"><h4>Modified src/recipe-import.ts</h4><p>Observed working-tree diff · revision fixture-r2 · lines +6–9</p>${btn("Open exact diff", "openDiff", "btn small quiet")}</div><div class="event"><h4>Completed three deterministic checks</h4><p>Verification evidence recorded, manual visual review outstanding.</p></div><div class="event"><h4>Paused at review gate</h4><p>Run finished does not mean release was approved.</p></div>${sideChatChips()}${mainChatMessages(tab)}</div>`;
+            return `<div class="session-content"><div class="eyebrow">RUN ACTIVITY / ${esc(st.runName)}</div><h1>Activity</h1><p class="lead"></p>${activityVisibility()}<div class="event"><h4>Read docs/recipe-qa.md</h4><p>Source inspected · read-only</p></div><div class="event"><h4>Modified src/recipe-import.ts</h4><p>Changes you can see · sample version r2 · lines +6–9</p>${btn("Open exact changes", "openDiff", "btn small quiet")}</div><div class="event"><h4>Completed three automatic checks</h4><p>Verification evidence recorded, manual visual review outstanding.</p></div><div class="event"><h4>Paused at approval step</h4><p>Run finished does not mean release was approved.</p></div>${sideChatChips()}${mainChatMessages(tab)}</div>`;
           if (st.workspaceView === "full")
-            return `<div class="session-content"><div class="eyebrow">COMPLETE ORDERED TRANSCRIPT</div><h1>Agent session</h1><p class="lead"></p><p class="section-caption">Sample conversation · ${sessionTurns.length} turns · press [ or ] to move between them</p>${turnBlocks()}${sideChatChips()}${mainChatMessages(tab)}</div>`;
-          return `<div class="session-content"><div class="eyebrow">AGENT / ${esc(st.runName)} / PI ORCHESTRATOR</div><h1>Reliable Norwegian recipe imports</h1><p class="lead">The implementation is ready to inspect. You can review observed changes while keeping the same agent session in view.</p><div class="session-overview"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div class="eyebrow">Current milestone</div>${status(task("TASK-21").status)}</div><h3>${task("TASK-21").status === "done" ? "QA approved · release not yet complete" : "Checks finished · awaiting your decision"}</h3><p>Parser and terminology changes have been prepared. Automated tests passed, but the actual result requires your acceptance. </p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">${btn("Inspect diff", "openDiff", "btn small quiet")}${btn("Review evidence", "review:qa", "btn small quiet")}${btn("Execution tree", "inspect:agents", "btn small quiet")}</div></div><div class="section-label" style="margin-top:30px"><h2>Last observed activity</h2></div><div class="event"><h4>Changed src/recipe-import.ts</h4><p>Four lines changed, exact diff is available beside this session</p></div><div class="event"><h4>Checks completed</h4><p>3 deterministic checks passed · screenshot acceptance unknown</p></div><div class="event"><h4>Review requested</h4><p>Reviewer output collected. Your decision is required before finalization.</p></div>${sideChatChips()}${mainChatMessages(tab)}</div>`;
+            return `<div class="session-content"><div class="eyebrow">FULL CONVERSATION IN ORDER</div><h1>Agent session</h1><p class="lead"></p><p class="section-caption">Sample conversation · ${sessionTurns.length} turns · press [ or ] to move between them</p>${turnBlocks()}${sideChatChips()}${mainChatMessages(tab)}</div>`;
+          return `<div class="session-content"><div class="eyebrow">AGENT / ${esc(st.runName)} / PI MAIN AGENT</div><h1>Reliable Norwegian recipe imports</h1><p class="lead">The changes are ready to inspect. You can review them while keeping the same agent conversation in view.</p><div class="session-overview"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div class="eyebrow">Current milestone</div>${status(task("TASK-21").status)}</div><h3>${task("TASK-21").status === "done" ? "Quality checks approved · release not yet complete" : "Checks finished · awaiting your decision"}</h3><p>Parser and terminology changes have been prepared. Automated tests passed, but the actual result requires your acceptance. </p><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">${btn("Inspect changes", "openDiff", "btn small quiet")}${btn("Review evidence", "review:qa", "btn small quiet")}${btn("Execution tree", "inspect:agents", "btn small quiet")}</div></div><div class="section-label" style="margin-top:30px"><h2>Recent activity</h2></div><div class="event"><h4>Changed src/recipe-import.ts</h4><p>Four lines changed; you can see them beside this conversation</p></div><div class="event"><h4>Checks completed</h4><p>3 automatic checks passed · screenshot acceptance unknown</p></div><div class="event"><h4>Review requested</h4><p>Reviewer output collected. Your decision is required before the work is finished.</p></div>${sideChatChips()}${mainChatMessages(tab)}</div>`;
         }
 
         function terminalSurface() {
@@ -6634,7 +6629,7 @@
         function newSessionBody(tab) {
           const project = tab.project ? getProject(tab.project) : null;
           const messages = tab.messages || [];
-          return `<div class="session-content ready-session"><div class="session-orientation"><span class="eyebrow">${project ? esc(project.name.toUpperCase()) + " / " + esc(workspaceFor(tab.workspace).branch) + " · eksempel" : "NO PROJECT"} · ${esc(tab.host)}</span><span class="status ready">Ready</span></div>${
+          return `<div class="session-content ready-session"><div class="session-orientation"><span class="eyebrow">${project ? esc(project.name.toUpperCase()) + " / " + esc(workspaceFor(tab.workspace).branch) + " · example" : "NO PROJECT"} · ${esc(tab.host)}</span><span class="status ready">Ready</span></div>${
             messages.length
               ? `<div class="fresh-transcript">${messages.map((m) => `<div class="message user"><div class="who">You</div>${esc(m.text)}</div>`).join("")}</div>`
               : `<div class="first-message"><div class="session-glyph">${ico("message", "lg")}</div><h1>${project ? esc(project.name) : "New session"}</h1><p>${project ? esc(workspaceFor(tab.workspace).name) + " · " + esc(project.detail) : "Standalone · " + esc(tab.host)}</p></div><div class="session-shortcuts"><div class="section-label"><h2>Start with</h2><span class="dim small">Insert into the composer</span></div><div class="snippet-grid">${templates
@@ -6644,7 +6639,7 @@
                       `<button data-action="insertSnippet:${item.id}"><span class="snippet-icon">${ico(item.id === "investigate" ? "search" : item.id === "plan" ? "layers" : item.id === "implement" ? "code" : "shield", "sm")}</span><strong>${esc(item.name)}</strong><span>${esc(item.body.split(".")[0])}</span>${ico("arrow", "xs")}</button>`,
                   )
                   .join("")}</div></div>`
-          }<div class="session-lower"><span>${ico("git", "xs")} ${project ? esc(project.id) + " / " + esc(workspaceFor(tab.workspace).branch) + " · eksempel" : "No repository"}</span><span>${esc(tab.provider)} · ${esc(tab.model)} · ${esc(tab.reasoning)}</span></div></div>`;
+          }<div class="session-lower"><span>${ico("git", "xs")} ${project ? esc(project.id) + " / " + esc(workspaceFor(tab.workspace).branch) + " · example" : "No repository"}</span><span>${esc(tab.provider)} · ${esc(tab.model)} · ${esc(tab.reasoning)}</span></div></div>`;
         }
         const providerModels = {
           Pi: [
@@ -6825,7 +6820,7 @@
           const maximized = !mobile && st.maximizedPane ? findLeaf(root, st.maximizedPane) : null;
           return `<div class="workspace-frame native-workspace" data-workspace="${esc(key)}"><div class="workspace-location" style="height:auto;min-height:31px;flex-wrap:wrap">${ico("git", "xs")} <strong>${workspace ? esc(getProject(st.project).name) : "No project"}</strong> / ${
             workspace
-              ? `<select style="max-width:130px;background:#151a24;color:inherit" id="workspace-switcher" aria-label="Velg arbeidsområde">${getProject(
+              ? `<select style="max-width:130px;background:#151a24;color:inherit" id="workspace-switcher" aria-label="Choose workspace">${getProject(
                   st.project,
                 )
                   .workspaces.map(
@@ -6834,16 +6829,16 @@
                   )
                   .join(
                     "",
-                  )}</select>${btn("Nytt arbeidsområde", "workspaceNew:" + st.project, "btn small quiet")}<span title="Ingen filer eller samtaler kjøres" style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Eksempel · ${esc(workspace.host)} · ${esc(workspace.branch)}</span>`
+                  )}</select>${btn("New workspace", "workspaceNew:" + st.project, "btn small quiet")}<span title="No files or conversations are run" style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Example · ${esc(workspace.host)} · ${esc(workspace.branch)}</span>`
               : "Session"
           }<span class="workspace-location-right">${maximized ? `<button class="btn small quiet" data-action="paneMaximize:${maximized.id}">Show all panes</button>` : ""}${all.length} ${all.length === 1 ? "pane" : "panes"} · ${Object.keys(st.tabsById).filter((id) => all.some((p) => p.tabs.includes(id))).length} tabs</span></div>${mobile && all.length > 1 ? `<div class="mobile-pane-picker">${all.map((p, i) => `<button class="${focused.id === p.id ? "selected" : ""}" data-action="paneFocus:${p.id}">${i + 1} · ${esc(st.tabsById[p.selected]?.label || "Empty pane")}</button>`).join("")}</div>` : ""}<div class="native-work-area">${mobile ? renderNativeLeaf(focused) : maximized ? renderNativeLeaf(maximized) : renderNativeTree(root)}</div></div>`;
         }
         function qaInspector() {
           let q = task("TASK-21");
-          return `<div class="eyebrow">SEICHO / TASK-21 / QA-21</div><h2>Recipe ingestion QA</h2><p>Deterministic extraction and language checks passed. Visual judgment is a separate decision.</p><div class="review-receipt"><strong>${q.status === "done" ? "Review approved · sample" : "Awaiting your decision"}</strong><p>3 deterministic checks passed. The evidence list shows what is and is not verified.</p></div><div class="section-label"><h2>Verification receipt</h2></div><div class="check-list"><div>${ico("check", "sm")} URL parser test passed</div><div>${ico("check", "sm")} Metric conversion checks passed</div><div>${ico("check", "sm")} Term dictionary normalization passed</div><div>${ico("alert", "sm")} Visual acceptance needs your judgment</div></div><div class="section-label"><h2>Provenance</h2></div><div class="metric-list"><span>Project</span><strong>SEICHO</strong><span>Task / revision</span><strong>TASK-21 / fixture-r2</strong><span>Host</span><strong>ANON-PC (sample)</strong><span>Source</span><strong>src/recipe-import.ts</strong></div><div class="section-label"><h2>Feedback</h2></div><div class="form-row"><label for="review-draft">Request a change or leave a decision note</label><textarea id="review-draft" placeholder="Specify the issue or acceptance reason…">${esc(st.commentDraft)}</textarea></div>${btn("Attach note to feedback", "bundle", "btn small quiet")}<p style="font-size:12px">${st.comments.length} saved draft comments. Sending feedback does not approve the result.</p>${st.comments.map((c, i) => `<div class="comment-preview">${esc(c.text)} <span class="dim">${esc(c.source)}</span><button data-action="removeComment:${i}">Remove</button></div>`).join("")}${changeRequestPanel("qa")}<div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap">${btn("Send feedback", "submitFeedback", "btn quiet", st.comments.length ? "" : "disabled")}${btn("Show observed diff", "openDiff", "btn quiet")}</div>`;
+          return `<div class="eyebrow">SEICHO / TASK-21 / QA-21</div><h2>Recipe import checks</h2><p>Automatic extraction and language checks passed. Visual judgment is a separate decision.</p><div class="review-receipt"><strong>${q.status === "done" ? "Review approved · sample" : "Awaiting your decision"}</strong><p>3 automatic checks passed. The evidence list shows what is and is not verified.</p></div><div class="section-label"><h2>Checks that ran</h2></div><div class="check-list"><div>${ico("check", "sm")} URL parser test passed</div><div>${ico("check", "sm")} Metric conversion checks passed</div><div>${ico("check", "sm")} Ingredient wording checks passed</div><div>${ico("alert", "sm")} Visual acceptance needs your judgment</div></div><div class="section-label"><h2>Where this came from</h2></div><div class="metric-list"><span>Project</span><strong>SEICHO</strong><span>Task / revision</span><strong>TASK-21 / sample version r2</strong><span>Host</span><strong>ANON-PC (sample)</strong><span>Source</span><strong>src/recipe-import.ts</strong></div><div class="section-label"><h2>Feedback</h2></div><div class="form-row"><label for="review-draft">Request a change or leave a decision note</label><textarea id="review-draft" placeholder="Specify the issue or acceptance reason…">${esc(st.commentDraft)}</textarea></div>${btn("Attach note to feedback", "bundle", "btn small quiet")}<p style="font-size:12px">${st.comments.length} saved draft comments. Sending feedback does not approve the result.</p>${st.comments.map((c, i) => `<div class="comment-preview">${esc(c.text)} <span class="dim">${esc(c.source)}</span><button data-action="removeComment:${i}">Remove</button></div>`).join("")}${changeRequestPanel("qa")}<div style="display:flex;gap:7px;margin-top:14px;flex-wrap:wrap">${btn("Send feedback", "submitFeedback", "btn quiet", st.comments.length ? "" : "disabled")}${btn("Show changes you can see", "openDiff", "btn quiet")}</div>`;
         }
         function shioriInspector() {
-          return `<div class="eyebrow">SHIORI / SHI-118 / REVIEW-118</div><h2>Reviewer results, now actionable</h2><p>The output was condensed into a decision receipt. The original code changes remain inspectable.</p><div class="review-receipt"><strong>${st.review === "pending" ? "Needs your review" : "Reviewed"}</strong><p>Typecheck and focused tests passed. Nothing is pushed to production.</p></div><div class="check-list"><div>${ico("check", "sm")} 17 targeted checks pass</div><div>${ico("check", "sm")} Diff summary and evidence attached</div></div>${changeRequestPanel("shiori")}${btn("Inspect native workspace", "workspace:shiori", "btn quiet")}`;
+          return `<div class="eyebrow">SHIORI / SHI-118 / REVIEW-118</div><h2>Reviewer results, now actionable</h2><p>The output was condensed into a decision summary. The original code changes remain inspectable.</p><div class="review-receipt"><strong>${st.review === "pending" ? "Needs your review" : "Reviewed"}</strong><p>Code type checks and focused tests passed. Nothing is pushed to production.</p></div><div class="check-list"><div>${ico("check", "sm")} 17 targeted checks pass</div><div>${ico("check", "sm")} Change summary and evidence attached</div></div>${changeRequestPanel("shiori")}${btn("Inspect native workspace", "workspace:shiori", "btn quiet")}`;
         }
         function taskInspector() {
           const t = task(st.selectedTask);
@@ -6854,11 +6849,11 @@
                 : "Design v2 not accepted"
               : `${id} — ${statusText[task(id)?.status] || "Unknown"}`,
           );
-          return `<div class="eyebrow">SEICHO / ${t.id}</div><h2>${esc(t.name)}</h2>${status(t.status)}<p>${esc(t.description)}</p>${btn("Legg oppgaven til i en tidsplan", `scheduleAdd:task:${t.id}`, "btn small quiet")}${st.taskRuns
+          return `<div class="eyebrow">SEICHO / ${t.id}</div><h2>${esc(t.name)}</h2>${status(t.status)}<p>${esc(t.description)}</p>${btn("Add the task to a schedule", `scheduleAdd:task:${t.id}`, "btn small quiet")}${st.taskRuns
             .filter((r) => r.taskRef === t.id)
             .map(
               (r) =>
-                `<p>${esc(r.id)} · ${esc(r.name)}</p>${btn("Legg kjøringen til i en tidsplan", `scheduleAdd:run:${r.id}`, "btn small quiet")}`,
+                `<p>${esc(r.id)} · ${esc(r.name)}</p>${btn("Add the run to a schedule", `scheduleAdd:run:${r.id}`, "btn small quiet")}`,
             )
             .join(
               "",
@@ -6900,7 +6895,7 @@
             )
             .join(
               "",
-            )}</div></div><div class="section-label"><h2>Selected agent</h2></div><div class="inspect-info"><strong>${esc(selected.role)} · ${esc(selected.name)}</strong><p>${esc(selected.model)}</p></div><div class="metric-list"><span>Elapsed</span><strong>${esc(selected.elapsed)} (sample)</strong><span>Tokens / cache / TTFT</span><strong>Unavailable</strong><span>Retries</span><strong>0 (sample)</strong><span>What you can do</span><strong>${esc(agentActionsLabel(selected))}</strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:22px">${agentControlButtons(selected)}${btn("View activity", "workspaceView:activity", "btn small quiet")}</div>${st.currentRunningTask && task(st.currentRunningTask)?.status === "running" ? `<div style="margin-top:16px">${btn("Complete sample run", "finishRun", "btn primary")}</div>` : ""}${agentControlNote(selected)}${steerQueuePanel()}`;
+            )}</div></div><div class="section-label"><h2>Selected agent</h2></div><div class="inspect-info"><strong>${esc(selected.role)} · ${esc(selected.name)}</strong><p>${esc(selected.model)}</p></div><div class="metric-list"><span>Elapsed</span><strong>${esc(selected.elapsed)} (sample)</strong><span>Text usage / saved results / first response time</span><strong>Unavailable</strong><span>Retries</span><strong>0 (sample)</strong><span>What you can do</span><strong>${esc(agentActionsLabel(selected))}</strong></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:22px">${agentControlButtons(selected)}${btn("View activity", "workspaceView:activity", "btn small quiet")}</div>${st.currentRunningTask && task(st.currentRunningTask)?.status === "running" ? `<div style="margin-top:16px">${btn("Complete sample run", "finishRun", "btn primary")}</div>` : ""}${agentControlNote(selected)}${steerQueuePanel()}`;
         }
         function annotationInspector() {
           let src =
@@ -6909,7 +6904,7 @@
           const range =
             st.selectedRange && st.selectedRange.line === st.selectedLine ? st.selectedRange : null;
           const span = range ? (src?.[2] || "").slice(range.from, range.to) : "";
-          return `<div class="eyebrow">PINNED CONTEXT / SOURCE REVISION</div><h2>Respond to this change</h2><p>Keep the file, revision and the exact characters you clicked attached to the question or instruction.</p><div class="line-selected">src/recipe-import.ts · line ${st.selectedLine} · fixture-r2<br>${esc(src?.[2] || "Selected change")}${
+          return `<div class="eyebrow">PINNED CONTEXT / SOURCE REVISION</div><h2>Respond to this change</h2><p>Keep the file, revision and the exact characters you clicked attached to the question or instruction.</p><div class="line-selected">src/recipe-import.ts · line ${st.selectedLine} · sample version r2<br>${esc(src?.[2] || "Selected change")}${
             range
               ? `<br><span class="range-chip">Selected “${esc(span)}” · characters ${range.from}–${range.to}</span> ${btn("Whole line", "clearRange", "btn small quiet")}`
               : ""
@@ -6929,7 +6924,7 @@
                 ? st.execution === "running"
                   ? "Steer sends an instruction to the running agent at the next safe point. It never rewrites an edit that is already in progress."
                   : "The agent is not running, so nothing can receive this. It is marked Not available — ask for changes on the finished result instead."
-                : "Comments remain drafts until you submit the review bundle."
+                : "Comments remain drafts until you submit the feedback list."
           }</p><div class="form-row"><label for="annotation-draft">${
             st.feedbackMode === "ask"
               ? "Question"
@@ -6954,7 +6949,7 @@
                     : ""
                 }`
               : btn(
-                  st.feedbackMode === "comment" ? "Save to review bundle" : "Ask in a side chat",
+                  st.feedbackMode === "comment" ? "Save to feedback list" : "Ask in a side chat",
                   "saveAnnotation",
                   "btn primary",
                 )
@@ -7081,7 +7076,7 @@
           let r = st.route;
           let meta = {
             history: ["Session history", ""],
-            schedules: ["Tidsplaner", ""],
+            schedules: ["Schedules", ""],
             hosts: ["Connected hosts", ""],
             usage: ["Provider usage", ""],
             tools: ["Skills and optimization", ""],
@@ -7094,7 +7089,7 @@
             content = `<div class="sheet"><div class="sheet-head"><h3>Recent sessions</h3>${btn("Import session", "modal:importSession", "btn small quiet")}</div>${st.sessionHistory.map((row) => `<button class="list-row" style="padding:17px" data-action="openSession:${row.id}"><span class="rail good"></span><div class="info"><strong>${ico(row.kind === "terminal" ? "terminal" : "message", "sm")} ${esc(row.title)}</strong><p>${row.kind === "terminal" ? "Terminal" : "Agent"} · ${esc(row.host)} · ${row.standalone ? "No project" : esc(getProject(row.project).name)} · sample</p></div>${chevron}</button>`).join("")}${[
               ["Shiori · Reviewer results", "workspace:shiori"],
               ["SEICHO · Recipe import planning", "workspace:seicho"],
-              ["Infrastructure · Inference benchmarks", "workspace:infrastructure"],
+              ["Infrastructure · Model speed tests", "workspace:infrastructure"],
             ]
               .map(
                 ([n, a]) =>
@@ -7102,8 +7097,8 @@
               )
               .join("")}</div>`;
           if (r === "schedules")
-            content = `<div class="two-col"><div>${schedulesContent()}<section class="sheet" style="margin-top:22px"><div class="sheet-head"><h3>Rekkefølger</h3>${btn(
-              "Ny rekkefølge (fra planen)",
+            content = `<div class="two-col"><div>${schedulesContent()}<section class="sheet" style="margin-top:22px"><div class="sheet-head"><h3>Sequences</h3>${btn(
+              "New sequence (from the plan)",
               "sequenceNew",
               "btn small primary",
             )}</div><div class="sheet-inner">${
@@ -7115,21 +7110,21 @@
                           s.id
                         }"><span class="rail"></span><div class="info"><strong>${esc(
                           s.name,
-                        )}</strong><p>Steg ${sequencePosition(s)} av ${s.steps.length} · ${s.steps
-                          .map((step) => (step.kind === "prompt" ? "Din beskjed" : step.ref))
+                        )}</strong><p>Step ${sequencePosition(s)} of ${s.steps.length} · ${s.steps
+                          .map((step) => (step.kind === "prompt" ? "Your message" : step.ref))
                           .join(" → ")}</p></div>${chevron}</button>`,
                     )
                     .join("")
-                : `<p class="section-caption">En ordnet liste over arbeid som finnes fra før: oppgaver, kjøringer eller en beskjed du skrev. Listen starter ingenting av seg selv.</p>`
-            }</div></section></div><aside class="aside-panel"><h3>Bare et eksempel</h3><p>En tidsplan peker på arbeid som finnes fra før. Ingenting kjøres her.</p><div class="note-line">Tidspunkter og resultater er eksempler, ikke en klokke eller en logg fra virkelig arbeid. Pause endrer bare valget på tidsplanen.</div></aside></div>`;
+                : `<p class="section-caption">An ordered list of work that already exists: tasks, runs or a message you wrote. The list starts nothing on its own.</p>`
+            }</div></section></div><aside class="aside-panel"><h3>An example only</h3><p>A schedule points to work that already exists. Nothing runs here.</p><div class="note-line">Times and results are examples, not a clock or a record of real work. Pausing only changes the setting on the schedule.</div></aside></div>`;
           if (r === "hosts")
-            content = `<div class="sheet"><div class="sheet-head"><h3>Host topology</h3><span class="status idle">Telemetry unavailable</span></div><div class="sheet-inner"><div class="dd-head"><div><h3>Execution locations</h3><p>Shows where work runs. It is not an agent performance dashboard.</p></div></div><svg class="diagram-svg" viewBox="0 0 1000 250" role="group" aria-label="Example host topology"><path class="edge" d="M245 125H365M625 125H745"/>${svgNode(10, 75, 235, 103, "WINDOWS 11", "ANON-PC", "Paseo · native sessions", "workspace:seicho", "active")}${svgNode(365, 75, 260, 103, "UBUNTU / ANON2", "Model gateway", "LiteLLM · embedding", "hostInfo", "")}${svgNode(745, 75, 240, 103, "UBUNTU / ANON3", "Inference host", "Qwen · 2× RTX 3090", "hostInfo", "")}</svg><div class="mobile-diagram-list"><button data-action="hostInfo">ANON-PC → anon2 → anon3</button></div></div></div>`;
+            content = `<div class="sheet"><div class="sheet-head"><h3>Connected computers</h3><span class="status idle">Live measurements unavailable</span></div><div class="sheet-inner"><div class="dd-head"><div><h3>Execution locations</h3><p>Shows where work runs. It is not an agent performance dashboard.</p></div></div><svg class="diagram-svg" viewBox="0 0 1000 250" role="group" aria-label="Example computer connections"><path class="edge" d="M245 125H365M625 125H745"/>${svgNode(10, 75, 235, 103, "WINDOWS 11", "ANON-PC", "Paseo · native sessions", "workspace:seicho", "active")}${svgNode(365, 75, 260, 103, "UBUNTU / ANON2", "Model gateway", "LiteLLM · embedding", "hostInfo", "")}${svgNode(745, 75, 240, 103, "UBUNTU / ANON3", "Model computer", "Qwen · 2× RTX 3090", "hostInfo", "")}</svg><div class="mobile-diagram-list"><button data-action="hostInfo">ANON-PC → anon2 → anon3</button></div></div></div>`;
           if (r === "usage")
-            content = `<div class="sheet"><div class="sheet-head"><h3>Codex provider · sample</h3><span class="status idle">Last seen · stale</span></div><div class="sheet-inner"><div class="mini-stats"><div><strong>76.5%</strong><span>5-hour remaining</span></div><div><strong>43.0%</strong><span>Weekly remaining</span></div></div><div class="divider"></div><p class="section-caption"></p></div></div>`;
+            content = `<div class="sheet"><div class="sheet-head"><h3>Codex provider · sample</h3><span class="status idle">Last seen · out of date</span></div><div class="sheet-inner"><div class="mini-stats"><div><strong>76.5%</strong><span>5-hour remaining</span></div><div><strong>43.0%</strong><span>Weekly remaining</span></div></div><div class="divider"></div><p class="section-caption"></p></div></div>`;
           if (r === "tools")
             content = `<div class="two-col"><section class="sheet"><div class="sheet-head"><h3>Effective skills</h3></div>${[
               ["diagram-design", "Editorial diagrams, static SVG & HTML"],
-              ["Pi orchestration", "Root-to-child specialist coordination"],
+              ["Pi main agent", "Main agent and helper agent coordination"],
               ["Visual verification", "Viewport screenshot comparison"],
             ]
               .map(
@@ -7143,7 +7138,7 @@
             content = `<div class="sheet"><div class="sheet-head"><h3>Application settings</h3></div>${["General", "Appearance", "Sidebar", "Chat", "Terminal", "Browser", "Editor", "Shortcuts", "Integrations", "Notifications", "Permissions", "Diagnostics", "Hosts", "Agents", "Plugins"].map((n) => `<button class="list-row" style="padding:14px 20px" data-action="setting:${n}"><div class="info"><strong>${n}</strong></div>${chevron}</button>`).join("")}</div>`;
           if (r === "standalone")
             content = `<div class="two-col"><div class="sheet"><div class="sheet-head"><h3>Independent sessions</h3></div><div class="sheet-inner"><p class="section-caption">Start Pi or a terminal without attaching it to a project or Shiori task. Host and model selection remain explicit.</p>${btn("New standalone agent", "newAgent", "btn primary")} ${btn("New terminal", "newTerminal", "btn quiet")}</div></div></div>`;
-          return `<main class="view"><div class="screen compact">${pageHead(title, desc, "PASEO / " + (r === "schedules" ? "TIDSPLANER" : r.toUpperCase()), r === "hosts" ? btn("Pair host", "modal:pair", "btn quiet") : "")}${content}</div></main>`;
+          return `<main class="view"><div class="screen compact">${pageHead(title, desc, "PASEO / " + (r === "schedules" ? "SCHEDULES" : r.toUpperCase()), r === "hosts" ? btn("Pair host", "modal:pair", "btn quiet") : "")}${content}</div></main>`;
         }
         function overlay() {
           if (st.command)
@@ -7180,11 +7175,11 @@
               capture: "Capture",
               prototype: "Design reference · v2",
               addTask: "New task proposal",
-              import: "Import artifact",
+              import: "Import file",
               importSession: "Import session",
-              workspace: "Nytt arbeidsområde",
-              schedule: "Ny tidsplan",
-              scheduleLink: "Legg til i en tidsplan",
+              workspace: "New workspace",
+              schedule: "New schedule",
+              scheduleLink: "Add to a schedule",
               skill: "Review skill or tool",
               pair: "Pair host",
               addProject: "Add project",
@@ -7201,33 +7196,33 @@
             confirm = st.acceptedDesign ? "Close" : "Accept reference v2";
           } else if (m === "workspace") {
             const draft = st.workspaceDraft;
-            body = `<p>Et arbeidsområde i dette eksempelet lagrer bare oppsettet på skjermen. Ingen filer, grener eller samtaler opprettes på en maskin.</p><div class="form-row"><label for="workspace-name">Navn</label><input id="workspace-name" data-focus-group="workspace" maxlength="60" value="${esc(draft.name)}"></div><div class="form-row"><label for="workspace-host">Maskin (eksempel)</label><select id="workspace-host"><option value="">Velg maskin</option>${["ANON-PC", "anon2", "anon3"].map((host) => `<option value="${host}" ${draft.host === host ? "selected" : ""}>${host} · eksempel</option>`).join("")}</select></div><div class="form-row"><label for="workspace-branch">Navn på gren eller arbeidskopi (eksempel)</label><input id="workspace-branch" maxlength="80" value="${esc(draft.branch)}"></div>${st.workspaceError ? `<p role="alert">${esc(st.workspaceError)}</p>` : ""}`;
-            confirm = "Legg til arbeidsområde";
+            body = `<p>A workspace in this example only saves the screen layout. No files, branches or conversations are created on a computer.</p><div class="form-row"><label for="workspace-name">Name</label><input id="workspace-name" data-focus-group="workspace" maxlength="60" value="${esc(draft.name)}"></div><div class="form-row"><label for="workspace-host">Computer (example)</label><select id="workspace-host"><option value="">Choose computer</option>${["ANON-PC", "anon2", "anon3"].map((host) => `<option value="${host}" ${draft.host === host ? "selected" : ""}>${host} · example</option>`).join("")}</select></div><div class="form-row"><label for="workspace-branch">Branch or working copy name (example)</label><input id="workspace-branch" maxlength="80" value="${esc(draft.branch)}"></div>${st.workspaceError ? `<p role="alert">${esc(st.workspaceError)}</p>` : ""}`;
+            confirm = "Add workspace";
           } else if (m === "scheduleLink") {
-            body = `<p>${esc(scheduleTargetTitle(st.scheduleSource))}</p><p>Velg en tidsplan, eller lag en ny. Tidsplanen peker på det samme arbeidet; den lager ingen kopi. Ingenting kjøres.</p><div class="seq-actions">${st.schedules.map((s) => btn(esc(s.name), `scheduleAttach:${s.id}`, "btn quiet")).join("")}</div>`;
-            confirm = "Lag ny tidsplan";
+            body = `<p>${esc(scheduleTargetTitle(st.scheduleSource))}</p><p>Choose a schedule or create a new one. The schedule points to the same work; it does not make a copy. Nothing runs.</p><div class="seq-actions">${st.schedules.map((s) => btn(esc(s.name), `scheduleAttach:${s.id}`, "btn quiet")).join("")}</div>`;
+            confirm = "Create new schedule";
           } else if (m === "schedule") {
             body = scheduleForm();
-            confirm = "Legg til tidsplan";
+            confirm = "Add schedule";
           } else if (m === "capture" || m === "addTask") {
             body = `<div class="form-row"><label>Project</label><input value="${esc(getProject(st.project).name)}" disabled></div><div class="form-row"><label>${m === "addTask" ? "Task proposal" : "Thought"}</label><textarea data-focus-group="modal" id="modal-draft" placeholder="Describe the outcome and relevant context…">${esc(st.formDraft)}</textarea></div><p class="section-caption">Saving this draft does not authorize execution</p>`;
             confirm = "Save proposal";
           } else if (m === "import") {
-            body = `<div class="form-row"><label>Destination</label><input value="ANON-PC · seicho / docs/design/" readonly></div><div class="form-row"><label>Import artifact (sample)</label><input type="file" id="mock-upload" accept=".html,.md,.png,.zip"></div><div class="form-row"><label>Conflict policy</label><select id="conflict-policy"><option value="rename">Keep both (rename incoming)</option><option value="skip">Skip existing files</option><option value="overwrite">Replace after explicit confirmation</option></select></div><p class="section-caption">Importing does not accept the design. No actual files are written.</p>`;
+            body = `<div class="form-row"><label>Destination</label><input value="ANON-PC · seicho / docs/design/" readonly></div><div class="form-row"><label>Import file (sample)</label><input type="file" id="mock-upload" accept=".html,.md,.png,.zip"></div><div class="form-row"><label>Conflict policy</label><select id="conflict-policy"><option value="rename">Keep both (rename incoming)</option><option value="skip">Skip existing files</option><option value="overwrite">Replace after explicit confirmation</option></select></div><p class="section-caption">Importing does not accept the design. No actual files are written.</p>`;
             confirm = "Preview sample import";
           } else if (m.startsWith("closeAgent") || m.startsWith("closeTerminal")) {
             const paneLevel = m.endsWith("Pane");
             const agent = m.startsWith("closeAgent");
-            body = `<div class="review-receipt"><strong>${agent ? "Agent archive semantics" : "Process termination semantics"}</strong><p>${agent ? "The real Paseo close action may archive an agent. Closing a view and stopping execution are not equivalent." : "A terminal close can terminate a process. Choose explicitly; this demo does not signal a real process."}</p></div><p class="section-caption">${paneLevel ? "Close this pane and every tab inside it?" : "Remove this tab from the sample workspace?"}</p>`;
+            body = `<div class="review-receipt"><strong>${agent ? "What closing an agent means" : "What closing a terminal means"}</strong><p>${agent ? "The real Paseo close action may archive an agent. Closing a view and stopping execution are not equivalent." : "A terminal close can terminate a process. Choose explicitly; this demo does not signal a real process."}</p></div><p class="section-caption">${paneLevel ? "Close this pane and every tab inside it?" : "Remove this tab from the sample workspace?"}</p>`;
             confirm = paneLevel ? "Close pane" : "Close sample tab";
           } else if (m === "skill") {
-            body = `<p class="section-caption">Workflow review should start with deterministic checks; local/cloud reviewers are optional.</p><div class="check-list"><div>${ico("check", "sm")} Inspect installed scope and version</div><div>${ico("check", "sm")} Run static checks before model calls</div><div>${ico("info", "sm")} Optionally compare independent local/cloud reviews</div><div>${ico("shield", "sm")} Require approval before modifying tools</div></div>`;
+            body = `<p class="section-caption">Workflow review should start with automatic checks; local/cloud reviewers are optional.</p><div class="check-list"><div>${ico("check", "sm")} Inspect installed scope and version</div><div>${ico("check", "sm")} Run static checks before model calls</div><div>${ico("info", "sm")} Optionally compare independent local/cloud reviews</div><div>${ico("shield", "sm")} Require approval before modifying tools</div></div>`;
             confirm = "Preview proposal";
           } else {
             body = `<p class="section-caption">Prototype screen. The navigation works; nothing is written to a host, deployment, credential, or external service.</p><div class="form-row"><label>${title}</label><input data-focus-group="modal" id="modal-draft" placeholder="Optional sample details"></div>`;
             confirm = "Save sample entry";
           }
-          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m.startsWith("schedule") || m === "workspace" ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m.startsWith("schedule") || m === "workspace" ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "workspace" ? "workspaceSave" : m === "schedule" ? "scheduleSave" : m === "scheduleLink" ? "scheduleCreate" : "modalConfirm", "btn primary")}</div></div></div>`;
+          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m.startsWith("schedule") || m === "workspace" ? "Close form" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m.startsWith("schedule") || m === "workspace" ? "Cancel" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "workspace" ? "workspaceSave" : m === "schedule" ? "scheduleSave" : m === "scheduleLink" ? "scheduleCreate" : "modalConfirm", "btn primary")}</div></div></div>`;
         }
         let previousDialog = false,
           dialogOpener = null;
@@ -7617,13 +7612,13 @@
         }
         // Schedule targets remain pointers, including sequence steps read at render time.
         const scheduleDays = [
-          "mandag",
-          "tirsdag",
-          "onsdag",
-          "torsdag",
-          "fredag",
-          "lørdag",
-          "søndag",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday",
         ];
         const scheduleRunTargets = () => [
           { ref: "RUN-S21", name: agentRuns[0].name },
@@ -7643,21 +7638,21 @@
             if (s.trigger.mode !== "onFinish" || s.trigger.parentRef !== ref) continue;
             if (!s.enabled) {
               s.finishNote =
-                "Kjøringen ble ferdig mens tidsplanen var på pause. Resultatet ble ikke lagt til. Det legges heller ikke til når du fortsetter.";
+                "The run finished while the schedule was paused. The result was not added. It will not be added when you resume either.";
               continue;
             }
             s.lastRuns.push({
-              at: "man 19. okt. 09:22",
-              outcome: "Kjøringen er ferdig. Eksempel lagt til; ingenting kjørte.",
+              at: "Mon 19 Oct 09:22",
+              outcome: "The run is finished. Example added; nothing ran.",
             });
-            s.finishNote = "Ferdig registrert én gang. Dette er et eksempel; ingenting kjørte.";
+            s.finishNote = "Completion recorded once. This is an example; nothing ran.";
           }
         }
         function scheduleFinishStatus(s) {
           if (s.finishNote) return s.finishNote;
           if (st.taskRuns.find((r) => r.id === s.trigger.parentRef)?.completed)
-            return "Kjøringen var allerede ferdig da tidsplanen ble lagt til. Ingen resultater legges til i ettertid.";
-          return "Venter på at kjøringen blir ferdig. På pause legges ingen resultater til, heller ikke når du fortsetter.";
+            return "The run was already finished when the schedule was added. No results are added afterwards.";
+          return "Waiting for the run to finish. While paused, no results are added, not even when you resume.";
         }
         function scheduleSourceExists(kind, ref) {
           return (
@@ -7668,32 +7663,33 @@
         }
         function scheduleTargetTitle(target) {
           if (target.kind === "sequence")
-            return `Rekkefølge · ${sequence(target.ref)?.name || target.ref}`;
-          if (target.kind === "task") return `Oppgave · ${task(target.ref)?.name || target.ref}`;
+            return `Sequence · ${sequence(target.ref)?.name || target.ref}`;
+          if (target.kind === "task") return `Task · ${task(target.ref)?.name || target.ref}`;
           const run = scheduleRunTargets().find((r) => r.ref === target.ref);
-          return `Kjøring · ${target.ref} · ${run?.name || "Ukjent kjøring"}`;
+          return `Run · ${target.ref} · ${run?.name || "Unknown run"}`;
         }
         function scheduleWhen(trigger) {
           if (trigger.mode === "onFinish")
-            return `Når ${scheduleTargetTitle({ kind: "run", ref: trigger.parentRef })} er ferdig`;
-          if (trigger.mode === "cadence") return `Hver ${trigger.every}`;
-          if (trigger.mode === "weekdays") return `${trigger.days.join(", ")} kl. ${trigger.at}`;
-          return `Én gang · ${trigger.at}`;
+            return `When ${scheduleTargetTitle({ kind: "run", ref: trigger.parentRef })} finishes`;
+          if (trigger.mode === "cadence") return `Every ${trigger.every}`;
+          if (trigger.mode === "weekdays")
+            return `${trigger.days.map((day) => day).join(", ")} at ${trigger.at}`;
+          return `Once · ${trigger.at}`;
         }
         function scheduleTargetMarkup(target) {
           const seq = target.kind === "sequence" ? sequence(target.ref) : null;
           return `<li data-schedule-target="${esc(target.kind)}:${esc(target.ref)}">${esc(scheduleTargetTitle(target))}${seq ? `<ol class="schedule-steps">${seq.steps.map((step) => `<li data-step-ref="${esc(step.ref || "prompt")}">${esc(step.kind === "prompt" ? step.prompt : step.ref)}</li>`).join("")}</ol>` : ""}</li>`;
         }
         function schedulesContent() {
-          return `<section class="sheet" id="schedules-list"><div class="sheet-head"><h3>Tidsplaner</h3>${btn("Ny tidsplan", "scheduleNew", "btn small primary")}</div>${st.schedules
+          return `<section class="sheet" id="schedules-list"><div class="sheet-head"><h3>Schedules</h3>${btn("New schedule", "scheduleNew", "btn small primary")}</div>${st.schedules
             .map(
               (s) =>
-                `<article class="schedule-row" data-schedule-id="${s.id}" style="padding:20px;border-top:1px solid var(--line);overflow-wrap:anywhere"><div class="schedule-head seq-actions" style="justify-content:space-between"><h3>${esc(s.name)}</h3><button class="btn small quiet" role="switch" aria-checked="${s.enabled}" aria-label="Aktiv tidsplan: ${esc(s.name)}" data-action="scheduleToggle:${s.id}">${s.enabled ? "Sett på pause" : "Fortsett"}</button></div><p>${s.enabled ? "Aktiv" : "På pause"} · ${esc(scheduleWhen(s.trigger))}</p>${s.trigger.mode === "onFinish" ? `<p class="schedule-finish-status">${esc(scheduleFinishStatus(s))}</p>` : ""}<h4>Hva tidsplanen peker på</h4><ul class="schedule-targets">${s.targets.map(scheduleTargetMarkup).join("")}</ul><div class="schedule-details two-col" style="margin-top:16px"><div><h4>Neste tre tidspunkter (eksempler)</h4><ul class="schedule-next">${s.nextFires
+                `<article class="schedule-row" data-schedule-id="${s.id}" style="padding:20px;border-top:1px solid var(--line);overflow-wrap:anywhere"><div class="schedule-head seq-actions" style="justify-content:space-between"><h3>${esc(s.name)}</h3><button class="btn small quiet" role="switch" aria-checked="${s.enabled}" aria-label="Active schedule: ${esc(s.name)}" data-action="scheduleToggle:${s.id}">${s.enabled ? "Pause" : "Resume"}</button></div><p>${s.enabled ? "Active" : "Paused"} · ${esc(scheduleWhen(s.trigger))}</p>${s.trigger.mode === "onFinish" ? `<p class="schedule-finish-status">${esc(scheduleFinishStatus(s))}</p>` : ""}<h4>What the schedule points to</h4><ul class="schedule-targets">${s.targets.map(scheduleTargetMarkup).join("")}</ul><div class="schedule-details two-col" style="margin-top:16px"><div><h4>Next three times (examples)</h4><ul class="schedule-next">${s.nextFires
                   .slice(0, 3)
                   .map((at) => `<li>${esc(at)}</li>`)
                   .join(
                     "",
-                  )}</ul>${s.trigger.mode === "onFinish" ? `<p>Tidspunktet avhenger av kjøringen. Ingen klokke brukes.</p>` : ""}${!s.enabled ? `<p>På pause. Tidspunktene står her bare som eksempler.</p>` : ""}</div><div><h4>Siste tre resultater (eksempler)</h4><ul class="schedule-history">${(s
+                  )}</ul>${s.trigger.mode === "onFinish" ? `<p>The time depends on that run. No clock is used.</p>` : ""}${!s.enabled ? `<p>Paused. The times shown here are only examples.</p>` : ""}</div><div><h4>Last three results (examples)</h4><ul class="schedule-history">${(s
                   .trigger.mode === "onFinish"
                   ? s.lastRuns.slice(-3).reverse()
                   : s.lastRuns
@@ -7702,12 +7698,12 @@
                   .map((r) => `<li>${esc(r.at)} · ${esc(r.outcome)}</li>`)
                   .join(
                     "",
-                  )}</ul></div></div><p class="small dim">Dette er et eksempel. Ingenting kjøres.</p></article>`,
+                  )}</ul></div></div><p class="small dim">This is an example. Nothing runs.</p></article>`,
             )
             .join("")}</section>`;
         }
         function scheduleStrip() {
-          return `<div class="schedule-strip seq-strip" aria-label="Tidsplaner i arbeidsområdet">${st.schedules.map((s) => `<button class="shiori-nav" data-action="schedules" data-schedule-status="${s.id}">${esc(s.name)} · ${s.enabled ? "Aktiv" : "På pause"}${s.trigger.mode === "onFinish" ? ` · ${esc(scheduleFinishStatus(s))}` : ""}</button>`).join("")}<p class="small dim">Bare eksempler. Ingenting kjøres.</p></div>`;
+          return `<div class="schedule-strip seq-strip" aria-label="Schedules in the workspace">${st.schedules.map((s) => `<button class="shiori-nav" data-action="schedules" data-schedule-status="${s.id}">${esc(s.name)} · ${s.enabled ? "Active" : "Paused"}${s.trigger.mode === "onFinish" ? ` · ${esc(scheduleFinishStatus(s))}` : ""}</button>`).join("")}<p class="small dim">Examples only. Nothing runs.</p></div>`;
         }
 
         function scheduleForm() {
@@ -7717,11 +7713,11 @@
             ...scheduleRunTargets().map((r) => ({ kind: "run", ref: r.ref })),
             ...st.taskList.map((t) => ({ kind: "task", ref: t.id })),
           ];
-          return `<p class="section-caption">Lag et eksempel. Ingenting kjøres. Ved tidsvalg er de tre tidspunktene og resultatene faste eksempler; de beregnes ikke fra valgene dine. Når vi venter på en kjøring, legges et eksempel til først når du fullfører den her.</p>${st.scheduleError ? `<p role="alert">${esc(st.scheduleError)}</p>` : ""}<div class="form-row"><label for="schedule-name">Navn</label><input id="schedule-name" data-focus-group="schedule" value="${esc(d.name)}"></div><fieldset><legend>Hva tidsplanen peker på (velg én eller flere)</legend>${choices.map((t) => `<label class="schedule-choice seq-actions" style="padding:8px 0;flex-wrap:nowrap"><input type="checkbox" data-action="scheduleTarget:${t.kind}:${t.ref}" ${d.targets.some((x) => x.kind === t.kind && x.ref === t.ref) ? "checked" : ""}><span style="min-width:0;flex:1">${esc(scheduleTargetTitle(t))}</span></label>`).join("")}</fieldset><div class="form-row"><label for="schedule-mode">Når</label><select id="schedule-mode">${[
-            ["time", "Én gang"],
-            ["cadence", "Med fast mellomrom"],
-            ["weekdays", "På valgte ukedager"],
-            ["onFinish", "Når en kjøring er ferdig"],
+          return `<p class="section-caption">Create an example. Nothing runs. For time-based schedules, the three times and results are fixed examples; they are not calculated from your choices. When waiting for a run, an example is added only when you complete it here.</p>${st.scheduleError ? `<p role="alert">${esc(st.scheduleError)}</p>` : ""}<div class="form-row"><label for="schedule-name">Name</label><input id="schedule-name" data-focus-group="schedule" value="${esc(d.name)}"></div><fieldset><legend>What the schedule points to (choose one or more)</legend>${choices.map((t) => `<label class="schedule-choice seq-actions" style="padding:8px 0;flex-wrap:nowrap"><input type="checkbox" data-action="scheduleTarget:${t.kind}:${t.ref}" ${d.targets.some((x) => x.kind === t.kind && x.ref === t.ref) ? "checked" : ""}><span style="min-width:0;flex:1">${esc(scheduleTargetTitle(t))}</span></label>`).join("")}</fieldset><div class="form-row"><label for="schedule-mode">When</label><select id="schedule-mode">${[
+            ["time", "Once"],
+            ["cadence", "At regular intervals"],
+            ["weekdays", "On selected weekdays"],
+            ["onFinish", "When a run finishes"],
           ]
             .map(
               ([mode, name]) =>
@@ -7729,7 +7725,7 @@
             )
             .join(
               "",
-            )}</select></div>${d.trigger.mode === "onFinish" ? `<div class="form-row"><label for="schedule-parent">Kjøringen vi venter på</label><select id="schedule-parent">${st.taskRuns.map((r) => `<option value="${esc(r.id)}" ${d.trigger.parentRef === r.id ? "selected" : ""}>${esc(scheduleTargetTitle({ kind: "run", ref: r.id }))}</option>`).join("")}</select></div><p>Et eksempel legges til når du fullfører kjøringen her. Ingenting kjøres. Fullføring på pause tas ikke igjen senere.</p>` : d.trigger.mode === "cadence" ? `<div class="form-row"><label for="schedule-every">Mellomrom, for eksempel 6 timer</label><input id="schedule-every" value="${esc(d.trigger.every)}"></div>` : `<div class="form-row"><label for="schedule-at">${d.trigger.mode === "time" ? "Tidspunkt, for eksempel man 19. okt. 07:00" : "Klokkeslett"}</label><input id="schedule-at" value="${esc(d.trigger.at)}"></div>`}${d.trigger.mode === "weekdays" ? `<fieldset><legend>Ukedager</legend>${scheduleDays.map((day) => `<label class="schedule-choice seq-actions" style="padding:8px 0"><input type="checkbox" data-action="scheduleDay:${day}" ${d.trigger.days.includes(day) ? "checked" : ""}>${day}</label>`).join("")}</fieldset>` : ""}`;
+            )}</select></div>${d.trigger.mode === "onFinish" ? `<div class="form-row"><label for="schedule-parent">The run it waits for</label><select id="schedule-parent">${st.taskRuns.map((r) => `<option value="${esc(r.id)}" ${d.trigger.parentRef === r.id ? "selected" : ""}>${esc(scheduleTargetTitle({ kind: "run", ref: r.id }))}</option>`).join("")}</select></div><p>An example is added when you complete the run here. Nothing runs. Completion while paused is not added later.</p>` : d.trigger.mode === "cadence" ? `<div class="form-row"><label for="schedule-every">Interval, for example 6 hours</label><input id="schedule-every" value="${esc(d.trigger.every)}"></div>` : `<div class="form-row"><label for="schedule-at">${d.trigger.mode === "time" ? "Time, for example Mon 19 Oct 07:00" : "Time of day"}</label><input id="schedule-at" value="${esc(d.trigger.at)}"></div>`}${d.trigger.mode === "weekdays" ? `<fieldset><legend>Weekdays</legend>${scheduleDays.map((day) => `<label class="schedule-choice seq-actions" style="padding:8px 0"><input type="checkbox" data-action="scheduleDay:${day}" ${d.trigger.days.includes(day) ? "checked" : ""}>${day}</label>`).join("")}</fieldset>` : ""}`;
         }
         // --- Sequences (slice S11a). One run made of work that already exists: tasks from
         // the plan board, the sample run on the Runs page, or a prompt you wrote. A step
@@ -8123,9 +8119,7 @@
             "One run made of work that already exists: tasks from the plan board, the sample run on the Runs page, or a prompt you wrote. A sequence points at that work. It never holds a copy of it, and it runs nothing by itself.",
             "PROJECT / SEQUENCES",
             btn("New sequence from the plan board", "sequenceFromQueue", "btn primary") +
-              (seq
-                ? btn("Legg til i en tidsplan", `scheduleAdd:sequence:${seq.id}`, "btn quiet")
-                : ""),
+              (seq ? btn("Add to a schedule", `scheduleAdd:sequence:${seq.id}`, "btn quiet") : ""),
           );
           if (!seq)
             return `<div style="margin-top:30px">${head}<div class="plain-section"><div class="section-label"><h2>No sequence yet</h2></div><p class="section-caption">A sequence is the order you want work to happen in. Make one from the tasks on the plan board, add the sample run to it, or start from the order the plan names.</p><div class="seq-actions" style="margin-top:14px">${btn(
@@ -8336,9 +8330,9 @@
                 targets: [],
                 trigger: {
                   mode: "time",
-                  at: "man 19. okt. 07:00",
-                  every: "6 timer",
-                  days: ["mandag"],
+                  at: "Mon 19 Oct 07:00",
+                  every: "6 hours",
+                  days: ["Monday"],
                   parentRef: "RUN-TASK-24",
                 },
               };
@@ -8360,7 +8354,7 @@
                 ["time", "cadence", "weekdays", "onFinish"].includes(value)
               ) {
                 d.trigger.mode = value;
-                if (value === "time") d.trigger.at = "man 19. okt. 07:00";
+                if (value === "time") d.trigger.at = "Mon 19 Oct 07:00";
                 if (value === "weekdays") d.trigger.at = "07:00";
               } else if (["at", "every"].includes(val)) d.trigger[val] = value;
               else if (val === "parentRef" && st.taskRuns.some((r) => r.id === value))
@@ -8402,7 +8396,8 @@
                     : !d.trigger.at.trim()) ||
                 (d.trigger.mode === "weekdays" && !d.trigger.days.length)
               ) {
-                st.scheduleError = "Skriv et navn, velg arbeid og fyll ut når tidsplanen gjelder.";
+                st.scheduleError =
+                  "Enter a name, choose work and fill in when the schedule applies.";
                 break;
               }
               const trigger =
@@ -8424,14 +8419,14 @@
                 nextFires:
                   trigger.mode === "onFinish"
                     ? []
-                    : ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
+                    : ["Mon 19 Oct 07:00", "Wed 21 Oct 07:00", "Fri 23 Oct 07:00"],
                 lastRuns:
                   trigger.mode === "onFinish"
                     ? []
                     : [
-                        { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
-                        { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
-                        { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
+                        { at: "Fri 16 Oct 07:00", outcome: "Suggestion ready" },
+                        { at: "Wed 14 Oct 07:00", outcome: "Waited for approval" },
+                        { at: "Mon 12 Oct 07:00", outcome: "Skipped" },
                       ],
               });
               st.scheduleDraft = null;
@@ -8631,11 +8626,11 @@
                 branch.length > 80 ||
                 !["ANON-PC", "anon2", "anon3"].includes(draft.host)
               ) {
-                st.workspaceError = "Fyll ut navn, maskin og navn på gren eller arbeidskopi.";
+                st.workspaceError = "Enter a name, computer and branch or working copy name.";
                 break;
               }
               if (project.workspaces.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
-                st.workspaceError = "Velg et navn som ikke er brukt i prosjektet.";
+                st.workspaceError = "Choose a name not already used in this project.";
                 break;
               }
               const id = project.id + "-workspace-" + ++st.workspaceSeq;
@@ -8759,7 +8754,7 @@
             case "authorizeRun": {
               let t = task(st.selectedTask);
               if (t.status !== "ready") {
-                toast("Cannot authorize: prerequisite or review gate is not satisfied.");
+                toast("Cannot authorize: prerequisite or approval step is not satisfied.");
                 break;
               }
               t.status = "running";
@@ -8776,8 +8771,8 @@
               if (!t || t.status !== "running") {
                 toast(
                   st.taskRuns.some((r) => r.id === st.runName && r.completed)
-                    ? "Denne eksempelkjøringen er allerede ferdig. Resultatet legges ikke til på nytt."
-                    : "Ingen eksempelkjøring pågår.",
+                    ? "This example run is already finished. The result is not added again."
+                    : "No example run is in progress.",
                 );
                 break;
               }
@@ -9053,7 +9048,7 @@
                     ? st.selectedRange
                     : null;
                 st.comments.push({
-                  source: `recipe-import.ts:${st.selectedLine}${r ? `:${r.from}-${r.to}` : ""} @ fixture-r2`,
+                  source: `recipe-import.ts:${st.selectedLine}${r ? `:${r.from}-${r.to}` : ""} @ sample version r2`,
                   text: draft,
                 });
                 // Saving should land you where the list lives, not leave you hunting for it.
@@ -9480,7 +9475,9 @@
               toast(`${val} settings screen: prototype route only.`);
               break;
             case "hostInfo":
-              toast("Host telemetry is unavailable. The topology uses static sample values.");
+              toast(
+                "Live computer measurements are unavailable. The connections shown use fixed sample values.",
+              );
               break;
             case "help":
               st.modal = "help";

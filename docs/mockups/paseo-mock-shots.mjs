@@ -213,7 +213,7 @@ const SCREENS = [
       "sequenceFromQueue",
       "schedules",
       "scheduleNew",
-      "scheduleField:name:Oppgavene i rekkefølge",
+      "scheduleField:name:Tasks in sequence",
       "scheduleTarget:sequence:$seq",
       "scheduleSave",
     ],

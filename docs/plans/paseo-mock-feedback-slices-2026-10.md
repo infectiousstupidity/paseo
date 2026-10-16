@@ -1,6 +1,6 @@
 # Paseo mock — feedback slices (2026-10-15)
 
-**Status:** in progress — S0–S12 are implemented in the mock (harness 624/624 at the S12 checkpoint). S13 remains. **Target:** `docs/mockups/paseo-mock.html` (9,900 lines, tracked). **Type:** mock/prototype only — no production Paseo, Shiori, SEICHO or Pivolution change, no real execution, no real Git.
+**Status:** complete — S0–S13 are implemented in the mock (harness 662/662 at the S13 checkpoint, language guards on by default). **Target:** `docs/mockups/paseo-mock.html` (9,923 lines, tracked). **Type:** mock/prototype only — no production Paseo, Shiori, SEICHO or Pivolution change, no real execution, no real Git.
 
 Governing contract: [Paseo product direction](paseo-product-direction-2026-10.md) (accepted directions: contextual anchored feedback, Ask/Comment/Steer semantics, native pane/tab parity, "Proposed until tested: exact labels/tabs"). Prototype scenario contract: [paseo-next-prototype-contract.md](../design/paseo-next-prototype-contract.md).
 
@@ -170,6 +170,9 @@ Sizes: S ≈ under an hour of mock editing, M ≈ a focused session, L ≈ a foc
 - Replace in all user-visible strings: Provenance → **Where this came from**; Verification receipt → **Checks that ran**; deterministic checks → **Automatic checks**; observed changes → **Changes you can see**; fixture-r2 → **sample version r2**; orchestrator → **Main agent**; specialist / child agent → **Helper agent**; gate → **Approval step**; delivery → **sent**; bundle → **feedback list**; artifact → **file**; reconcile → **merge and commit**; vertical slice → **part of the feature**; stale → **out of date**; transcript → **full conversation**; projection → **view**; canonical → **main**.
 - Keep real identifiers (TASK-21, RUN-S21, file paths, model names) untouched.
 - Acceptance: the smoke grep check finds no banned word in rendered strings; a non-developer can read every page top to bottom.
+- **As built:** ~133 phrase substitutions plus the Norwegian copy from S11b/S12 (133 phrase/token substitutions, 21 fixed date strings, 9 sample outcome strings). The jargon and Norwegian guards now run **by default** (no flag), scanning text, accessible labels, tooltips, placeholders and input values across 3,769 distinct rendered states; 38 checks added (624 → 662). Two defects from the blanket sweep were found and fixed: the guard's own Norwegian word list had been translated (it flagged "Monday" as Norwegian), and the weekday action tokens were left Norwegian behind an English display map — they are now English tokens with the map deleted. Verified by mutation probe: injecting "Tidsplaner" or "Provenance" into visible copy fails the default run.
+
+**D7 — Mock language (S13).** **Decided: plain English, one language.** The mock had drifted bilingual: slices S11b and S12 were authored with Norwegian UI copy while S0–S11a and the plan's D6 replacement names are English. S13 unifies every user-visible string to plain English per D6, including the Norwegian copy S11b/S12 introduced ("Ny tidsplan" → "New schedule", "På pause" → "Paused", "Dette er et eksempel. Ingenting kjøres." → "This is an example. Nothing runs."). Real identifiers stay untouched. Reverse this decision by re-running the sweep the other way; it is a text pass, not a structural one.
 
 ## Order and parallelism
 
@@ -184,7 +187,7 @@ S12 (workspaces)            independent
 S13 (language sweep)        last
 ```
 
-**Status:** S0–S12 done (plus Stop/Interrupt on the execution tree, which was not in the plan). S13 (plain-language pass) is last.
+**Status:** S0–S13 all done (plus Stop/Interrupt on the execution tree, which was not in the plan). The mock is at the end of this plan; further change should come from new feedback, not from these slices.
 
 Fastest useful path if you want to stop early: **S0 → S1 → S2 → S4 → S5 → S3** fixes the daily friction (width, duplicate controls, closing, sub-line targeting, save-and-return, diagram bloat) without needing any new product decision. S6/S7/S9/S11 are the ones that need D1–D4 agreed first.
 
