@@ -427,6 +427,30 @@ page("schedules:onFinish:resumed", () => {
   return render();
 });
 
+// --- S12: create workspace records through the same small form the UI uses.
+const beforeWorkspacePages = snapshot();
+action("workspace:seicho");
+const workspaceA = st.currentLayoutKey;
+const workspaceB = createWorkspace("Ordlisten", "anon2", "ordliste");
+page("project:seicho/two-workspaces", () => (action("project:seicho"), render()));
+page("workspace:second-layout", () => {
+  action("workspaceSwitch:" + workspaceB);
+  action("paneSplit:right:" + firstLeaf().id);
+  action("paneAdd:" + firstLeaf().id + ":browser");
+  resizeSplit(layoutRoot(), "ArrowRight");
+  return render();
+});
+page("workspace:first-restored", () => (action("workspaceSwitch:" + workspaceA), render()));
+page("modal:new-workspace", () => (action("workspaceNew:seicho"), render()));
+page("modal:new-workspace-ready", () => {
+  workspaceField("name", "Utprøving");
+  workspaceField("host", "anon3");
+  workspaceField("branch", "utproving");
+  return render();
+});
+restore(beforeWorkspacePages);
+render();
+
 // ---------------------------------------------------------------- 2. no leaked placeholders
 
 const LEAK = /\bundefined\b|\bNaN\b|\[object Object\]|\[object Object\]|>\s*null\s*</g;
@@ -656,7 +680,306 @@ function resetFinishSample() {
   delete s.finishNote;
 }
 
+// S12 helpers drive the input/change listeners, including the native select switcher.
+function workspaceField(field, value) {
+  const type = field === "host" ? "change" : "input";
+  for (const listener of listeners.filter((l) => l.type === type))
+    listener.fn({ target: { id: "workspace-" + field, value, dataset: {} } });
+}
+function switchWorkspace(id) {
+  for (const listener of listeners.filter((l) => l.type === "change"))
+    listener.fn({ target: { id: "workspace-switcher", value: id, dataset: {} } });
+}
+function createWorkspace(name, host = "ANON-PC", branch = "main") {
+  action("workspaceNew:seicho");
+  workspaceField("name", name);
+  workspaceField("host", host);
+  workspaceField("branch", branch);
+  action("workspaceSave");
+  return st.currentLayoutKey;
+}
+function workspaceForTest(id) {
+  return st.projects.flatMap((p) => p.workspaces).find((w) => w.id === id);
+}
+function workspaceBytes(id = st.currentLayoutKey) {
+  const root = st.layouts[id];
+  const tabs = leaves(root).flatMap((p) => p.tabs.map((tab) => st.tabsById[tab]));
+  return JSON.stringify({ root, tabs });
+}
+function resizeSplit(root, key) {
+  const handle = {
+    dataset: { splitId: root.id },
+    parentElement: { children: [{ style: {} }, {}, { style: {} }], querySelector: () => null },
+  };
+  pressKey(key, {
+    target: {
+      closest: (selector) => (selector === "[data-split-id]" ? handle : null),
+      matches: () => false,
+    },
+  });
+}
+
 const scenarios = [
+  {
+    name: "S12 projectData workspaces have stable ids and layouts use workspace ids",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const project = st.projects.find((p) => p.id === "seicho");
+      return (
+        project.workspaces[0].id === "seicho-main" &&
+        st.currentLayoutKey === project.workspaces[0].id &&
+        st.layouts[project.workspaces[0].id].kind === "split" &&
+        st.projects.every((p) => p.workspaces.length >= 1)
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 creating SEICHO workspace B preserves A byte for byte and adds the chosen record",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey,
+        before = workspaceBytes(a);
+      const b = createWorkspace("Ordlisten", "anon2", "ordliste");
+      const records = st.projects.find((p) => p.id === "seicho").workspaces;
+      const record = records.find((w) => w.id === b);
+      return (
+        records.length === 2 &&
+        record.name === "Ordlisten" &&
+        record.host === "anon2" &&
+        record.branch === "ordliste" &&
+        st.layouts[b].kind === "leaf" &&
+        workspaceBytes(a) === before
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 split, tab selection, tab close and pane close in B preserve A exactly",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey,
+        before = workspaceBytes(a);
+      const b = createWorkspace("Ordlisten");
+      const original = firstLeaf().id;
+      action("paneSplit:right:" + original);
+      const splitBuilt = leaves().length === 2;
+      action("paneAdd:" + original + ":files");
+      const files = activeTab().id;
+      action("paneAdd:" + original + ":browser");
+      const browser = activeTab().id;
+      action(`paneSelect:${original}:${files}`);
+      const selected = activeTab().id === files;
+      action(`paneClose:${original}:${browser}`);
+      const closedTab = firstLeaf().tabs.length === 2;
+      const second = leaves()[1];
+      action("paneRemove:" + second.id);
+      const confirms = st.modal === "closeAgentPane";
+      action("modalConfirm");
+      return (
+        splitBuilt &&
+        selected &&
+        closedTab &&
+        confirms &&
+        leaves().length === 1 &&
+        st.currentLayoutKey === b &&
+        workspaceBytes(a) === before
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 A to B to A restores panes, tabs, ratios and running sample state; B is untouched",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey;
+      startSampleRun();
+      const running = JSON.stringify({
+        execution: st.execution,
+        task: st.currentRunningTask,
+        tasks: st.taskList,
+      });
+      resizeSplit(layoutRoot(), "ArrowRight");
+      action("newTerminal:attached");
+      activeTab().terminal.lines.push("Eksempel på pågående arbeid");
+      const aBytes = workspaceBytes(a),
+        history = JSON.stringify(st.sessionHistory);
+      const b = createWorkspace("Ordlisten");
+      action("paneSplit:down:" + firstLeaf().id);
+      resizeSplit(layoutRoot(), "ArrowUp");
+      action("paneAdd:" + firstLeaf().id + ":browser");
+      const bBytes = workspaceBytes(b);
+      switchWorkspace(a);
+      const aRestored =
+        workspaceBytes(a) === aBytes &&
+        layoutRoot().ratio === 0.55 &&
+        activeTab().terminal.lines[0] === "Eksempel på pågående arbeid";
+      switchWorkspace(b);
+      return (
+        aRestored &&
+        workspaceBytes(b) === bBytes &&
+        JSON.stringify(st.sessionHistory) === history &&
+        st.ratios[a + ":"] === 0.55 &&
+        st.ratios[b + ":"] === 0.45 &&
+        layoutRoot().ratio === 0.45 &&
+        st.execution === "running" &&
+        JSON.stringify({
+          execution: st.execution,
+          task: st.currentRunningTask,
+          tasks: st.taskList,
+        }) === running
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 workspace switcher renders the selected layout, not the other workspace",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey,
+        aPane = firstLeaf().id;
+      const b = createWorkspace("Ordlisten");
+      action("paneSplit:right:" + firstLeaf().id);
+      const bPane = leaves()[1].id;
+      switchWorkspace(a);
+      const aHTML = render();
+      switchWorkspace(b);
+      const bHTML = render();
+      return (
+        aHTML.includes(`data-workspace="${a}"`) &&
+        aHTML.includes(`data-paneldrop="${aPane}"`) &&
+        bHTML.includes(`data-workspace="${b}"`) &&
+        bHTML.includes(`data-paneldrop="${bPane}"`) &&
+        bHTML.includes(`value="${b}" selected`) &&
+        aHTML.includes('id="workspace-switcher"')
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 modal validates required fields and host before adding a record",
+    setup: () => action("modal:workspace"),
+    run: () => {
+      const count = st.projects.find((p) => p.id === "seicho").workspaces.length;
+      action("workspaceSave");
+      const required = render().includes('role="alert"') && st.modal === "workspace";
+      workspaceField("name", "Ordlisten");
+      workspaceField("branch", "ordliste");
+      workspaceField("host", "annen maskin");
+      action("workspaceSave");
+      const invalidHost =
+        st.workspaceError === "Fyll ut navn, maskin og navn på gren eller arbeidskopi." &&
+        st.projects.find((p) => p.id === "seicho").workspaces.length === count;
+      workspaceField("host", "anon3");
+      action("workspaceSave");
+      return (
+        required &&
+        invalidHost &&
+        st.route === "workspace" &&
+        st.projects.find((p) => p.id === "seicho").workspaces.length === count + 1 &&
+        workspaceForTest(st.currentLayoutKey).host === "anon3"
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 duplicate names show an error, and a different name succeeds",
+    setup: () => action("workspaceNew:seicho"),
+    run: () => {
+      workspaceField("name", " MAIN ");
+      workspaceField("branch", "main");
+      action("workspaceSave");
+      const explained =
+        st.workspaceError === "Velg et navn som ikke er brukt i prosjektet." &&
+        render().includes('role="alert"');
+      workspaceField("name", "Ordlisten");
+      action("workspaceSave");
+      return explained && workspaceForTest(st.currentLayoutKey).name === "Ordlisten";
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 modal fields survive full rendering and are escaped in the result",
+    setup: () => action("workspaceNew:seicho"),
+    run: () => {
+      workspaceField("name", '<Ny & "to">');
+      workspaceField("host", "anon2");
+      workspaceField("branch", "gren & kopi");
+      const form = render();
+      action("workspaceSave");
+      return (
+        form.includes('value="&lt;Ny &amp; &quot;to&quot;&gt;"') &&
+        form.includes('value="anon2" selected') &&
+        workspaceForTest(st.currentLayoutKey).name === '<Ny & "to">' &&
+        render().includes("gren &amp; kopi")
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 all three entry points open the form and sidebar lists both records",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey,
+        b = createWorkspace("Ordlisten");
+      action("project:seicho");
+      const projectHTML = render();
+      const buttons = [...projectHTML.matchAll(/data-action="workspaceNew:seicho"/g)].length;
+      action("workspaceNew:seicho");
+      const form = render().includes('aria-label="Nytt arbeidsområde"');
+      action("modal:close");
+      switchWorkspace(a);
+      const workHTML = render();
+      return (
+        buttons === 2 &&
+        form &&
+        [...workHTML.matchAll(/data-action="workspaceNew:seicho"/g)].length === 2 &&
+        workHTML.includes(`data-action="workspaceSwitch:${a}"`) &&
+        workHTML.includes(`data-action="workspaceSwitch:${b}"`)
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 project expander lists multiple workspaces outside the focus card too",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey,
+        b = createWorkspace("Ordlisten");
+      action("focus:shiori");
+      const out = render();
+      return (
+        out.includes(`data-action="workspaceSwitch:${a}"`) &&
+        out.includes(`data-action="workspaceSwitch:${b}"`) &&
+        out.includes('data-action="workspaceNew:seicho"')
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "S12 reopening session history returns to its own workspace",
+    setup: () => action("workspace:seicho"),
+    run: () => {
+      const a = st.currentLayoutKey;
+      const b = createWorkspace("Ordlisten", "anon2", "ordliste");
+      action("newTerminal:attached");
+      const terminal = activeTab();
+      const bBytes = workspaceBytes(b);
+      switchWorkspace(a);
+      action("openSession:" + terminal.id);
+      return (
+        st.currentLayoutKey === b &&
+        activeTab().id === terminal.id &&
+        terminal.workspace === b &&
+        terminal.project === "seicho" &&
+        terminal.host === "anon2" &&
+        terminal.terminal.host === "anon2" &&
+        workspaceBytes(b) === bBytes
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+
   {
     name: "onFinish names its parent from the run record and lists its target separately",
     setup: resetFinishSample,

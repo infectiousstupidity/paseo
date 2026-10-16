@@ -5039,7 +5039,15 @@
             name: "SEICHO",
             short: "S",
             detail: "Recipe ingestion reliability",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "seicho-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "1 review · 2 ready tasks",
           },
           {
@@ -5047,7 +5055,15 @@
             name: "Shiori",
             short: "S",
             detail: "Reviewer workflow improvements",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "shiori-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "1 running · 1 review",
           },
           {
@@ -5055,7 +5071,15 @@
             name: "Paseo",
             short: "P",
             detail: "Native interface redesign",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "paseo-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Design exploration",
           },
           {
@@ -5063,7 +5087,15 @@
             name: "food-core",
             short: "F",
             detail: "Recipe services",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "food-core-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Idle",
           },
           {
@@ -5071,7 +5103,15 @@
             name: "Infrastructure",
             short: "I",
             detail: "Inference and homelab",
-            workspace: "benchmarks",
+            workspaces: [
+              {
+                id: "infrastructure-benchmarks",
+                name: "benchmarks",
+                host: "ANON-PC",
+                branch: "benchmarks",
+                sampleSession: true,
+              },
+            ],
             state: "No current attention",
           },
           {
@@ -5079,7 +5119,15 @@
             name: "Crux",
             short: "C",
             detail: "Bookmark processing",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "crux-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Idle",
           },
           {
@@ -5087,7 +5135,15 @@
             name: "Pivolution",
             short: "P",
             detail: "Agent workflow analysis",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "pivolution-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Idle",
           },
           {
@@ -5095,7 +5151,15 @@
             name: "Quicklog",
             short: "Q",
             detail: "Logging utilities",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "quicklog-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Idle",
           },
           {
@@ -5103,7 +5167,15 @@
             name: "Home-core",
             short: "H",
             detail: "Home automation",
-            workspace: "main",
+            workspaces: [
+              {
+                id: "home-core-main",
+                name: "main",
+                host: "ANON-PC",
+                branch: "main",
+                sampleSession: true,
+              },
+            ],
             state: "Idle",
           },
         ];
@@ -5410,7 +5482,13 @@
           lastScreen: "project",
           sidebarPreference: "priority",
         };
-        // Per-project persistent pane layouts. A split contains independently tabbed leaves.
+        // Workspace records and layouts last only in this mock tab; only split ratios are stored.
+        st.projects = projectData;
+        st.workspaceByProject = {};
+        st.workspaceViewState = {};
+        st.workspaceSeq = 0;
+        st.workspaceDraft = null;
+        st.workspaceError = "";
         st.layouts = {};
         st.tabsById = {};
         st.paneSeq = 0;
@@ -5559,13 +5637,28 @@
             body: "Summarize what changed, what is verified, outstanding blockers, and the next action in concise terms.",
           },
         ];
+        function workspaceFor(key) {
+          const project = st.projects.find((p) => p.id === key);
+          const id = project ? st.workspaceByProject[project.id] : key;
+          return (
+            st.projects.flatMap((p) => p.workspaces).find((w) => w.id === id) ||
+            (project || getProject(st.project)).workspaces[0]
+          );
+        }
+        function workspaceProject(id) {
+          return st.projects.find((p) => p.workspaces.some((w) => w.id === id));
+        }
+        function layoutKey(key) {
+          return key === "standalone" ? key : workspaceFor(key).id;
+        }
         function newTab(kind, project = null, opts = {}) {
           const id = "tab-" + ++st.tabSeq;
           let t = {
             id,
             kind,
             project,
-            host: "ANON-PC",
+            workspace: project ? workspaceFor(project).id : "standalone",
+            host: project ? workspaceFor(project).host : "ANON-PC",
             provider: "Pi",
             model: "Qwen 3.8 27B",
             reasoning: "Extra high",
@@ -5585,7 +5678,7 @@
           };
           if (kind === "terminal")
             t.terminal = {
-              host: "ANON-PC",
+              host: t.host,
               cwd: project ? "~/projects/" + project : "~",
               shell: "PowerShell",
               lines: [],
@@ -5603,19 +5696,32 @@
           };
         }
         function layoutFor(key) {
+          key = layoutKey(key);
           if (!st.layouts[key]) {
             if (key === "standalone") {
               let a = newTab("agent", null);
               st.layouts[key] = leaf([a]);
             } else {
-              let a = newTab("agent", key, {
-                fresh: false,
-                label: key === "seicho" ? "Pi · Recipe ingestion" : "Pi · Session",
+              const project = workspaceProject(key).id;
+              const workspace = workspaceFor(key);
+              let a = newTab("agent", project, {
+                workspace: key,
+                host: workspace.host,
+                fresh: !workspace.sampleSession,
+                label: workspace.sampleSession
+                  ? project === "seicho"
+                    ? "Pi · Recipe ingestion"
+                    : "Pi · Session"
+                  : "Ny samtale · eksempel",
               });
-              let b = newTab("diff", key);
-              let f = newTab("files", key);
-              let t = newTab("terminal", key);
-              let browser = newTab("browser", key);
+              if (!workspace.sampleSession) {
+                st.layouts[key] = leaf([a]);
+                return st.layouts[key];
+              }
+              let b = newTab("diff", project, { workspace: key });
+              let f = newTab("files", project, { workspace: key });
+              let t = newTab("terminal", project, { workspace: key });
+              let browser = newTab("browser", project, { workspace: key });
               st.layouts[key] = {
                 kind: "split",
                 id: "split-" + ++st.paneSeq,
@@ -5663,12 +5769,23 @@
           return st.tabsById[activeLeaf().selected] || null;
         }
         function enterLayout(key, paneId = null) {
+          key = layoutKey(key);
+          if (st.currentLayoutKey)
+            st.workspaceViewState[st.currentLayoutKey] = {
+              focusPaneId: st.focusPaneId,
+              maximizedPane: st.maximizedPane,
+            };
           st.currentLayoutKey = key;
+          if (key !== "standalone") {
+            st.project = workspaceProject(key).id;
+            st.workspaceByProject[st.project] = key;
+          }
           const root = layoutFor(key);
-          const p = paneId ? findLeaf(root, paneId) : leaves(root)[0];
+          const savedView = st.workspaceViewState[key];
+          const p = findLeaf(root, paneId || savedView?.focusPaneId) || leaves(root)[0];
+          st.maximizedPane = savedView?.maximizedPane || null;
           st.focusPaneId = p?.id || null;
           st.standalone = key === "standalone";
-          if (key !== "standalone") st.project = key;
           st.route = "workspace";
           st.inspector = null;
           st.paneMenu = null;
@@ -5676,7 +5793,7 @@
           st.snippetMenu = false;
         }
         function launchInProject(kind, project = null, paneId = null) {
-          const key = project || "standalone";
+          const key = layoutKey(project || "standalone");
           const root = layoutFor(key);
           let destination = paneId
             ? findLeaf(root, paneId)
@@ -5727,7 +5844,7 @@
             original = findLeaf(root, id);
           if (!original) return;
           const newP = leaf([
-            newTab("agent", st.currentLayoutKey === "standalone" ? null : st.currentLayoutKey),
+            newTab("agent", st.currentLayoutKey === "standalone" ? null : st.project),
           ]);
           st.layouts[st.currentLayoutKey] = {
             ...replaceLeaf(root, id, {
@@ -5754,7 +5871,7 @@
           render();
           document.getElementById("composer-" + tab.id)?.focus();
         }
-        const getProject = (id) => projectData.find((p) => p.id === id) || projectData[0];
+        const getProject = (id) => st.projects.find((p) => p.id === id) || st.projects[0];
         const projectStatus = (p) =>
           p.id === "seicho"
             ? [
@@ -5795,12 +5912,12 @@
         }
         function projectRow(p, active = true) {
           const exp = st.expanded.includes(p.id);
-          return `<div class="project-entry"><div class="project-row" draggable="true" data-drag-project="${p.id}"><button class="project-icon ${p.id}" aria-label="Open ${esc(p.name)}" data-action="project:${p.id}">${esc(p.short)}</button><button class="project-content" data-action="project:${p.id}"><span class="project-row-head">${esc(p.name)}${p.id === "shiori" && st.review === "pending" ? '<span class="status needs_review">Review</span>' : ""}</span><span class="project-row-sub">${esc(projectStatus(p))}</span></button><div class="project-actions"><button class="bare-icon" data-action="focus:${p.id}" aria-label="Make ${esc(p.name)} focus" title="Make focus">${ico("star", "xs")}</button><button class="bare-icon" data-action="expand:${p.id}" aria-expanded="${exp}" aria-label="${exp ? "Collapse" : "Expand"} ${esc(p.name)} workspaces">${ico(exp ? "down" : "chevron", "xs")}</button></div></div>${exp ? `<div class="project-children"><button data-action="workspace:${p.id}">${ico("git", "xs")} ${esc(p.workspace)} · native workspace</button><button data-action="project:${p.id}">${ico("layers", "xs")} Project home</button>${p.id === "shiori" ? '<button data-action="review:shiori">Review · SHI-118</button>' : ""}</div>` : ""}</div>`;
+          return `<div class="project-entry"><div class="project-row" draggable="true" data-drag-project="${p.id}"><button class="project-icon ${p.id}" aria-label="Open ${esc(p.name)}" data-action="project:${p.id}">${esc(p.short)}</button><button class="project-content" data-action="project:${p.id}"><span class="project-row-head">${esc(p.name)}${p.id === "shiori" && st.review === "pending" ? '<span class="status needs_review">Review</span>' : ""}</span><span class="project-row-sub">${esc(projectStatus(p))}</span></button><div class="project-actions">${!active ? btn(ico("plus", "xs"), "activate:" + p.id, "bare-icon", `aria-label="Activate ${esc(p.name)}"`) : ""}<button class="bare-icon" data-action="focus:${p.id}" aria-label="Make ${esc(p.name)} focus" title="Make focus">${ico("star", "xs")}</button><button class="bare-icon" data-action="expand:${p.id}" aria-expanded="${exp}" aria-label="${exp ? "Collapse" : "Expand"} ${esc(p.name)} workspaces">${ico(exp ? "down" : "chevron", "xs")}</button></div></div>${exp ? `<div class="project-children">${p.workspaces.map((w) => `<button data-action="workspaceSwitch:${w.id}">${ico("git", "xs")} ${esc(w.name)} · eksempel</button>`).join("")}${btn("Nytt arbeidsområde", "workspaceNew:" + p.id, "btn small quiet")}<button data-action="project:${p.id}">${ico("layers", "xs")} Project home</button>${p.id === "shiori" ? '<button data-action="review:shiori">Review · SHI-118</button>' : ""}</div>` : ""}</div>`;
         }
         function sidebar() {
           const focus = getProject(st.focus);
-          const active = projectData.filter((p) => p.id !== st.focus && st.active.includes(p.id));
-          const passive = projectData.filter((p) => p.id !== st.focus && !st.active.includes(p.id));
+          const active = st.projects.filter((p) => p.id !== st.focus && st.active.includes(p.id));
+          const passive = st.projects.filter((p) => p.id !== st.focus && !st.active.includes(p.id));
           const nav = [
             ["home", "Home", "home"],
             ["projects", "Projects", "folder"],
@@ -5810,7 +5927,7 @@
           const query = st.priorityQuery.toLowerCase();
           const pendingReviews =
             (task("TASK-21").status === "needs_review" ? 1 : 0) + (st.review === "pending" ? 1 : 0);
-          return `<aside id="app-nav" class="sidebar ${st.sidebarOpen ? "open" : ""}" aria-label="Navigation"${innerWidth <= 720 && !st.sidebarOpen ? ' inert aria-hidden="true"' : ""}><div class="brandbar"><span class="mark">P</span><span class="brand">Paseo</span></div><div class="sidebar-scroll"><nav class="nav-group">${nav.map(([key, label, ic]) => `<button class="nav-item ${st.route === key ? "active" : ""}" data-action="${key}"${st.route === key ? ' aria-current="page"' : ""}>${ico(ic)}<span>${label}</span>${key === "home" && pendingReviews ? `<span class="nav-count">${pendingReviews}</span>` : ""}</button>`).join("")}</nav><div class="sidebar-rule"></div><div class="side-section-title"><span class="label">Focus project</span><button data-action="focus-picker" aria-label="Choose focus project">${ico("edit", "xs")} Change</button></div>${!query || focus.name.toLowerCase().includes(query) ? `<div class="focus-project"><div class="focus-head"><div class="focus-label"><span>Current priority</span>${ico("star", "sm")}</div><div class="focus-row">${projIcon(focus)}<button class="focus-name" data-action="project:${focus.id}">${esc(focus.name)}</button></div><p class="focus-sub">${esc(focus.detail)}</p></div>${focus.id === "seicho" && task("TASK-21").status === "needs_review" ? `<button class="focus-alert" data-action="review:qa"><span><strong>Recipe QA awaits your review</strong><br><span class="dim">TASK-21 · Decision gate</span></span>${chevron}</button>` : `<button class="focus-alert" data-action="project:${focus.id}"><span>${esc(projectStatus(focus))}</span>${chevron}</button>`}<div class="focus-workspace">${ico("git", "xs")}<button data-action="workspace:${focus.id}">${esc(focus.workspace)} · Workspace</button>${ico("arrow", "xs")}</div></div>` : ""}<div class="side-section-title"><span class="label">Active projects</span><button data-action="priority-help">${active.length} ${ico("more", "xs")}</button></div><div class="project-section dropzone" data-drop-zone="active">${
+          return `<aside id="app-nav" class="sidebar ${st.sidebarOpen ? "open" : ""}" aria-label="Navigation"${innerWidth <= 720 && !st.sidebarOpen ? ' inert aria-hidden="true"' : ""}><div class="brandbar"><span class="mark">P</span><span class="brand">Paseo</span></div><div class="sidebar-scroll"><nav class="nav-group">${nav.map(([key, label, ic]) => `<button class="nav-item ${st.route === key ? "active" : ""}" data-action="${key}"${st.route === key ? ' aria-current="page"' : ""}>${ico(ic)}<span>${label}</span>${key === "home" && pendingReviews ? `<span class="nav-count">${pendingReviews}</span>` : ""}</button>`).join("")}</nav><div class="sidebar-rule"></div><div class="side-section-title"><span class="label">Focus project</span><button data-action="focus-picker" aria-label="Choose focus project">${ico("edit", "xs")} Change</button></div>${!query || focus.name.toLowerCase().includes(query) ? `<div class="focus-project"><div class="focus-head"><div class="focus-label"><span>Current priority</span>${ico("star", "sm")}</div><div class="focus-row">${projIcon(focus)}<button class="focus-name" data-action="project:${focus.id}">${esc(focus.name)}</button></div><p class="focus-sub">${esc(focus.detail)}</p></div>${focus.id === "seicho" && task("TASK-21").status === "needs_review" ? `<button class="focus-alert" data-action="review:qa"><span><strong>Recipe QA awaits your review</strong><br><span class="dim">TASK-21 · Decision gate</span></span>${chevron}</button>` : `<button class="focus-alert" data-action="project:${focus.id}"><span>${esc(projectStatus(focus))}</span>${chevron}</button>`}<div class="focus-workspace">${ico("git", "xs")}<button data-action="expand:${focus.id}" aria-expanded="${st.expanded.includes(focus.id)}">Arbeidsområder · ${focus.workspaces.length}</button></div>${st.expanded.includes(focus.id) ? `<div class="project-children">${focus.workspaces.map((w) => btn(esc(w.name) + " · eksempel", "workspaceSwitch:" + w.id)).join("")}${btn("Nytt arbeidsområde", "workspaceNew:" + focus.id, "btn small quiet")}</div>` : ""}</div>` : ""}<div class="side-section-title"><span class="label">Active projects</span><button data-action="priority-help">${active.length} ${ico("more", "xs")}</button></div><div class="project-section dropzone" data-drop-zone="active">${
             active
               .filter((p) => !query || p.name.toLowerCase().includes(query))
               .map((p) => projectRow(p))
@@ -5819,10 +5936,7 @@
             st.passiveOpen
               ? `<div class="passive-list dropzone" data-drop-zone="passive">${passive
                   .filter((p) => !query || p.name.toLowerCase().includes(query))
-                  .map(
-                    (p) =>
-                      `<div style="display:flex;align-items:center;gap:2px" draggable="true" data-drag-project="${p.id}"><button class="passive-row" data-action="project:${p.id}">${projIcon(p)}<span>${esc(p.name)}</span><span class="idle">Idle</span></button><button class="bare-icon" title="Activate project" aria-label="Activate ${p.name}" data-action="activate:${p.id}">${ico("plus", "xs")}</button></div>`,
-                  )
+                  .map((p) => projectRow(p, false))
                   .join("")}</div>`
               : ""
           }</div><div class="sidebar-bottom"><div class="usage-line"><span>Codex · 5-hour</span><span>76.5% remaining · stale</span></div><div class="usage-track"><span style="width:76.5%"></span></div><div class="usage-line"><span>Codex · weekly</span><span>43% remaining</span></div><div class="usage-track"><span style="width:43%"></span></div><div class="foot-actions"><button data-action="addProject" aria-label="Add project" title="Add project">${ico("folder")}</button><button data-action="tools" aria-label="Tools and skills" title="Tools and skills">${ico("grid")}</button><button data-action="usage" aria-label="Usage" title="Usage">${ico("bolt")}</button><button data-action="hosts" aria-label="Hosts" title="Hosts">${ico("network")}</button><button data-action="help" aria-label="Help" title="Help">${ico("info")}</button><button data-action="settings" aria-label="Settings" title="Settings">${ico("settings")}</button></div></div></aside>`;
@@ -5851,14 +5965,14 @@
                     settings: "Settings",
                     standalone: "Sessions without a project",
                   }[st.route] || st.route;
-          return `<header class="topbar"><button class="top-icon mobile-menu" data-action="mobile-menu" aria-label="Open navigation" aria-expanded="${st.sidebarOpen}" aria-controls="app-nav">${ico("menu")}</button><div class="topbar-crumb">${ico(st.route === "project" ? "folder" : st.route === "workspace" ? "git" : "layers", "sm")} <strong>${esc(label)}</strong>${st.route === "project" ? `<span class="crumb-sep">/</span>${esc(st.section)}` : st.route === "workspace" && !st.standalone ? `<span class="crumb-sep">/</span>${esc(getProject(st.project).workspace)}` : ""}</div><div class="topbar-spacer"></div><span class="mock-marker">PREVIEW</span>${sideChatEntry()}<button class="top-icon" data-action="toggleInspector" aria-label="${st.inspector ? "Hide" : "Show"} right sidebar" title="${st.inspector ? "Hide" : "Show"} right sidebar" aria-expanded="${!!st.inspector}" aria-controls="right-sidebar">${ico("split")}</button><button class="top-icon global-search" data-action="command" aria-label="Search Paseo" title="Search and commands · Ctrl+K">${ico("search")}</button><div class="create-trigger-wrap"><button class="top-icon global-create ${st.createMenu ? "active" : ""}" data-action="createMenu" aria-haspopup="menu" aria-expanded="${st.createMenu}" aria-label="Create agent or terminal" title="New agent or terminal">${ico("plus")}</button>${st.createMenu ? `<div class="create-menu" role="menu" aria-label="Create"><div class="create-menu-label">START SOMETHING</div><button role="menuitem" data-action="newAgent${contextProject ? ":attached" : ""}"><span class="create-menu-icon">${ico("message")}</span><span><strong>New agent</strong><small>${contextProject ? `In ${esc(getProject(contextProject).name)}` : "Start an independent agent"}</small></span>${ico("chevron", "sm")}</button><button role="menuitem" data-action="newTerminal${contextProject ? ":attached" : ""}"><span class="create-menu-icon">${ico("terminal")}</span><span><strong>New terminal</strong><small>${contextProject ? `In ${esc(getProject(contextProject).name)}` : "Independent terminal"}</small></span>${ico("chevron", "sm")}</button><div class="create-menu-divider"></div><button role="menuitem" data-action="modal:importSession"><span class="create-menu-icon">${ico("history")}</span><span><strong>Import session</strong><small>Resume previous agent work</small></span>${ico("chevron", "sm")}</button></div>` : ""}</div></header>`;
+          return `<header class="topbar"><button class="top-icon mobile-menu" data-action="mobile-menu" aria-label="Open navigation" aria-expanded="${st.sidebarOpen}" aria-controls="app-nav">${ico("menu")}</button><div class="topbar-crumb">${ico(st.route === "project" ? "folder" : st.route === "workspace" ? "git" : "layers", "sm")} <strong>${esc(label)}</strong>${st.route === "project" ? `<span class="crumb-sep">/</span>${esc(st.section)}` : st.route === "workspace" && !st.standalone ? `<span class="crumb-sep">/</span>${esc(workspaceFor(st.project).name)}` : ""}</div><div class="topbar-spacer"></div><span class="mock-marker">PREVIEW</span>${sideChatEntry()}<button class="top-icon" data-action="toggleInspector" aria-label="${st.inspector ? "Hide" : "Show"} right sidebar" title="${st.inspector ? "Hide" : "Show"} right sidebar" aria-expanded="${!!st.inspector}" aria-controls="right-sidebar">${ico("split")}</button><button class="top-icon global-search" data-action="command" aria-label="Search Paseo" title="Search and commands · Ctrl+K">${ico("search")}</button><div class="create-trigger-wrap"><button class="top-icon global-create ${st.createMenu ? "active" : ""}" data-action="createMenu" aria-haspopup="menu" aria-expanded="${st.createMenu}" aria-label="Create agent or terminal" title="New agent or terminal">${ico("plus")}</button>${st.createMenu ? `<div class="create-menu" role="menu" aria-label="Create"><div class="create-menu-label">START SOMETHING</div><button role="menuitem" data-action="newAgent${contextProject ? ":attached" : ""}"><span class="create-menu-icon">${ico("message")}</span><span><strong>New agent</strong><small>${contextProject ? `In ${esc(getProject(contextProject).name)}` : "Start an independent agent"}</small></span>${ico("chevron", "sm")}</button><button role="menuitem" data-action="newTerminal${contextProject ? ":attached" : ""}"><span class="create-menu-icon">${ico("terminal")}</span><span><strong>New terminal</strong><small>${contextProject ? `In ${esc(getProject(contextProject).name)}` : "Independent terminal"}</small></span>${ico("chevron", "sm")}</button><div class="create-menu-divider"></div><button role="menuitem" data-action="modal:importSession"><span class="create-menu-icon">${ico("history")}</span><span><strong>Import session</strong><small>Resume previous agent work</small></span>${ico("chevron", "sm")}</button></div>` : ""}</div></header>`;
         }
 
         function pageHead(title, desc, eyebrow, actions = "") {
           return `<div class="pagehead"><div class="left">${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${desc ? `<p>${desc}</p>` : ""}</div>${actions ? `<div class="buttons">${actions}</div>` : ""}</div>`;
         }
         function projectHeader(p) {
-          return `<div class="pagehead"><div class="left"><div class="eyebrow">PROJECT / ANON-PC / ${p.workspace.toUpperCase()}</div><h1 style="display:flex;gap:12px;align-items:center">${projIcon(p)} ${esc(p.name)}</h1><p>${esc(p.detail)}</p></div><div class="buttons">${btn(ico("edit", "sm") + " Capture", "capture", "btn quiet")}${btn(ico("plus", "sm") + " Agent", "newAgent:attached", "btn quiet")}${btn(ico("arrow", "sm") + " Open workspace", "workspace:" + p.id, "btn primary")}</div></div><nav class="tabs" aria-label="Project navigation">${[
+          return `<div class="pagehead"><div class="left"><div class="eyebrow">PROJECT / ${esc(workspaceFor(p.id).host)} / ${esc(workspaceFor(p.id).name.toUpperCase())}</div><h1 style="display:flex;gap:12px;align-items:center">${projIcon(p)} ${esc(p.name)}</h1><p>${esc(p.detail)}</p></div><div class="buttons">${btn("Nytt arbeidsområde", "workspaceNew:" + p.id, "btn quiet")}${btn(ico("edit", "sm") + " Capture", "capture", "btn quiet")}${btn(ico("plus", "sm") + " Agent", "newAgent:attached", "btn quiet")}${btn(ico("arrow", "sm") + " Open workspace", "workspace:" + p.id, "btn primary")}</div></div><nav class="tabs" aria-label="Project navigation">${[
             ["overview", "Overview"],
             ["plan", "Plan"],
             ["runs", "Runs"],
@@ -6179,7 +6293,7 @@
           return `<main class="view"><div class="screen project">${projectHeader(p)}${p.id === "seicho" ? (st.section === "overview" ? projectOverview() : st.section === "plan" ? planContent() : st.section === "slice" ? sliceContent() : st.section === "runs" ? runsContent() : st.section === "sequences" ? sequencesContent() : knowledgeContent()) : genericProject(p)}</div></main>`;
         }
         function genericProject(p) {
-          return `<div class="projecthero"><div><div class="eyebrow">CURRENT FOCUS</div><h2>${esc(p.detail)}</h2><p></p><div class="hero-meta"><span>${ico("git", "sm")} ${esc(p.workspace)} / ANON-PC</span><span>${ico("clock", "sm")} ${esc(projectStatus(p))}</span></div></div><div class="hero-action"><div class="top">Project context</div><h3>${esc(p.name)}</h3><p>Open the existing native workspace for source and sessions.</p>${btn("Open workspace", "workspace:" + p.id, "btn primary")}</div></div><div class="overview-layout"><section><div class="section-label"><h2>Work in motion</h2></div><button class="list-row" data-action="workspace:${p.id}"><span class="rail"></span><div class="info"><strong>${esc(p.detail)}</strong><p>Linked active workspace</p></div>${chevron}</button>${p.id === "shiori" ? `<button class="list-row" data-action="review:shiori"><span class="rail attn"></span><div class="info"><strong>Reviewer result presentation</strong><p>Changes require your review</p></div>${status("needs_review")}${chevron}</button>` : ""}</section><aside class="aside-panel"><h3>Project context</h3><div class="kv"><span>Repository</span><strong>${esc(p.id)}</strong><span>Host</span><strong>ANON-PC</strong><span>Current branch</span><strong>main</strong></div><div class="divider"></div>${btn("Capture note", "capture", "btn small quiet")}</aside></div>`;
+          return `<div class="projecthero"><div><div class="eyebrow">CURRENT FOCUS</div><h2>${esc(p.detail)}</h2><p></p><div class="hero-meta"><span>${ico("git", "sm")} ${esc(workspaceFor(p.id).name)} / ${esc(workspaceFor(p.id).host)} · eksempel</span><span>${ico("clock", "sm")} ${esc(projectStatus(p))}</span></div></div><div class="hero-action"><div class="top">Project context</div><h3>${esc(p.name)}</h3><p>Open the existing native workspace for source and sessions.</p>${btn("Open workspace", "workspace:" + p.id, "btn primary")}</div></div><div class="overview-layout"><section><div class="section-label"><h2>Work in motion</h2></div><button class="list-row" data-action="workspace:${p.id}"><span class="rail"></span><div class="info"><strong>${esc(p.detail)}</strong><p>Linked active workspace</p></div>${chevron}</button>${p.id === "shiori" ? `<button class="list-row" data-action="review:shiori"><span class="rail attn"></span><div class="info"><strong>Reviewer result presentation</strong><p>Changes require your review</p></div>${status("needs_review")}${chevron}</button>` : ""}</section><aside class="aside-panel"><h3>Project context</h3><div class="kv"><span>Repository</span><strong>${esc(p.id)}</strong><span>Maskin (eksempel)</span><strong>${esc(workspaceFor(p.id).host)}</strong><span>Gren (eksempel)</span><strong>${esc(workspaceFor(p.id).branch)}</strong></div><div class="divider"></div>${btn("Capture note", "capture", "btn small quiet")}</aside></div>`;
         }
         function homePage() {
           return `<main class="view"><div class="screen">${pageHead("Home", "", "PASEO", btn("Capture", "capture", "btn quiet"))}<div class="home-grid"><div><section class="home-focus"><div class="eyebrow">Focus</div><h2>${esc(getProject(st.focus).name)} <span style="font-size:14px;color:#b1c5e7;font-weight:500">/ ${esc(getProject(st.focus).detail)}</span></h2>${btn("Open focus project " + ico("arrow", "sm"), "project:" + st.focus, "btn small primary")}</section><div class="section-label"><h2>Needs you</h2></div>${task("TASK-21").status === "needs_review" ? `<button class="attention-item" data-action="review:qa"><span class="status needs_review">Review</span><div class="info"><strong>SEICHO · Recipe ingestion QA</strong><p>Automated checks passed. Visual and language acceptance still requires your decision.</p></div>${chevron}</button>` : ""}${st.review === "pending" ? `<button class="attention-item" data-action="review:shiori"><span class="status needs_review">Review</span><div class="info"><strong>Shiori · Reviewer results presentation</strong><p>Inspect the summary and code evidence, then approve or request changes.</p></div>${chevron}</button>` : ""}<div class="section-label" style="margin-top:30px"><h2>Next eligible work</h2></div>${st.taskList
@@ -6193,7 +6307,7 @@
             )}</div><div><div class="section-label"><h2>Current operations</h2></div><div class="portfolio-track"><div class="portfolio-stat"><strong>3</strong><span>Focused + active</span></div><div class="portfolio-stat"><strong>1</strong><span>Running agent</span></div><div class="portfolio-stat"><strong>${Number(st.review === "pending") + Number(task("TASK-21").status === "needs_review")}</strong><span>Review gates</span></div></div><div class="plain-section" style="margin-top:28px"><div class="section-label"><h2>Running across projects</h2></div><button class="list-row" data-action="workspace:shiori"><span class="rail"></span><div class="info"><strong>Shiori · Reviewer UX</strong><p>Running on ANON-PC · Pi orchestrator · activity observed</p></div><span class="status running">Running</span>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Recent verified outcomes</h2></div><button class="list-row" data-action="project:food-core"><span class="rail good"></span><div class="info"><strong>food-core · URL importer</strong><p>9 deterministic checks passed, evidence recorded</p></div>${chevron}</button></div><div class="plain-section"><div class="section-label"><h2>Usage and capacity</h2></div><div class="kv"><span>Codex · 5-hour</span><strong>76.5% · stale</strong><span>Codex · weekly</span><strong>43% · stale</strong><span>Usage data</span><strong>Stale sample · decide on the Usage page</strong></div>${btn("Inspect usage", "usage", "btn small quiet")}</div></div></div></div></main>`;
         }
         function projectsPage() {
-          return `<main class="view"><div class="screen compact">${pageHead("Projects", "Priority is your choice. Activity and review indicators come from the actual project state.", "GLOBAL / PROJECT INDEX", btn("Add project", "addProject", "btn primary"))}<div class="sheet"><div class="sheet-head"><h3>Portfolio</h3><span class="small dim">Move between Focus, Active and Passive using project actions</span></div><table class="simple-table"><thead><tr><th>Project</th><th>Priority</th><th>Current activity</th><th>Actions</th></tr></thead><tbody>${projectData.map((p) => `<tr><td><button data-action="project:${p.id}" style="display:flex;align-items:center;gap:10px;font-weight:700">${projIcon(p)} ${esc(p.name)}</button></td><td>${p.id === st.focus ? "Focus" : st.active.includes(p.id) ? "Active" : "Passive"}</td><td class="dim">${esc(projectStatus(p))}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">${btn("Set focus", "focus:" + p.id, "btn small quiet")}${btn(st.active.includes(p.id) ? "Make passive" : "Make active", st.active.includes(p.id) ? "deactivate:" + p.id : "activate:" + p.id, "btn small quiet")}</div></td></tr>`).join("")}</tbody></table></div></div></main>`;
+          return `<main class="view"><div class="screen compact">${pageHead("Projects", "Priority is your choice. Activity and review indicators come from the actual project state.", "GLOBAL / PROJECT INDEX", btn("Add project", "addProject", "btn primary"))}<div class="sheet"><div class="sheet-head"><h3>Portfolio</h3><span class="small dim">Move between Focus, Active and Passive using project actions</span></div><table class="simple-table"><thead><tr><th>Project</th><th>Priority</th><th>Current activity</th><th>Actions</th></tr></thead><tbody>${st.projects.map((p) => `<tr><td><button data-action="project:${p.id}" style="display:flex;align-items:center;gap:10px;font-weight:700">${projIcon(p)} ${esc(p.name)}</button></td><td>${p.id === st.focus ? "Focus" : st.active.includes(p.id) ? "Active" : "Passive"}</td><td class="dim">${esc(projectStatus(p))}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap">${btn("Set focus", "focus:" + p.id, "btn small quiet")}${btn(st.active.includes(p.id) ? "Make passive" : "Make active", st.active.includes(p.id) ? "deactivate:" + p.id : "activate:" + p.id, "btn small quiet")}</div></td></tr>`).join("")}</tbody></table></div></div></main>`;
         }
         const diffLines = [
           [" ", 1, 'import { normalizeRecipe } from "./normalize";'],
@@ -6487,7 +6601,7 @@
           } else {
             launchInProject(
               "diff",
-              st.currentLayoutKey === "standalone" ? null : st.currentLayoutKey,
+              st.currentLayoutKey === "standalone" ? null : st.project,
               activeLeaf().id,
             );
           }
@@ -6520,17 +6634,17 @@
         function newSessionBody(tab) {
           const project = tab.project ? getProject(tab.project) : null;
           const messages = tab.messages || [];
-          return `<div class="session-content ready-session"><div class="session-orientation"><span class="eyebrow">${project ? esc(project.name.toUpperCase()) + " / MAIN" : "NO PROJECT"} · ${esc(tab.host)}</span><span class="status ready">Ready</span></div>${
+          return `<div class="session-content ready-session"><div class="session-orientation"><span class="eyebrow">${project ? esc(project.name.toUpperCase()) + " / " + esc(workspaceFor(tab.workspace).branch) + " · eksempel" : "NO PROJECT"} · ${esc(tab.host)}</span><span class="status ready">Ready</span></div>${
             messages.length
               ? `<div class="fresh-transcript">${messages.map((m) => `<div class="message user"><div class="who">You</div>${esc(m.text)}</div>`).join("")}</div>`
-              : `<div class="first-message"><div class="session-glyph">${ico("message", "lg")}</div><h1>${project ? esc(project.name) : "New session"}</h1><p>${project ? esc(project.workspace) + " · " + esc(project.detail) : "Standalone · " + esc(tab.host)}</p></div><div class="session-shortcuts"><div class="section-label"><h2>Start with</h2><span class="dim small">Insert into the composer</span></div><div class="snippet-grid">${templates
+              : `<div class="first-message"><div class="session-glyph">${ico("message", "lg")}</div><h1>${project ? esc(project.name) : "New session"}</h1><p>${project ? esc(workspaceFor(tab.workspace).name) + " · " + esc(project.detail) : "Standalone · " + esc(tab.host)}</p></div><div class="session-shortcuts"><div class="section-label"><h2>Start with</h2><span class="dim small">Insert into the composer</span></div><div class="snippet-grid">${templates
                   .slice(0, 4)
                   .map(
                     (item) =>
                       `<button data-action="insertSnippet:${item.id}"><span class="snippet-icon">${ico(item.id === "investigate" ? "search" : item.id === "plan" ? "layers" : item.id === "implement" ? "code" : "shield", "sm")}</span><strong>${esc(item.name)}</strong><span>${esc(item.body.split(".")[0])}</span>${ico("arrow", "xs")}</button>`,
                   )
                   .join("")}</div></div>`
-          }<div class="session-lower"><span>${ico("git", "xs")} ${project ? esc(project.id) + " / main" : "No repository"}</span><span>${esc(tab.provider)} · ${esc(tab.model)} · ${esc(tab.reasoning)}</span></div></div>`;
+          }<div class="session-lower"><span>${ico("git", "xs")} ${project ? esc(project.id) + " / " + esc(workspaceFor(tab.workspace).branch) + " · eksempel" : "No repository"}</span><span>${esc(tab.provider)} · ${esc(tab.model)} · ${esc(tab.reasoning)}</span></div></div>`;
         }
         const providerModels = {
           Pi: [
@@ -6701,14 +6815,28 @@
           return `<div class="native-split axis-${node.axis}" style="flex:${weight} 1 0%">${renderNativeTree(node.a, node.ratio ?? 0.5)}<div class="native-split-handle" data-split-id="${node.id}" role="separator" tabindex="0" aria-valuemin="20" aria-valuemax="80" aria-valuenow="${Math.round((node.ratio ?? 0.5) * 100)}" aria-orientation="${node.axis === "horizontal" ? "vertical" : "horizontal"}" aria-label="${node.axis === "horizontal" ? "Vertical" : "Horizontal"} pane boundary" title="Drag or use arrow keys to resize"></div>${renderNativeTree(node.b, 1 - (node.ratio ?? 0.5))}</div>`;
         }
         function workspacePage() {
-          const key = st.currentLayoutKey || st.project || "seicho";
+          const key = layoutKey(st.currentLayoutKey || st.project || "seicho");
+          const workspace = key === "standalone" ? null : workspaceFor(key);
           const root = layoutFor(key);
           if (!st.focusPaneId) st.focusPaneId = leaves(root)[0].id;
           const all = leaves(root);
           const mobile = innerWidth <= 1150;
           const focused = activeLeaf();
           const maximized = !mobile && st.maximizedPane ? findLeaf(root, st.maximizedPane) : null;
-          return `<div class="workspace-frame native-workspace"><div class="workspace-location">${ico("git", "xs")} <strong>${key === "standalone" ? "No project" : esc(getProject(key).name)}</strong> / ${key === "standalone" ? "Session" : "main"}<span class="workspace-location-right">${maximized ? `<button class="btn small quiet" data-action="paneMaximize:${maximized.id}">Show all panes</button>` : ""}${all.length} ${all.length === 1 ? "pane" : "panes"} · ${Object.keys(st.tabsById).filter((id) => all.some((p) => p.tabs.includes(id))).length} tabs</span></div>${mobile && all.length > 1 ? `<div class="mobile-pane-picker">${all.map((p, i) => `<button class="${focused.id === p.id ? "selected" : ""}" data-action="paneFocus:${p.id}">${i + 1} · ${esc(st.tabsById[p.selected]?.label || "Empty pane")}</button>`).join("")}</div>` : ""}<div class="native-work-area">${mobile ? renderNativeLeaf(focused) : maximized ? renderNativeLeaf(maximized) : renderNativeTree(root)}</div></div>`;
+          return `<div class="workspace-frame native-workspace" data-workspace="${esc(key)}"><div class="workspace-location" style="height:auto;min-height:31px;flex-wrap:wrap">${ico("git", "xs")} <strong>${workspace ? esc(getProject(st.project).name) : "No project"}</strong> / ${
+            workspace
+              ? `<select style="max-width:130px;background:#151a24;color:inherit" id="workspace-switcher" aria-label="Velg arbeidsområde">${getProject(
+                  st.project,
+                )
+                  .workspaces.map(
+                    (w) =>
+                      `<option value="${w.id}" ${w.id === key ? "selected" : ""}>${esc(w.name)}</option>`,
+                  )
+                  .join(
+                    "",
+                  )}</select>${btn("Nytt arbeidsområde", "workspaceNew:" + st.project, "btn small quiet")}<span title="Ingen filer eller samtaler kjøres" style="max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Eksempel · ${esc(workspace.host)} · ${esc(workspace.branch)}</span>`
+              : "Session"
+          }<span class="workspace-location-right">${maximized ? `<button class="btn small quiet" data-action="paneMaximize:${maximized.id}">Show all panes</button>` : ""}${all.length} ${all.length === 1 ? "pane" : "panes"} · ${Object.keys(st.tabsById).filter((id) => all.some((p) => p.tabs.includes(id))).length} tabs</span></div>${mobile && all.length > 1 ? `<div class="mobile-pane-picker">${all.map((p, i) => `<button class="${focused.id === p.id ? "selected" : ""}" data-action="paneFocus:${p.id}">${i + 1} · ${esc(st.tabsById[p.selected]?.label || "Empty pane")}</button>`).join("")}</div>` : ""}<div class="native-work-area">${mobile ? renderNativeLeaf(focused) : maximized ? renderNativeLeaf(maximized) : renderNativeTree(root)}</div></div>`;
         }
         function qaInspector() {
           let q = task("TASK-21");
@@ -7054,6 +7182,7 @@
               addTask: "New task proposal",
               import: "Import artifact",
               importSession: "Import session",
+              workspace: "Nytt arbeidsområde",
               schedule: "Ny tidsplan",
               scheduleLink: "Legg til i en tidsplan",
               skill: "Review skill or tool",
@@ -7070,6 +7199,10 @@
           if (m === "prototype") {
             body = `<p class="section-caption">A versioned, inspectable HTML design reference. Generating a prototype and accepting it are separate actions.</p><div class="thumb-ui"><div class="windowbar">Recipe import interface · v2 · sample</div><div class="bar" style="width:94%"></div><div class="bar" style="width:72%"></div><div class="bar short"></div></div><div class="kv"><span>Template</span><strong>Paseo / native dark</strong><span>Revision</span><strong>design-v2</strong><span>Browser capture</span><strong>Sample capture</strong><span>Accepted</span><strong>${st.acceptedDesign ? "Yes" : "No"}</strong></div>`;
             confirm = st.acceptedDesign ? "Close" : "Accept reference v2";
+          } else if (m === "workspace") {
+            const draft = st.workspaceDraft;
+            body = `<p>Et arbeidsområde i dette eksempelet lagrer bare oppsettet på skjermen. Ingen filer, grener eller samtaler opprettes på en maskin.</p><div class="form-row"><label for="workspace-name">Navn</label><input id="workspace-name" data-focus-group="workspace" maxlength="60" value="${esc(draft.name)}"></div><div class="form-row"><label for="workspace-host">Maskin (eksempel)</label><select id="workspace-host"><option value="">Velg maskin</option>${["ANON-PC", "anon2", "anon3"].map((host) => `<option value="${host}" ${draft.host === host ? "selected" : ""}>${host} · eksempel</option>`).join("")}</select></div><div class="form-row"><label for="workspace-branch">Navn på gren eller arbeidskopi (eksempel)</label><input id="workspace-branch" maxlength="80" value="${esc(draft.branch)}"></div>${st.workspaceError ? `<p role="alert">${esc(st.workspaceError)}</p>` : ""}`;
+            confirm = "Legg til arbeidsområde";
           } else if (m === "scheduleLink") {
             body = `<p>${esc(scheduleTargetTitle(st.scheduleSource))}</p><p>Velg en tidsplan, eller lag en ny. Tidsplanen peker på det samme arbeidet; den lager ingen kopi. Ingenting kjøres.</p><div class="seq-actions">${st.schedules.map((s) => btn(esc(s.name), `scheduleAttach:${s.id}`, "btn quiet")).join("")}</div>`;
             confirm = "Lag ny tidsplan";
@@ -7094,7 +7227,7 @@
             body = `<p class="section-caption">Prototype screen. The navigation works; nothing is written to a host, deployment, credential, or external service.</p><div class="form-row"><label>${title}</label><input data-focus-group="modal" id="modal-draft" placeholder="Optional sample details"></div>`;
             confirm = "Save sample entry";
           }
-          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m.startsWith("schedule") ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m.startsWith("schedule") ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "schedule" ? "scheduleSave" : m === "scheduleLink" ? "scheduleCreate" : "modalConfirm", "btn primary")}</div></div></div>`;
+          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m.startsWith("schedule") || m === "workspace" ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m.startsWith("schedule") || m === "workspace" ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "workspace" ? "workspaceSave" : m === "schedule" ? "scheduleSave" : m === "scheduleLink" ? "scheduleCreate" : "modalConfirm", "btn primary")}</div></div></div>`;
         }
         let previousDialog = false,
           dialogOpener = null;
@@ -8340,7 +8473,7 @@
               } else {
                 launchInProject(
                   kind,
-                  st.currentLayoutKey === "standalone" ? null : st.currentLayoutKey,
+                  st.currentLayoutKey === "standalone" ? null : st.project,
                   p.id,
                 );
               }
@@ -8350,7 +8483,7 @@
               const p = findLeaf(layoutFor(st.currentLayoutKey), val);
               if (!p) break;
               const kind = rest[1],
-                project = st.currentLayoutKey === "standalone" ? null : st.currentLayoutKey;
+                project = st.currentLayoutKey === "standalone" ? null : st.project;
               const id = launchInProject(kind, project, p.id);
               if (kind === "diff" || kind === "files" || kind === "browser")
                 st.tabsById[id].fresh = false;
@@ -8472,6 +8605,48 @@
             case "workspace":
               enterLayout(val || st.project);
               break;
+            case "workspaceSwitch":
+              if (workspaceProject(val)) enterLayout(val);
+              break;
+            case "workspaceNew":
+              st.workspaceDraft = {
+                project: getProject(val || st.project).id,
+                name: "",
+                host: "ANON-PC",
+                branch: "",
+              };
+              st.workspaceError = "";
+              st.modal = "workspace";
+              break;
+            case "workspaceSave": {
+              const draft = st.workspaceDraft;
+              if (!draft) break;
+              const name = draft.name.trim();
+              const branch = draft.branch.trim();
+              const project = getProject(draft.project);
+              if (
+                !name ||
+                name.length > 60 ||
+                !branch ||
+                branch.length > 80 ||
+                !["ANON-PC", "anon2", "anon3"].includes(draft.host)
+              ) {
+                st.workspaceError = "Fyll ut navn, maskin og navn på gren eller arbeidskopi.";
+                break;
+              }
+              if (project.workspaces.some((w) => w.name.toLowerCase() === name.toLowerCase())) {
+                st.workspaceError = "Velg et navn som ikke er brukt i prosjektet.";
+                break;
+              }
+              const id = project.id + "-workspace-" + ++st.workspaceSeq;
+              project.workspaces.push({ id, name, host: draft.host, branch, sampleSession: false });
+              st.expanded = [...new Set([...st.expanded, project.id])];
+              st.workspaceDraft = null;
+              st.workspaceError = "";
+              st.modal = null;
+              enterLayout(id);
+              break;
+            }
             case "section":
               st.section = val;
               st.inspector = null;
@@ -9146,7 +9321,7 @@
                 toast("Session is no longer available.");
                 break;
               }
-              const key = tab.project || "standalone";
+              const key = tab.workspace || layoutKey(tab.project || "standalone");
               let p = leaves(layoutFor(key)).find((p) => p.tabs.includes(tab.id));
               if (!p) {
                 p = leaves(layoutFor(key))[0];
@@ -9226,6 +9401,10 @@
               st.modal = cmd;
               break;
             case "modal":
+              if (val === "workspace") {
+                action("workspaceNew");
+                break;
+              }
               if (val === "schedule") {
                 action("scheduleNew");
                 break;
@@ -9415,6 +9594,8 @@
         });
         document.addEventListener("input", (e) => {
           const id = e.target.id;
+          if (["workspace-name", "workspace-branch"].includes(id) && st.workspaceDraft)
+            st.workspaceDraft[id.slice("workspace-".length)] = e.target.value;
           if (["schedule-name", "schedule-at", "schedule-every"].includes(id) && st.scheduleDraft) {
             const field = id.slice("schedule-".length);
             if (field === "name") st.scheduleDraft.name = e.target.value;
@@ -9449,6 +9630,14 @@
           }
         });
         document.addEventListener("change", (e) => {
+          if (e.target.id === "workspace-switcher") {
+            action("workspaceSwitch:" + e.target.value);
+            return;
+          }
+          if (e.target.id === "workspace-host" && st.workspaceDraft) {
+            st.workspaceDraft.host = e.target.value;
+            return;
+          }
           if (e.target.id === "schedule-parent") {
             action("scheduleField:parentRef:" + e.target.value);
             return;
@@ -9577,7 +9766,7 @@
           if (!z) return;
           e.preventDefault();
           const id = e.dataTransfer?.getData("text/plain");
-          if (!projectData.some((p) => p.id === id) || id === st.focus) return;
+          if (!st.projects.some((p) => p.id === id) || id === st.focus) return;
           if (z.dataset.dropZone === "active") st.active = [...new Set([...st.active, id])];
           else st.active = st.active.filter((x) => x !== id);
           persist();
