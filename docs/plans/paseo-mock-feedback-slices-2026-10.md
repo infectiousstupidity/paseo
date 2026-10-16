@@ -1,6 +1,6 @@
 # Paseo mock — feedback slices (2026-10-15)
 
-**Status:** in progress — S0–S10 are implemented in the mock (harness 401/401 at the S10 checkpoint). S11a, S11b, S12, S13 remain. **Target:** `docs/mockups/paseo-mock.html` (6,441 lines, untracked). **Type:** mock/prototype only — no production Paseo, Shiori, SEICHO or Pivolution change, no real execution, no real Git.
+**Status:** in progress — S0–S11a are implemented in the mock (harness 474/474 at the S11a checkpoint). S11b, S12, S13 remain. **Target:** `docs/mockups/paseo-mock.html` (6,441 lines, untracked). **Type:** mock/prototype only — no production Paseo, Shiori, SEICHO or Pivolution change, no real execution, no real Git.
 
 Governing contract: [Paseo product direction](paseo-product-direction-2026-10.md) (accepted directions: contextual anchored feedback, Ask/Comment/Steer semantics, native pane/tab parity, "Proposed until tested: exact labels/tabs"). Prototype scenario contract: [paseo-next-prototype-contract.md](../design/paseo-next-prototype-contract.md).
 
@@ -184,7 +184,7 @@ S12 (workspaces)            independent
 S13 (language sweep)        last
 ```
 
-**Status:** S0–S10 done (plus Stop/Interrupt on the execution tree, which was not in the plan). S11a is next, then S11b, S12, and S13 last.
+**Status:** S0–S11a done (plus Stop/Interrupt on the execution tree, which was not in the plan). S11b is next, then S12, and S13 last.
 
 Fastest useful path if you want to stop early: **S0 → S1 → S2 → S4 → S5 → S3** fixes the daily friction (width, duplicate controls, closing, sub-line targeting, save-and-return, diagram bloat) without needing any new product decision. S6/S7/S9/S11 are the ones that need D1–D4 agreed first.
 

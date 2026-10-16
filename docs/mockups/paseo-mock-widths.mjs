@@ -23,6 +23,8 @@ const screens = [
   // one part opened as a page of its own has to sit in the same content column.
   ["project/plan/parts", ["project:seicho", "section:plan", "lens:workstreams"]],
   ["project/slice", ["project:seicho", "section:plan", "lens:workstreams", "slice:foundation"]],
+  // Slice S11a: a sequence is a project section of its own, so it gets the same column.
+  ["project/sequences", ["project:seicho", "section:sequences"]],
   ["project/runs", ["project:seicho", "section:runs"]],
   ["project/knowledge", ["project:seicho", "section:knowledge"]],
   ["history", ["history"]],

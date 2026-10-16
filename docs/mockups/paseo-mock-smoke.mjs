@@ -255,6 +255,61 @@ page("project:seicho/plan:parts", () => {
 });
 page("project:seicho/slice", () => (action("slice:foundation"), render()));
 
+// --- slice S11a: a sequence is one run made of work that already exists. The page only
+// exists once there is a sequence, so each page below makes one first. The dead-end probe
+// then replays the sequence's own controls in the state they appear in.
+page("project:seicho/sequences", () => {
+  resetSampleTasks();
+  action("project:seicho");
+  action("section:plan");
+  const id = sequenceFromBoard();
+  action(`sequenceStart:${id}`);
+  // Step 1 is TASK-20, which was finished before the sequence existed.
+  action(`sequenceRun:${id}`);
+  action("clearToast");
+  return render();
+});
+page("project:seicho/sequences:running", () => {
+  resetSampleTasks();
+  action("project:seicho");
+  action("section:plan");
+  const id = sequenceFromBoard();
+  action(`sequenceStart:${id}`);
+  action(`sequenceRun:${id}`);
+  // Step 2 is TASK-24: the sample run is in flight, so the step is not settled yet.
+  action(`sequenceRun:${id}`);
+  action("clearToast");
+  return render();
+});
+page("project:seicho/sequences:blocked", () => {
+  resetSampleTasks();
+  action("project:seicho");
+  action("section:plan");
+  const id = sequenceFromBoard();
+  action(`sequenceStart:${id}`);
+  action(`sequenceRun:${id}`);
+  action(`sequenceRun:${id}`);
+  action("finishRun");
+  // Step 3 is TASK-21, which is in review. The default policy stops the sequence there.
+  action(`sequenceRun:${id}`);
+  action("clearToast");
+  return render();
+});
+page("project:seicho/sequences:ask", () => {
+  resetSampleTasks();
+  action("project:seicho");
+  action("section:plan");
+  const id = sequenceFromBoard();
+  action(`sequencePolicy:${id}:ask`);
+  action(`sequenceStart:${id}`);
+  action(`sequenceRun:${id}`);
+  action(`sequenceRun:${id}`);
+  action("finishRun");
+  action(`sequenceRun:${id}`);
+  action("clearToast");
+  return render();
+});
+
 // ---------------------------------------------------------------- 2. no leaked placeholders
 
 const LEAK = /\bundefined\b|\bNaN\b|\[object Object\]|\[object Object\]|>\s*null\s*</g;
@@ -412,6 +467,41 @@ function inspectorMarkup(out) {
   if (from < 0) throw new Error("no inspector on screen");
   const to = out.indexOf("</aside>", from);
   return out.slice(from, to < 0 ? undefined : to);
+}
+
+// --- slice S11a helpers: a sequence is a list of pointers at records that already exist,
+// so the checks read the steps and the records behind them instead of the wording.
+// The task records live outside st, so a state snapshot cannot put them back. Sequence
+// pages and scenarios name the sample statuses they assume; this is the fixture's own start.
+function resetSampleTasks() {
+  const fixture = {
+    "TASK-20": "done",
+    "TASK-24": "ready",
+    "TASK-21": "needs_review",
+    "TASK-22": "blocked",
+    "TASK-25": "planned",
+  };
+  for (const [id, value] of Object.entries(fixture)) api.task(id).status = value;
+  st.currentRunningTask = null;
+  api.recalc();
+}
+function sequenceFromBoard() {
+  action("sequenceFromQueue");
+  return st.sequences[st.sequences.length - 1].id;
+}
+function seqOf(id) {
+  const seq = st.sequences.find((s) => s.id === id);
+  if (!seq) throw new Error(`no sequence ${id}`);
+  return seq;
+}
+const runningSteps = (seq) => seq.steps.filter((s) => s.status === "running");
+
+// The workspace strip, alone. A check against the whole page could pass on the sequence
+// page's own text, which is not what "the sidebar says it" means.
+function stripMarkup(out) {
+  const from = out.indexOf('class="seq-strip"');
+  if (from < 0) throw new Error("no sequence strip on screen");
+  return out.slice(from, out.indexOf("</button>", from) + 9);
 }
 
 const scenarios = [
@@ -1579,6 +1669,323 @@ const scenarios = [
       if (first.includes("display:none")) throw new Error("content on the page is hidden");
       // A part with no run says so instead of showing an invented one.
       return first.includes("No run has been made for this part yet.");
+    },
+    expect: (ok) => ok === true,
+  },
+  // --- slice S11a: one run made of runs and tasks that already exist. Every check below
+  // follows a step to the record it points at, because a copy would be the bug.
+  {
+    name: "the plan board puts its tasks in a sequence in the order the board shows them",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      const seq = seqOf(id);
+      const wanted = st.taskOrder;
+      const got = seq.steps.map((s) => s.ref);
+      if (got.join(",") !== wanted.join(","))
+        throw new Error(`steps are ${got.join(", ")}, the board shows ${wanted.join(", ")}`);
+      // Each step points at a task record; none of them is a copy of one.
+      if (seq.steps.some((s) => s.kind !== "task" || !api.task(s.ref)))
+        throw new Error("a step does not point at a task record");
+      if (seq.status !== "not_started") throw new Error("making the sequence started it");
+      if (st.currentRunningTask) throw new Error("making the sequence started a run");
+      const out = render();
+      const absent = wanted.filter((ref) => !out.includes(ref));
+      if (absent.length) throw new Error(`steps missing from the page: ${absent.join(", ")}`);
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "sequence steps move with the same up and down controls the task queue uses",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      const order = () =>
+        seqOf(id)
+          .steps.map((s) => s.ref)
+          .join(",");
+      const before = order();
+      const out = render();
+      const moves = [...out.matchAll(/data-action="seqMove:/g)].length;
+      if (moves !== 2 * seqOf(id).steps.length)
+        throw new Error(`${moves} move controls for ${seqOf(id).steps.length} steps`);
+      action(`seqMove:${id}:1:down`);
+      if (order() === before) throw new Error("the order did not change");
+      action(`seqMove:${id}:2:up`);
+      if (order() !== before) throw new Error("moving it back did not restore the order");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "a sequence takes one step at a time and never starts the next one by itself",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      const seq = seqOf(id);
+      action(`sequenceStart:${id}`);
+      if (runningSteps(seq).length) throw new Error("starting the sequence started a step");
+      // Step 1 is TASK-20, finished before the sequence existed: taking it runs nothing.
+      action(`sequenceRun:${id}`);
+      if (seq.steps[0].status !== "done")
+        throw new Error("the finished task did not settle step 1");
+      if (st.currentRunningTask) throw new Error("taking a finished step started a run");
+      action(`sequenceRun:${id}`);
+      if (runningSteps(seq).length !== 1) throw new Error("more than one step is running");
+      if (api.task("TASK-24").status !== "running")
+        throw new Error("step 2 did not start its task");
+      // The sample run finishes through the same control the task page uses, and the
+      // sequence only points at the next step.
+      action("finishRun");
+      if (seq.steps[1].status !== "done") throw new Error("the finished run did not settle step 2");
+      if (runningSteps(seq).length) throw new Error("the sequence started the next step itself");
+      if (api.task("TASK-21").status === "running") throw new Error("the next step started itself");
+      const out = render();
+      if (!out.includes("Step 3 of 5 is next."))
+        throw new Error("the page does not name the next step");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "a step that cannot be taken is handled by the policy you chose, and the page says so",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      // Walk to the step that cannot be taken: TASK-21 is in review, and that decision is
+      // yours. Each sequence gets there through the same clicks.
+      const toBlockedStep = (id) => {
+        action(`sequenceStart:${id}`);
+        action(`sequenceRun:${id}`);
+        action(`sequenceRun:${id}`);
+        if (runningSteps(seqOf(id)).length) action("finishRun");
+        action(`sequenceRun:${id}`);
+      };
+      const stop = sequenceFromBoard();
+      toBlockedStep(stop);
+      const s1 = seqOf(stop);
+      if (s1.status !== "stopped" || s1.steps[2].status !== "blocked")
+        throw new Error(`Stop policy left ${s1.status}/${s1.steps[2].status}`);
+      if (s1.steps.slice(3).some((s) => s.status !== "pending"))
+        throw new Error("steps after a stopped step were started");
+      if (!render().includes("is in review"))
+        throw new Error("the page does not say why it stopped");
+      const go = sequenceFromBoard();
+      action(`sequencePolicy:${go}:continue`);
+      toBlockedStep(go);
+      const s2 = seqOf(go);
+      if (s2.steps[2].status !== "skipped")
+        throw new Error("Keep going did not pass the step over");
+      if (s2.status !== "running") throw new Error(`Keep going left the sequence ${s2.status}`);
+      if (!render().includes("You chose to keep going"))
+        throw new Error("the passed-over step does not say it was your policy");
+      const ask = sequenceFromBoard();
+      action(`sequencePolicy:${ask}:ask`);
+      toBlockedStep(ask);
+      const s3 = seqOf(ask);
+      if (s3.steps[2].status !== "ask" || s3.status !== "waiting")
+        throw new Error(`Ask me each time left ${s3.status}/${s3.steps[2].status}`);
+      const askPage = render();
+      if (
+        !askPage.includes("Skip this step and keep going") ||
+        !askPage.includes("Stop the sequence")
+      )
+        throw new Error("the choice is not on the page");
+      action(`sequenceSkip:${ask}:2`);
+      if (s3.steps[2].status !== "skipped") throw new Error("skipping the step did nothing");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "a blocked step offers the record that unblocks it, not a retry that repeats the answer",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      action(`sequenceStart:${id}`);
+      action(`sequenceRun:${id}`);
+      action(`sequenceRun:${id}`);
+      action("finishRun");
+      action(`sequenceRun:${id}`);
+      const out = render();
+      if (out.includes("sequenceRetry:")) throw new Error("a retry control is offered");
+      if (!out.includes('data-action="review:qa"'))
+        throw new Error("the blocked step does not lead to the review that blocks it");
+      // The step is not offered as runnable while it cannot be taken.
+      if (out.includes(`data-action="sequenceRun:${id}"`))
+        throw new Error("a blocked step is offered as runnable");
+      // Decide the review on the record itself, and the old block goes away: the step is
+      // offered again instead of repeating a reason that no longer holds.
+      action("review:qa");
+      action("approveQA");
+      const seq = seqOf(id);
+      if (seq.steps[2].status !== "pending")
+        throw new Error(`the step is ${seq.steps[2].status} after the review was decided`);
+      if (seq.status !== "running") throw new Error(`the sequence is ${seq.status}`);
+      if (!render().includes(`data-action="sequenceRun:${id}"`))
+        throw new Error("the step is not offered again once it can be taken");
+      action(`sequenceRun:${id}`);
+      if (seq.steps[2].status !== "done")
+        throw new Error("the approved task did not settle step 3");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "an approval step waits for you, and approving it is what finishes the sequence",
+    setup: () => {
+      resetSampleTasks();
+      action("schedules");
+    },
+    run: () => {
+      action("sequenceNew");
+      const seq = st.sequences[st.sequences.length - 1];
+      const id = seq.id;
+      action(`sequencePolicy:${id}:continue`);
+      action(`sequenceStart:${id}`);
+      action(`sequenceRun:${id}`);
+      if (runningSteps(seq).length) action("finishRun");
+      action(`sequenceRun:${id}`);
+      action(`sequenceRun:${id}`);
+      action(`sequenceRun:${id}`);
+      if (seq.steps[3].status !== "approval")
+        throw new Error(`the review step is ${seq.steps[3].status}, not waiting for approval`);
+      if (seq.status !== "waiting") throw new Error(`the sequence is ${seq.status}`);
+      if (!render().includes("waits for your approval"))
+        throw new Error("the page does not say the step is waiting for you");
+      if (runningSteps(seq).length) throw new Error("a step was left running");
+      action(`sequenceApprove:${id}:3`);
+      if (seq.steps[3].status !== "done")
+        throw new Error("approving did not settle the prompt step");
+      if (seq.status !== "finished") throw new Error(`the sequence is ${seq.status}`);
+      if (!render().includes("Every step is settled."))
+        throw new Error("the page does not say it is done");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "the Runs page adds its sample run to a sequence without making a second run",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:runs");
+    },
+    run: () => {
+      if (!render().includes("sequenceAddRun:RUN-S21"))
+        throw new Error("the Runs page has no way to put its run in a sequence");
+      action("sequenceAddRun:RUN-S21");
+      const seq = st.sequences[st.sequences.length - 1];
+      const step = seq.steps[seq.steps.length - 1];
+      if (step.kind !== "run" || step.ref !== "RUN-S21")
+        throw new Error("the new step is not a pointer at RUN-S21");
+      const out = render();
+      if (!out.includes("Run from the Runs page"))
+        throw new Error("the step does not say where it comes from");
+      if (!out.includes("it does not start a second run"))
+        throw new Error("the page does not say the run is followed, not copied");
+      if (st.sequences.filter((s) => s.id === seq.id).length !== 1)
+        throw new Error("adding the run made a second sequence");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "the schedules page can make a sequence and shows the order it will run in",
+    setup: () => {
+      resetSampleTasks();
+      action("schedules");
+    },
+    run: () => {
+      if (!render().includes("sequenceNew"))
+        throw new Error("the schedules page has no way to make a sequence");
+      action("sequenceNew");
+      const seq = st.sequences[st.sequences.length - 1];
+      const chain = render().match(/<div class="seq-preview">([\s\S]*?)<\/div>/);
+      if (!chain) throw new Error("the page does not show the order");
+      const names = [...chain[1].matchAll(/<span>([^<]*)<\/span>/g)].map((m) => m[1]);
+      const wanted = ["TASK-24", "TASK-21", "TASK-22", "review step"];
+      if (names.join(" > ") !== wanted.join(" > "))
+        throw new Error(`the order reads ${names.join(" > ")}, not ${wanted.join(" > ")}`);
+      if (seq.steps.length !== 4) throw new Error(`${seq.steps.length} steps`);
+      if (seq.steps[3].gate !== "approval")
+        throw new Error("the review step is not an approval step");
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "the workspace sidebar strip says which step the sequence is on, and opens it",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      action("workspace");
+      action("inspect:shioriHome");
+      if (render().includes('class="seq-strip"'))
+        throw new Error("a sequence that was never started is in the sidebar");
+      action(`sequenceStart:${id}`);
+      action(`sequenceRun:${id}`);
+      const strip = stripMarkup(render());
+      const m = strip.match(/step (\d+) of (\d+)/);
+      if (!m) throw new Error("the strip does not say which step it is on");
+      if (m[1] !== "2" || Number(m[2]) !== seqOf(id).steps.length)
+        throw new Error(`the strip reads step ${m[1]} of ${m[2]}`);
+      if (strip.includes("display:none"))
+        throw new Error("the strip is hidden with an inline style");
+      action(`sequenceOpen:${id}`);
+      if (st.route !== "project" || st.section !== "sequences")
+        throw new Error(`the strip landed on ${st.route}/${st.section}`);
+      return true;
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "a sequence never claims a run of its own",
+    setup: () => {
+      resetSampleTasks();
+      action("project:seicho");
+      action("section:plan");
+    },
+    run: () => {
+      const id = sequenceFromBoard();
+      action(`sequenceStart:${id}`);
+      action(`sequenceRun:${id}`);
+      action(`sequenceRun:${id}`);
+      const out = render();
+      const plain = out.replace(/<[^>]+>/g, " ");
+      if (!plain.includes("Nothing runs until you start a step."))
+        throw new Error("the page does not say it runs nothing by itself");
+      if (!plain.includes("No real execution."))
+        throw new Error("starting a step does not say the run is a sample");
+      if (!plain.includes("Running (sample)"))
+        throw new Error("the running state is not labelled as sample");
+      if (!plain.includes("It is a list, not a runner."))
+        throw new Error("the page does not say what a sequence is not");
+      return true;
     },
     expect: (ok) => ok === true,
   },

@@ -4882,6 +4882,39 @@
       .knowledge-notes .note-line + .note-line {
         margin-top: 10px;
       }
+      /* Sequences (slice S11a): a sequence points at work that already exists, so its
+         strip and step rows only say what you can do next. */
+      .seq-strip {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface2);
+        padding: 8px 11px;
+        margin: 10px 0 0;
+      }
+      .seq-preview {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 14px 16px;
+      }
+      .seq-preview span {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--base);
+        padding: 6px 9px;
+      }
+      .seq-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .seq-block {
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--warm);
+        padding: 10px 12px;
+        margin: 14px 0 0;
+      }
       @media (max-width: 720px) {
         .side-drawer {
           width: 100%;
@@ -5426,6 +5459,14 @@
         // Agent control: what you asked for (stop / interrupt / resume), kept apart from the
         // sample run data so the request is visible on screen and never changes the sample.
         st.agentState = {};
+        // Sequences (slice S11a): an ordered list of work that already exists. A step points
+        // at a task record, a run record or a prompt you wrote; the sequence never holds a
+        // copy of that work, so there is nothing to keep in sync. currentSequence is the one
+        // the workspace strip follows. Not persisted: every step references sample records.
+        st.sequences = [];
+        st.sequenceSeq = 0;
+        st.selectedSequence = null;
+        st.currentSequence = null;
         const storedSnippets = readStored("paseo-snippet-library", []);
         st.savedSnippets = Array.isArray(storedSnippets)
           ? storedSnippets
@@ -5769,11 +5810,16 @@
             ["overview", "Overview"],
             ["plan", "Plan"],
             ["runs", "Runs"],
+            ["sequences", "Sequences"],
             ["knowledge", "Knowledge"],
           ]
             .map(
               ([id, label]) =>
-                `<button data-action="section:${id}" class="${st.section === id || (id === "plan" && st.section === "slice") ? "active" : ""}">${label}${id === "plan" ? ' <span class="tab-count">5</span>' : ""}</button>`,
+                `<button data-action="section:${id}" class="${st.section === id || (id === "plan" && st.section === "slice") ? "active" : ""}">${label}${id === "plan" ? ' <span class="tab-count">5</span>' : ""}${
+                  id === "sequences" && st.sequences.length
+                    ? ` <span class="tab-count">${st.sequences.length}</span>`
+                    : ""
+                }</button>`,
             )
             .join("")}</nav>`;
         }
@@ -5916,7 +5962,11 @@
             workstreams: diagramWorkstreams,
             structure: diagramStructure,
           };
-          return `<div class="plan-top"><div><div class="eyebrow">PROJECT / PLAN</div><h2 class="section-title" style="font-size:22px;margin-top:8px">Execution order and relationships</h2><p class="section-caption">See the execution order and what each task is waiting on. The queue below shares these task states.</p></div><div class="buttons">${btn("New prototype", "modal:prototype", "btn quiet")}${btn("Add task", "modal:addTask", "btn")}</div></div><div class="dd-frame" style="margin-top:20px"><div class="dd-head"><div><div class="eyebrow">Visual planning</div><h3>${{ dependencies: "What unlocks the release?", workstreams: "How the feature is delivered", structure: "What belongs to what" }[chosen]}</h3></div><div class="diagram-lenses" role="group" aria-label="Planning lenses">${[
+          return `<div class="plan-top"><div><div class="eyebrow">PROJECT / PLAN</div><h2 class="section-title" style="font-size:22px;margin-top:8px">Execution order and relationships</h2><p class="section-caption">See the execution order and what each task is waiting on. The queue below shares these task states.</p></div><div class="buttons">${btn(
+            `Put these ${st.taskOrder.length} tasks in a sequence`,
+            "sequenceFromQueue",
+            "btn quiet",
+          )}${btn("New prototype", "modal:prototype", "btn quiet")}${btn("Add task", "modal:addTask", "btn")}</div></div><div class="dd-frame" style="margin-top:20px"><div class="dd-head"><div><div class="eyebrow">Visual planning</div><h3>${{ dependencies: "What unlocks the release?", workstreams: "How the feature is delivered", structure: "What belongs to what" }[chosen]}</h3></div><div class="diagram-lenses" role="group" aria-label="Planning lenses">${[
             ["dependencies", "Dependencies"],
             ["workstreams", "Parts"],
             ["structure", "Structure"],
@@ -6016,7 +6066,11 @@
             .join("")}</aside></div>`;
         }
         function runsContent() {
-          return `<div style="margin-top:30px">${pageHead("Execution and verification", "", "PROJECT / RUNS", btn("Open native workspace", "workspace:seicho", "btn primary"))}<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">RUN-S21 / SAMPLE RUN</div><h3>Main agent and helper agents</h3><p>Sample data: one main agent and the helper agents it started. Nothing was executed.</p></div>${btn("Open execution tree", "inspect:agents", "btn")}</div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
+          return `<div style="margin-top:30px">${pageHead("Execution and verification", "", "PROJECT / RUNS", btn("Open native workspace", "workspace:seicho", "btn primary"))}<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">RUN-S21 / SAMPLE RUN</div><h3>Main agent and helper agents</h3><p>Sample data: one main agent and the helper agents it started. Nothing was executed.</p></div><div class="seq-actions">${btn(
+            "Add this run to a sequence",
+            "sequenceAddRun:RUN-S21",
+            "btn quiet",
+          )}${btn("Open execution tree", "inspect:agents", "btn")}</div></div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
             ["09:12", "Implementation completed", "Observed code modifications recorded", "done"],
             [
               "09:18",
@@ -6071,7 +6125,7 @@
         }
         function projectPage() {
           const p = getProject(st.project);
-          return `<main class="view"><div class="screen project">${projectHeader(p)}${p.id === "seicho" ? (st.section === "overview" ? projectOverview() : st.section === "plan" ? planContent() : st.section === "slice" ? sliceContent() : st.section === "runs" ? runsContent() : knowledgeContent()) : genericProject(p)}</div></main>`;
+          return `<main class="view"><div class="screen project">${projectHeader(p)}${p.id === "seicho" ? (st.section === "overview" ? projectOverview() : st.section === "plan" ? planContent() : st.section === "slice" ? sliceContent() : st.section === "runs" ? runsContent() : st.section === "sequences" ? sequencesContent() : knowledgeContent()) : genericProject(p)}</div></main>`;
         }
         function genericProject(p) {
           return `<div class="projecthero"><div><div class="eyebrow">CURRENT FOCUS</div><h2>${esc(p.detail)}</h2><p></p><div class="hero-meta"><span>${ico("git", "sm")} ${esc(p.workspace)} / ANON-PC</span><span>${ico("clock", "sm")} ${esc(projectStatus(p))}</span></div></div><div class="hero-action"><div class="top">Project context</div><h3>${esc(p.name)}</h3><p>Open the existing native workspace for source and sessions.</p>${btn("Open workspace", "workspace:" + p.id, "btn primary")}</div></div><div class="overview-layout"><section><div class="section-label"><h2>Work in motion</h2></div><button class="list-row" data-action="workspace:${p.id}"><span class="rail"></span><div class="info"><strong>${esc(p.detail)}</strong><p>Linked active workspace</p></div>${chevron}</button>${p.id === "shiori" ? `<button class="list-row" data-action="review:shiori"><span class="rail attn"></span><div class="info"><strong>Reviewer result presentation</strong><p>Changes require your review</p></div>${status("needs_review")}${chevron}</button>` : ""}</section><aside class="aside-panel"><h3>Project context</h3><div class="kv"><span>Repository</span><strong>${esc(p.id)}</strong><span>Host</span><strong>ANON-PC</strong><span>Current branch</span><strong>main</strong></div><div class="divider"></div>${btn("Capture note", "capture", "btn small quiet")}</aside></div>`;
@@ -6761,9 +6815,10 @@
         }
         function shioriSidebar() {
           const project = getProject(st.project);
-          return `<div class="shiori-sidebar-heading"><span class="project-icon ${esc(st.project)}">${esc(project.name.slice(0, 2).toUpperCase())}</span><h2>${esc(project.name)}</h2></div><div class="section-label"><h2>Now</h2></div><button class="sidebar-now" data-action="inspect:agents">${ico("pulse", "sm")}<span><strong>${st.execution === "running" ? "Execution running" : "Awaiting review"}</strong><small>${esc(st.runName)} · Open execution</small></span>${chevron}</button><div class="section-label"><h2>Next</h2></div><p>Review the current result before starting dependent tasks.</p><div class="section-label"><h2>Navigate</h2></div>${[
+          return `<div class="shiori-sidebar-heading"><span class="project-icon ${esc(st.project)}">${esc(project.name.slice(0, 2).toUpperCase())}</span><h2>${esc(project.name)}</h2></div><div class="section-label"><h2>Now</h2></div><button class="sidebar-now" data-action="inspect:agents">${ico("pulse", "sm")}<span><strong>${st.execution === "running" ? "Execution running" : "Awaiting review"}</strong><small>${esc(st.runName)} · Open execution</small></span>${chevron}</button>${sequenceStrip()}<div class="section-label"><h2>Next</h2></div><p>Review the current result before starting dependent tasks.</p><div class="section-label"><h2>Navigate</h2></div>${[
             ["Review task", "review:" + st.reviewInspector, "check"],
             ["Tasks", "section:plan", "layers"],
+            ["Sequences", "sequencePage", "layers"],
             ["Execution queue", "inspect:agents", "bolt"],
             ["Open full workspace", "workspace:" + st.project, "split"],
             ["Add task", "modal:addTask", "plus"],
@@ -6860,7 +6915,26 @@
               )
               .join("")}</div>`;
           if (r === "schedules")
-            content = `<div class="two-col"><section class="sheet"><div class="sheet-head"><h3>Scheduled research</h3>${btn("New schedule", "modal:schedule", "btn small primary")}</div><div class="sheet-inner"><div class="list-row"><div class="info"><strong>Weekly Paseo competitor delta</strong><p>Mondays · proposal-only output · no auto-updates</p></div>${status("planned")}</div></div></section><aside class="aside-panel"><h3>Proposed start condition</h3><p>Runs only when verified cloud capacity is available and the task is already authorized</p><div class="note-line">Sample schedule. No quota is checked and no job is scheduled.</div></aside></div>`;
+            content = `<div class="two-col"><div><section class="sheet"><div class="sheet-head"><h3>Scheduled research</h3>${btn("New schedule", "modal:schedule", "btn small primary")}</div><div class="sheet-inner"><div class="list-row"><div class="info"><strong>Weekly Paseo competitor delta</strong><p>Mondays · proposal-only output · no auto-updates</p></div>${status("planned")}</div></div></section><section class="sheet" style="margin-top:22px"><div class="sheet-head"><h3>Sequences</h3>${btn(
+              "New sequence (the plan's order)",
+              "sequenceNew",
+              "btn small primary",
+            )}</div><div class="sheet-inner">${
+              st.sequences.length
+                ? st.sequences
+                    .map(
+                      (s) =>
+                        `<button class="list-row" data-action="sequenceOpen:${
+                          s.id
+                        }"><span class="rail"></span><div class="info"><strong>${esc(
+                          s.name,
+                        )}</strong><p>step ${sequencePosition(s)} of ${s.steps.length} · ${s.steps
+                          .map(stepPreviewName)
+                          .join(" → ")}</p></div>${sequenceChip(s)}${chevron}</button>`,
+                    )
+                    .join("")
+                : `<p class="section-caption">An ordered list of work that already exists: tasks, a run, or a prompt you wrote. Make one here and it lives with the tasks and the run it points at.</p>`
+            }</div></section></div><aside class="aside-panel"><h3>Proposed start condition</h3><p>Runs only when verified cloud capacity is available and the task is already authorized</p><div class="note-line">Sample schedule. No quota is checked and no job is scheduled.</div></aside></div>`;
           if (r === "hosts")
             content = `<div class="sheet"><div class="sheet-head"><h3>Host topology</h3><span class="status idle">Telemetry unavailable</span></div><div class="sheet-inner"><div class="dd-head"><div><h3>Execution locations</h3><p>Shows where work runs. It is not an agent performance dashboard.</p></div></div><svg class="diagram-svg" viewBox="0 0 1000 250" role="group" aria-label="Example host topology"><path class="edge" d="M245 125H365M625 125H745"/>${svgNode(10, 75, 235, 103, "WINDOWS 11", "ANON-PC", "Paseo · native sessions", "workspace:seicho", "active")}${svgNode(365, 75, 260, 103, "UBUNTU / ANON2", "Model gateway", "LiteLLM · embedding", "hostInfo", "")}${svgNode(745, 75, 240, 103, "UBUNTU / ANON3", "Inference host", "Qwen · 2× RTX 3090", "hostInfo", "")}</svg><div class="mobile-diagram-list"><button data-action="hostInfo">ANON-PC → anon2 → anon3</button></div></div></div>`;
           if (r === "usage")
@@ -7342,6 +7416,453 @@
               "",
             )}<button class="steer-open" data-action="inspect:agents">Open the queue</button></div>`;
         }
+        // --- Sequences (slice S11a). One run made of work that already exists: tasks from
+        // the plan board, the sample run on the Runs page, or a prompt you wrote. A step
+        // points at that record by id, so the task list and the Runs page stay the source of
+        // what is true. Taking a step uses the same one-step-at-a-time sample simulation as
+        // the task page (authorizeRun, then finishRun); a sequence never takes the next step
+        // by itself.
+        const sequence = (id) => st.sequences.find((s) => s.id === id) || null;
+        const stepFor = (kind, ref, gate = "auto") => ({ kind, ref, gate, status: "pending" });
+        function addSequence(name, steps) {
+          st.sequenceSeq += 1;
+          const seq = {
+            id: `seq-${st.sequenceSeq}`,
+            name,
+            steps,
+            // What to do when a step cannot be taken: stop, keep going, or ask you.
+            onFailure: "stop",
+            status: "not_started",
+          };
+          st.sequences.push(seq);
+          return seq;
+        }
+        // The order the plan names as its example: TASK-24, TASK-21, TASK-22, review step.
+        const sampleSequence = () =>
+          addSequence("Recipe import sequence", [
+            stepFor("task", "TASK-24"),
+            stepFor("task", "TASK-21"),
+            stepFor("task", "TASK-22"),
+            {
+              kind: "prompt",
+              prompt: "Review the result before anything is finalized",
+              gate: "approval",
+              status: "pending",
+            },
+          ]);
+        // The plan board's own order is the starting order. The release task is an approval
+        // step: releasing is your decision, not the sequence's.
+        const queueSequence = () =>
+          addSequence(
+            "Task queue sequence",
+            st.taskOrder.map((id) => stepFor("task", id, id === "TASK-22" ? "approval" : "auto")),
+          );
+        const stepSettled = (step) => step.status === "done" || step.status === "skipped";
+        const currentStep = (seq) => seq.steps.find((s) => !stepSettled(s)) || null;
+        // Which step the sequence is on: the first one still in play, or the last one when
+        // every step is settled. This is the number the workspace strip shows.
+        function sequencePosition(seq) {
+          const i = seq.steps.findIndex((s) => !stepSettled(s));
+          return i === -1 ? seq.steps.length : i + 1;
+        }
+        const sequenceNames = {
+          not_started: "Not started",
+          running: "Running (sample)",
+          waiting: "Waiting on you",
+          stopped: "Stopped",
+          finished: "Finished",
+        };
+        // Existing status chips only. A sequence does not invent new colours.
+        const sequenceChips = {
+          not_started: "planned",
+          running: "running",
+          waiting: "needs_review",
+          stopped: "stopped",
+          finished: "done",
+        };
+        const stepNames = {
+          pending: "Not reached",
+          running: "Running (sample)",
+          approval: "Needs your approval",
+          blocked: "Blocked",
+          ask: "Waiting on you",
+          done: "Done",
+          skipped: "Skipped",
+        };
+        const stepChips = {
+          pending: "planned",
+          running: "running",
+          approval: "needs_review",
+          blocked: "blocked",
+          ask: "needs_review",
+          done: "done",
+          skipped: "idle",
+        };
+        const policyNames = {
+          stop: "Stop the sequence",
+          continue: "Keep going",
+          ask: "Ask me each time",
+        };
+        const policyHints = {
+          stop: "the sequence stops there",
+          continue: "the step is skipped and the next one is offered",
+          ask: "the choice is put in front of you",
+        };
+        const sequenceChip = (seq) =>
+          `<span class="status ${sequenceChips[seq.status]}">${sequenceNames[seq.status]}</span>`;
+        const stepChip = (step) =>
+          `<span class="status ${stepChips[step.status]}">${stepNames[step.status]}</span>`;
+        // Short name in the preview chain. A prompt step reads "review step", which is what
+        // the plan calls it.
+        const stepPreviewName = (step) =>
+          step.kind === "prompt"
+            ? step.gate === "approval"
+              ? "review step"
+              : "prompt step"
+            : step.ref;
+        function stepTitle(step) {
+          if (step.kind === "task") {
+            const t = task(step.ref);
+            return t ? `${t.id} · ${t.name}` : step.ref;
+          }
+          if (step.kind === "run") return `${step.ref} · the sample run on the Runs page`;
+          return step.prompt;
+        }
+        const stepSource = (step) =>
+          step.kind === "task"
+            ? "Task from the plan board"
+            : step.kind === "run"
+              ? "Run from the Runs page"
+              : "Prompt you wrote";
+        // Why a step cannot be taken right now, in the words the record it points at uses.
+        // An empty string means the step can be taken.
+        function stepBlockReason(step) {
+          if (step.kind === "task") {
+            const t = task(step.ref);
+            if (!t) return `${step.ref} is no longer in the task list.`;
+            if (t.status === "blocked")
+              return `${t.id} needs ${t.requires.join(" and ")} finished first.`;
+            if (t.status === "needs_review")
+              return `${t.id} is in review, and that decision is yours. Open the review and decide there.`;
+            if (t.status === "planned")
+              return `${t.id} is still planned: ${t.description.toLowerCase()}.`;
+            if (t.status === "running")
+              return `${t.id} is already running from its own task page. The sequence waits for it.`;
+            return "";
+          }
+          if (step.kind === "run") {
+            const state = sampleRunRecord(step.ref).state;
+            if (state === "done") return "";
+            return `${step.ref} is the sample run on the Runs page and is ${
+              state === "stopped" ? "stopped" : "still going"
+            }. The sequence follows that run; it does not start a second one.`;
+          }
+          return "";
+        }
+        // After a step is settled, say where the sequence stands. It starts nothing: the
+        // note is where "start it when you are ready" is said out loud.
+        function nextStepNote(seq) {
+          const next = currentStep(seq);
+          if (!next) {
+            seq.status = "finished";
+            return `${seq.name} is finished. Nothing was run on its own.`;
+          }
+          seq.status = "running";
+          return `Next is step ${seq.steps.indexOf(next) + 1} of ${seq.steps.length} — start it when you are ready.`;
+        }
+        // A step that cannot be taken is handled by the sequence's own policy, and the
+        // result is said out loud so the policy is visible instead of implied.
+        function blockStep(seq, step, reason) {
+          const where = `step ${seq.steps.indexOf(step) + 1} of ${seq.steps.length}`;
+          if (seq.onFailure === "continue") {
+            step.status = "skipped";
+            return `${seq.name}: ${where} is blocked — ${reason} Your policy is Keep going, so it was skipped. ${nextStepNote(
+              seq,
+            )}`;
+          }
+          if (seq.onFailure === "ask") {
+            step.status = "ask";
+            seq.status = "waiting";
+            st.currentSequence = seq.id;
+            return `${seq.name}: ${where} is blocked — ${reason} Your policy is Ask me each time, so the choice is on the step.`;
+          }
+          step.status = "blocked";
+          seq.status = "stopped";
+          return `${seq.name}: ${where} is blocked — ${reason} Your policy is Stop the sequence, so it stops here. Nothing after it was started.`;
+        }
+        // Take the step the sequence is on. One step per click, through the same sample
+        // simulation the task page uses.
+        function takeStep(seq) {
+          const step = currentStep(seq);
+          if (!step) {
+            seq.status = "finished";
+            return `${seq.name} has no step left to take.`;
+          }
+          const where = `step ${seq.steps.indexOf(step) + 1} of ${seq.steps.length}`;
+          if (step.status === "running")
+            return `${seq.name}: ${where} is already running in sample state. Finish it before the next one.`;
+          const reason = stepBlockReason(step);
+          if (reason) return blockStep(seq, step, reason);
+          if (step.gate === "approval" && !step.approved) {
+            step.status = "approval";
+            seq.status = "waiting";
+            st.currentSequence = seq.id;
+            return `${seq.name}: ${where} needs your approval before it runs.`;
+          }
+          if (step.kind === "task") {
+            const t = task(step.ref);
+            if (t.status === "done") {
+              step.status = "done";
+              return `${seq.name}: ${t.id} was already finished before the sequence started, so nothing was run again. ${nextStepNote(
+                seq,
+              )}`;
+            }
+            t.status = "running";
+            recalc();
+            st.currentRunningTask = t.id;
+            st.execution = "running";
+            st.runName = "RUN-" + t.id;
+            step.status = "running";
+            seq.status = "running";
+            st.currentSequence = seq.id;
+            return `${t.id} started in sample state. No real execution.`;
+          }
+          step.status = "done";
+          return `${seq.name}: ${step.ref} had already finished in the sample data, so the step is satisfied. ${nextStepNote(
+            seq,
+          )}`;
+        }
+        // Approving an approval step. A prompt step is finished by the approval; a task step
+        // still has to be taken.
+        function approveStep(seq, step) {
+          step.approved = true;
+          if (step.kind === "prompt") {
+            step.status = "done";
+            return `${seq.name}: your prompt is recorded as approved at ${SAMPLE_TIME}. ${nextStepNote(
+              seq,
+            )}`;
+          }
+          step.status = "pending";
+          seq.status = "running";
+          return `${stepTitle(step)}: approved by you at ${SAMPLE_TIME}. Take the step when you are ready.`;
+        }
+        // The sample run for a sequence step just finished (finishRun). Close the step and
+        // point at the next one; start nothing.
+        function finishSequenceStep(taskId) {
+          const seq = sequence(st.currentSequence);
+          if (!seq) return "";
+          const step = seq.steps.find(
+            (s) => s.status === "running" && s.kind === "task" && s.ref === taskId,
+          );
+          if (!step) return "";
+          step.status = "done";
+          return ` ${nextStepNote(seq)}`;
+        }
+        // Every sequence this mock has points at SEICHO's tasks and its sample run, so the
+        // sequence page is always SEICHO's page.
+        function openSequence(id) {
+          st.selectedSequence = id || null;
+          st.project = "seicho";
+          st.route = "project";
+          st.section = "sequences";
+          st.inspector = null;
+          st.mobileOpen = false;
+          st.sidebarOpen = false;
+        }
+        // Workspace sidebar strip: the sequence you started, and what it is waiting for.
+        function sequenceStrip() {
+          const seq = sequence(st.currentSequence);
+          if (!seq) return "";
+          resyncStoppedStep(seq);
+          return `<button class="seq-strip" data-action="sequenceOpen:${
+            seq.id
+          }"><strong>Sequence</strong> · step ${sequencePosition(seq)} of ${
+            seq.steps.length
+          } · ${sequenceNames[seq.status].toLowerCase()} · ${esc(seq.name)}</button>`;
+        }
+        function sequencePreview(seq) {
+          return `<div class="seq-preview">${seq.steps
+            .map((s) => `<span>${esc(stepPreviewName(s))}</span>`)
+            .join("→")}</div>`;
+        }
+        // The choices for the step the sequence is on live in one place: the row runs or
+        // approves, the panel below decides what a blocked step means.
+        function sequenceStepRow(seq, step, i) {
+          const total = seq.steps.length;
+          const isNow = i === sequencePosition(seq) - 1;
+          const reason = stepBlockReason(step);
+          const actions = [];
+          if (step.status === "running")
+            actions.push(btn("Complete sample run", "finishRun", "btn small primary"));
+          else if (step.status === "approval")
+            actions.push(
+              btn("Approve this step", `sequenceApprove:${seq.id}:${i}`, "btn small primary"),
+            );
+          else if (isNow && step.kind === "task" && !reason)
+            actions.push(
+              btn(
+                `Run step ${i + 1} of ${total} (sample)`,
+                `sequenceRun:${seq.id}`,
+                "btn small primary",
+              ),
+            );
+          else if (isNow && step.kind === "run" && !reason)
+            actions.push(btn("Open the Runs page", "section:runs", "btn small quiet"));
+          if (step.kind === "task")
+            actions.push(btn("Inspect", "task:" + step.ref, "btn small quiet"));
+          return `<div class="task-row${isNow ? " active" : ""}"><span class="task-index">${String(
+            i + 1,
+          ).padStart(2, "0")}</span><div class="task-desc"><strong>${esc(
+            stepTitle(step),
+          )}</strong><span>${stepSource(step)}${
+            step.gate === "approval"
+              ? step.approved
+                ? ` · approval step · approved by you at ${SAMPLE_TIME}`
+                : " · approval step · waits for you before it runs"
+              : ""
+          }</span>${
+            reason
+              ? `<span>${esc(reason)}${
+                  step.status === "skipped"
+                    ? " You chose to keep going, so this step was passed over."
+                    : ""
+                }</span>`
+              : ""
+          }</div>${stepChip(step)}<div class="task-reorder"><button data-action="seqMove:${
+            seq.id
+          }:${i}:up" aria-label="Move ${esc(stepPreviewName(step))} earlier"${
+            i === 0 ? " disabled" : ""
+          }>↑</button><button data-action="seqMove:${seq.id}:${i}:down" aria-label="Move ${esc(
+            stepPreviewName(step),
+          )} later"${i === total - 1 ? " disabled" : ""}>↓</button></div><div class="seq-actions">${actions.join("")}</div></div>`;
+        }
+        // The way out of a blocked step is the record that blocks it. A retry button would
+        // only repeat the same answer; deciding the review or opening the task is what makes
+        // the step takeable.
+        function stepFixControl(step) {
+          if (step.kind !== "task") return "";
+          const t = task(step.ref);
+          if (!t) return "";
+          if (t.status === "needs_review")
+            return btn("Open the review", "review:qa", "btn small primary");
+          return btn(`Open ${t.id}`, "task:" + t.id, "btn small");
+        }
+        // A stopped sequence can continue as soon as the step it stopped on can be taken.
+        const canTakeCurrentStep = (seq) => {
+          const step = currentStep(seq);
+          return !!step && !stepBlockReason(step);
+        };
+        // A step is blocked because of the record it points at. When that record changes, the
+        // reason is gone: the step goes back to not-reached and the sequence back to waiting
+        // to be started, instead of repeating a block that no longer has a reason.
+        function resyncStoppedStep(seq) {
+          if (!seq || seq.status !== "stopped") return;
+          const step = currentStep(seq);
+          if (step && step.status === "blocked" && !stepBlockReason(step)) {
+            step.status = "pending";
+            seq.status = "running";
+          }
+        }
+        // What a blocked step means right now, with the choice next to it. This is where the
+        // failure policy becomes something you can see and check.
+        function sequenceDecision(seq) {
+          const i = seq.steps.findIndex((s) => !stepSettled(s));
+          if (i === -1)
+            return `<div class="seq-block"><p><strong>Every step is settled.</strong> ${esc(
+              seq.name,
+            )} is finished. Nothing was run on its own.</p></div>`;
+          const step = seq.steps[i];
+          const where = `Step ${i + 1} of ${seq.steps.length}`;
+          const policy = policyNames[seq.onFailure].toLowerCase();
+          if (step.status === "blocked")
+            return `<div class="seq-block"><p><strong>${where} is blocked.</strong> ${esc(
+              stepBlockReason(step),
+            )}</p><p>Your policy is ${policy}, so the sequence stopped here. Steps after it were not started. Change the policy, or finish what the step is waiting for; the row offers the step again once it can be taken.</p><div class="seq-actions">${stepFixControl(
+              step,
+            )}</div></div>`;
+          if (step.status === "ask")
+            return `<div class="seq-block"><p><strong>${where} is blocked, and your policy is ${policy}.</strong> ${esc(
+              stepBlockReason(step),
+            )}</p><div class="seq-actions">${btn(
+              "Skip this step and keep going",
+              `sequenceSkip:${seq.id}:${i}`,
+              "btn small primary",
+            )}${btn("Stop the sequence", `sequenceStop:${seq.id}`, "btn small warning")}</div></div>`;
+          if (step.status === "approval")
+            return `<div class="seq-block"><p><strong>${where} waits for your approval.</strong> It is an approval step, so the sequence will not run it until you say so.</p></div>`;
+          if (step.status === "running")
+            return `<div class="seq-block"><p><strong>${where} is running in sample state.</strong> Finish it before the next step. Nothing else was started.</p></div>`;
+          return `<div class="seq-block"><p><strong>${where} is next.</strong> ${
+            step.kind === "task"
+              ? `Run it when you are ready — one step at a time, and the task page shows what it does.`
+              : `The sequence follows ${esc(step.ref)}; it does not start a second run.`
+          }</p></div>`;
+        }
+        function sequencesContent() {
+          const seq =
+            sequence(st.selectedSequence) || st.sequences[st.sequences.length - 1] || null;
+          st.sequences.forEach(resyncStoppedStep);
+          const head = pageHead(
+            "Sequences",
+            "One run made of work that already exists: tasks from the plan board, the sample run on the Runs page, or a prompt you wrote. A sequence points at that work. It never holds a copy of it, and it runs nothing by itself.",
+            "PROJECT / SEQUENCES",
+            btn("New sequence from the plan board", "sequenceFromQueue", "btn primary"),
+          );
+          if (!seq)
+            return `<div style="margin-top:30px">${head}<div class="plain-section"><div class="section-label"><h2>No sequence yet</h2></div><p class="section-caption">A sequence is the order you want work to happen in. Make one from the tasks on the plan board, add the sample run to it, or start from the order the plan names.</p><div class="seq-actions" style="margin-top:14px">${btn(
+              "Put the plan board in a sequence",
+              "sequenceFromQueue",
+              "btn primary",
+            )}${btn("New sequence (the plan's order)", "sequenceNew", "btn quiet")}${btn(
+              "Open the plan board",
+              "section:plan",
+              "btn quiet",
+            )}</div></div></div>`;
+          const settled = seq.steps.filter(stepSettled).length;
+          return `<div style="margin-top:30px">${head}<div class="dd-frame"><div class="dd-head"><div><div class="eyebrow">SEQUENCE / ${seq.id.toUpperCase()} / PREVIEW</div><h3>${esc(
+            seq.name,
+          )}</h3><p>${sequenceNames[seq.status]} · step ${sequencePosition(seq)} of ${
+            seq.steps.length
+          } · ${settled} of ${seq.steps.length} settled</p></div>${
+            seq.status === "not_started"
+              ? btn("Start the sequence", `sequenceStart:${seq.id}`, "btn primary")
+              : seq.status === "stopped" && canTakeCurrentStep(seq)
+                ? btn("Continue the sequence", `sequenceRun:${seq.id}`, "btn primary")
+                : ""
+          }</div>${sequencePreview(
+            seq,
+          )}<div class="diagram-foot"><span>The order you set. ↑ ↓ on a step change it.</span><span>Nothing runs until you start a step.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Steps in order</h2><small>Use ↑ ↓ on a step to change its order</small></div><div class="task-list">${seq.steps
+            .map((s, i) => sequenceStepRow(seq, s, i))
+            .join(
+              "",
+            )}</div>${sequenceDecision(seq)}</section><aside class="aside-panel"><h3>If a step is blocked</h3><p>Choose what the sequence does with a step it cannot take. The choice is remembered for this sequence.</p><div class="seq-actions">${Object.entries(
+            policyNames,
+          )
+            .map(([key, label]) =>
+              seq.onFailure === key
+                ? `<span>${label} · your choice</span>`
+                : btn(label, `sequencePolicy:${seq.id}:${key}`, "btn small quiet"),
+            )
+            .join(
+              "",
+            )}</div><p class="small dim">Now: ${policyHints[seq.onFailure]}.</p><div class="divider"></div><h3>Other sequences</h3>${
+            st.sequences.length > 1
+              ? `<div>${st.sequences
+                  .filter((s) => s.id !== seq.id)
+                  .map(
+                    (s) =>
+                      `<button class="list-row" data-action="sequenceOpen:${
+                        s.id
+                      }"><span class="rail"></span><div class="info"><strong>${esc(
+                        s.name,
+                      )}</strong><p>step ${sequencePosition(s)} of ${s.steps.length} · ${sequenceNames[
+                        s.status
+                      ].toLowerCase()}</p></div>${sequenceChip(s)}${chevron}</button>`,
+                  )
+                  .join("")}</div>`
+              : `<p class="small dim">This is the only sequence. The plan board and the Runs page can make or add to one.</p>`
+          }<div class="divider"></div><h3>What a sequence is not</h3><p>It is a list, not a runner. The sample run on the Runs page is the only run here, and a step that points at it follows that run instead of starting another.</p></aside></div></div>`;
+        }
         // What the Activity view is actually showing: written changes, or an edit in flight.
         function activityVisibility() {
           const midEdit = st.execution === "running";
@@ -7768,7 +8289,113 @@
               recalc();
               st.inspector = "task";
               st.selectedTask = t.id;
-              toast(t.id + " complete (sample) — evidence attached; dependent tasks re-checked.");
+              // A sequence step pointing at this task is settled by the same finish; the
+              // sequence then names the next step without starting it.
+              toast(
+                t.id +
+                  " complete (sample) — evidence attached; dependent tasks re-checked." +
+                  finishSequenceStep(t.id),
+              );
+              break;
+            }
+            // --- Sequences (slice S11a). Creating one only points at work that already
+            // exists. Taking a step goes through the same sample run the task page uses.
+            case "sequenceFromQueue": {
+              const seq = queueSequence();
+              openSequence(seq.id);
+              toast(
+                `${seq.name}: ${seq.steps.length} steps, in the order the plan board shows them. Nothing has been run.`,
+              );
+              break;
+            }
+            case "sequenceNew": {
+              const seq = sampleSequence();
+              openSequence(seq.id);
+              toast(
+                `${seq.name}: TASK-24, then TASK-21, then TASK-22, then your review step. It lives with the tasks and the run it points at.`,
+              );
+              break;
+            }
+            case "sequenceAddRun": {
+              // The run is not copied into the sequence; the step points at it.
+              const seq =
+                sequence(st.selectedSequence) ||
+                st.sequences[st.sequences.length - 1] ||
+                addSequence(`Sequence from ${val}`, []);
+              seq.steps.push({ kind: "run", ref: val, gate: "auto", status: "pending" });
+              openSequence(seq.id);
+              toast(
+                `${val} is step ${seq.steps.length} of ${seq.name}. The sequence follows that run; it does not start a second one.`,
+              );
+              break;
+            }
+            case "sequencePage":
+              openSequence(st.selectedSequence || (st.sequences[st.sequences.length - 1] || {}).id);
+              break;
+            case "sequenceOpen":
+              openSequence(val);
+              break;
+            case "seqMove": {
+              const seq = sequence(val);
+              if (!seq) break;
+              let i = Number(rest[1]),
+                j = i + (rest[2] === "up" ? -1 : 1);
+              if (j >= 0 && j < seq.steps.length) {
+                [seq.steps[i], seq.steps[j]] = [seq.steps[j], seq.steps[i]];
+                toast(
+                  `${seq.name} order is now ${seq.steps.map(stepPreviewName).join(", ")}. Prerequisites remain enforced.`,
+                );
+              }
+              break;
+            }
+            case "sequenceStart": {
+              const seq = sequence(val);
+              if (!seq) break;
+              seq.status = "running";
+              st.currentSequence = seq.id;
+              st.selectedSequence = seq.id;
+              toast(
+                `${seq.name} started. Step 1 of ${seq.steps.length} is next — nothing runs until you take a step.`,
+              );
+              break;
+            }
+            case "sequenceRun": {
+              const seq = sequence(val);
+              if (seq) toast(takeStep(seq));
+              break;
+            }
+            case "sequenceApprove": {
+              const seq = sequence(val);
+              const step = seq && seq.steps[Number(rest[1])];
+              if (step) toast(approveStep(seq, step));
+              break;
+            }
+            case "sequenceSkip": {
+              const seq = sequence(val);
+              const i = Number(rest[1]);
+              const step = seq && seq.steps[i];
+              if (step) {
+                step.status = "skipped";
+                toast(`${seq.name}: step ${i + 1} passed over by you. ${nextStepNote(seq)}`);
+              }
+              break;
+            }
+            case "sequenceStop": {
+              const seq = sequence(val);
+              if (!seq) break;
+              const step = currentStep(seq);
+              if (step && step.status === "ask") step.status = "blocked";
+              seq.status = "stopped";
+              toast(`${seq.name} stopped. Nothing after the current step was started.`);
+              break;
+            }
+            case "sequencePolicy": {
+              const seq = sequence(val);
+              if (!seq || !policyNames[rest[1]]) break;
+              seq.onFailure = rest[1];
+              toast(
+                `${seq.name}: if a step is blocked, ${policyHints[rest[1]]}. The step you stopped on stays where it is.`,
+              );
               break;
             }
             case "inspect":
