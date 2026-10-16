@@ -5501,9 +5501,24 @@
             ],
           },
         ];
-        st.scheduleSeq = 2;
+        // The task surface's sample run has a record before it starts, so a schedule can
+        // point at it while waiting. Completion belongs to that record, not to the clock.
+        st.taskRuns = [
+          { id: "RUN-TASK-24", taskRef: "TASK-24", name: "Arbeid med ordlisten", completed: false },
+        ];
+        st.schedules.push({
+          id: "schedule-3",
+          name: "Etter arbeidet med ordlisten",
+          targets: [{ kind: "task", ref: "TASK-21" }],
+          trigger: { mode: "onFinish", parentRef: "RUN-TASK-24" },
+          enabled: true,
+          nextFires: [],
+          lastRuns: [],
+        });
+        st.scheduleSeq = 3;
         st.scheduleDraft = null;
         st.scheduleError = "";
+        st.scheduleSource = null;
         const storedSnippets = readStored("paseo-snippet-library", []);
         st.savedSnippets = Array.isArray(storedSnippets)
           ? storedSnippets
@@ -6038,9 +6053,8 @@
               "",
             )}</div></div><aside class="aside-panel"><h3>Design reference</h3><p>Recipe ingestion / v2. Accepting the source and accepting the screenshot are separate choices.</p><div class="thumb-ui"><div class="windowbar">Recipe import · prototype preview</div><div class="bar" style="width:90%"></div><div class="bar short"></div><div class="bar" style="width:66%"></div></div><div style="display:flex;gap:7px;flex-wrap:wrap">${btn("Inspect", "modal:prototype", "btn small quiet")}${btn(st.acceptedDesign ? "Accepted v2" : "Accept v2", "acceptDesign", "btn small primary")}</div><div class="divider"></div><h3>Execution policy</h3><div class="check-list"><div>${ico("shield", "sm")} Only authorized tasks may execute</div><div>${ico("git", "sm")} Git reconciliation after review</div><div>${ico("eye", "sm")} Screenshot proof is required</div></div><div class="divider"></div><h3>Queue integrity</h3><p>Reordering changes priority; it does not remove dependencies. Blocked tasks remain blocked.</p></aside></div>`;
         }
-        // The only run record in this mock is the sample run on the Runs page (RUN-S21). A part
-        // of the plan names it by id, and the status shown here is the status the execution tree
-        // shows, so the two pages cannot disagree and no run is implied that does not exist.
+        // A part of the plan names the Runs page's sample run (RUN-S21) by id. Its status
+        // comes from the same execution tree; task-surface runs live separately in st.taskRuns.
         function sampleRunRecord(id) {
           const main = agentRuns[0];
           return {
@@ -6107,7 +6121,7 @@
             "Add this run to a sequence",
             "sequenceAddRun:RUN-S21",
             "btn quiet",
-          )}${btn("Open execution tree", "inspect:agents", "btn")}</div></div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
+          )}${btn("Legg til i en tidsplan", "scheduleAdd:run:RUN-S21", "btn quiet")}${btn("Open execution tree", "inspect:agents", "btn")}</div></div>${executionSummary()}<div class="diagram-foot"><span>The full tree is shown once, in the inspector.</span><span>Select an agent to open it there.</span></div></div><div class="two-col"><section><div class="section-label"><h2>Execution timeline</h2></div>${[
             ["09:12", "Implementation completed", "Observed code modifications recorded", "done"],
             [
               "09:18",
@@ -6712,7 +6726,15 @@
                 : "Design v2 not accepted"
               : `${id} — ${statusText[task(id)?.status] || "Unknown"}`,
           );
-          return `<div class="eyebrow">SEICHO / ${t.id}</div><h2>${esc(t.name)}</h2>${status(t.status)}<p>${esc(t.description)}</p><div class="section-label"><h2>Execution readiness</h2></div><div class="check-list">${deps.length ? deps.map((d) => `<div>${ico("network", "sm")}${esc(d)}</div>`).join("") : `<div>${ico("check", "sm")} No unmet prerequisites in this sample</div>`}</div><div class="section-label"><h2>Execution policy</h2></div><div class="metric-list"><span>Host</span><strong>ANON-PC (sample)</strong><span>Provider</span><strong>Pi / local Qwen</strong><span>Git</span><strong>Manual approval</strong><span>Source context</span><strong>SEICHO project</strong></div>${t.id === "TASK-25" ? `<div class="inspect-info"><strong>Design reference</strong><p>${st.acceptedDesign ? "v2 accepted as a reference" : "Acceptance is separate from producing a prototype."}</p>${btn("Open reference", "modal:prototype", "btn small quiet")}</div>` : ""}`;
+          return `<div class="eyebrow">SEICHO / ${t.id}</div><h2>${esc(t.name)}</h2>${status(t.status)}<p>${esc(t.description)}</p>${btn("Legg oppgaven til i en tidsplan", `scheduleAdd:task:${t.id}`, "btn small quiet")}${st.taskRuns
+            .filter((r) => r.taskRef === t.id)
+            .map(
+              (r) =>
+                `<p>${esc(r.id)} · ${esc(r.name)}</p>${btn("Legg kjøringen til i en tidsplan", `scheduleAdd:run:${r.id}`, "btn small quiet")}`,
+            )
+            .join(
+              "",
+            )}<div class="section-label"><h2>Execution readiness</h2></div><div class="check-list">${deps.length ? deps.map((d) => `<div>${ico("network", "sm")}${esc(d)}</div>`).join("") : `<div>${ico("check", "sm")} No unmet prerequisites in this sample</div>`}</div><div class="section-label"><h2>Execution policy</h2></div><div class="metric-list"><span>Host</span><strong>ANON-PC (sample)</strong><span>Provider</span><strong>Pi / local Qwen</strong><span>Git</span><strong>Manual approval</strong><span>Source context</span><strong>SEICHO project</strong></div>${t.id === "TASK-25" ? `<div class="inspect-info"><strong>Design reference</strong><p>${st.acceptedDesign ? "v2 accepted as a reference" : "Acceptance is separate from producing a prototype."}</p>${btn("Open reference", "modal:prototype", "btn small quiet")}</div>` : ""}`;
         }
         // What you can ask an agent to do depends on what it is doing right now.
         function agentActionsLabel(a) {
@@ -7033,6 +7055,7 @@
               import: "Import artifact",
               importSession: "Import session",
               schedule: "Ny tidsplan",
+              scheduleLink: "Legg til i en tidsplan",
               skill: "Review skill or tool",
               pair: "Pair host",
               addProject: "Add project",
@@ -7047,6 +7070,9 @@
           if (m === "prototype") {
             body = `<p class="section-caption">A versioned, inspectable HTML design reference. Generating a prototype and accepting it are separate actions.</p><div class="thumb-ui"><div class="windowbar">Recipe import interface · v2 · sample</div><div class="bar" style="width:94%"></div><div class="bar" style="width:72%"></div><div class="bar short"></div></div><div class="kv"><span>Template</span><strong>Paseo / native dark</strong><span>Revision</span><strong>design-v2</strong><span>Browser capture</span><strong>Sample capture</strong><span>Accepted</span><strong>${st.acceptedDesign ? "Yes" : "No"}</strong></div>`;
             confirm = st.acceptedDesign ? "Close" : "Accept reference v2";
+          } else if (m === "scheduleLink") {
+            body = `<p>${esc(scheduleTargetTitle(st.scheduleSource))}</p><p>Velg en tidsplan, eller lag en ny. Tidsplanen peker på det samme arbeidet; den lager ingen kopi. Ingenting kjøres.</p><div class="seq-actions">${st.schedules.map((s) => btn(esc(s.name), `scheduleAttach:${s.id}`, "btn quiet")).join("")}</div>`;
+            confirm = "Lag ny tidsplan";
           } else if (m === "schedule") {
             body = scheduleForm();
             confirm = "Legg til tidsplan";
@@ -7068,7 +7094,7 @@
             body = `<p class="section-caption">Prototype screen. The navigation works; nothing is written to a host, deployment, credential, or external service.</p><div class="form-row"><label>${title}</label><input data-focus-group="modal" id="modal-draft" placeholder="Optional sample details"></div>`;
             confirm = "Save sample entry";
           }
-          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m === "schedule" ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m === "schedule" ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "schedule" ? "scheduleSave" : "modalConfirm", "btn primary")}</div></div></div>`;
+          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m.startsWith("schedule") ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m.startsWith("schedule") ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "schedule" ? "scheduleSave" : m === "scheduleLink" ? "scheduleCreate" : "modalConfirm", "btn primary")}</div></div></div>`;
         }
         let previousDialog = false,
           dialogOpener = null;
@@ -7467,9 +7493,46 @@
           "søndag",
         ];
         const scheduleRunTargets = () => [
-          { ref: "RUN-S21", name: "Hovedkjøringen" },
-          ...agentRuns.slice(1).map((r) => ({ ref: r.id, name: "Hjelpeagentens kjøring" })),
+          { ref: "RUN-S21", name: agentRuns[0].name },
+          ...agentRuns.slice(1).map((r) => ({ ref: r.id, name: r.name })),
+          ...st.taskRuns.map((r) => ({ ref: r.id, name: r.name })),
         ];
+        function rememberTaskRun(t) {
+          const id = "RUN-" + t.id;
+          if (!st.taskRuns.some((r) => r.id === id))
+            st.taskRuns.push({ id, taskRef: t.id, name: t.name, completed: false });
+        }
+        function recordScheduleCompletion(ref) {
+          const run = st.taskRuns.find((r) => r.id === ref);
+          if (!run || run.completed) return;
+          run.completed = true;
+          for (const s of st.schedules) {
+            if (s.trigger.mode !== "onFinish" || s.trigger.parentRef !== ref) continue;
+            if (!s.enabled) {
+              s.finishNote =
+                "Kjøringen ble ferdig mens tidsplanen var på pause. Resultatet ble ikke lagt til. Det legges heller ikke til når du fortsetter.";
+              continue;
+            }
+            s.lastRuns.push({
+              at: "man 19. okt. 09:22",
+              outcome: "Kjøringen er ferdig. Eksempel lagt til; ingenting kjørte.",
+            });
+            s.finishNote = "Ferdig registrert én gang. Dette er et eksempel; ingenting kjørte.";
+          }
+        }
+        function scheduleFinishStatus(s) {
+          if (s.finishNote) return s.finishNote;
+          if (st.taskRuns.find((r) => r.id === s.trigger.parentRef)?.completed)
+            return "Kjøringen var allerede ferdig da tidsplanen ble lagt til. Ingen resultater legges til i ettertid.";
+          return "Venter på at kjøringen blir ferdig. På pause legges ingen resultater til, heller ikke når du fortsetter.";
+        }
+        function scheduleSourceExists(kind, ref) {
+          return (
+            (kind === "sequence" && sequence(ref)) ||
+            (kind === "task" && task(ref)) ||
+            (kind === "run" && scheduleRunTargets().some((r) => r.ref === ref))
+          );
+        }
         function scheduleTargetTitle(target) {
           if (target.kind === "sequence")
             return `Rekkefølge · ${sequence(target.ref)?.name || target.ref}`;
@@ -7478,6 +7541,8 @@
           return `Kjøring · ${target.ref} · ${run?.name || "Ukjent kjøring"}`;
         }
         function scheduleWhen(trigger) {
+          if (trigger.mode === "onFinish")
+            return `Når ${scheduleTargetTitle({ kind: "run", ref: trigger.parentRef })} er ferdig`;
           if (trigger.mode === "cadence") return `Hver ${trigger.every}`;
           if (trigger.mode === "weekdays") return `${trigger.days.join(", ")} kl. ${trigger.at}`;
           return `Én gang · ${trigger.at}`;
@@ -7490,12 +7555,16 @@
           return `<section class="sheet" id="schedules-list"><div class="sheet-head"><h3>Tidsplaner</h3>${btn("Ny tidsplan", "scheduleNew", "btn small primary")}</div>${st.schedules
             .map(
               (s) =>
-                `<article class="schedule-row" data-schedule-id="${s.id}" style="padding:20px;border-top:1px solid var(--line);overflow-wrap:anywhere"><div class="schedule-head seq-actions" style="justify-content:space-between"><h3>${esc(s.name)}</h3><button class="btn small quiet" role="switch" aria-checked="${s.enabled}" aria-label="Aktiv tidsplan: ${esc(s.name)}" data-action="scheduleToggle:${s.id}">${s.enabled ? "Sett på pause" : "Fortsett"}</button></div><p>${s.enabled ? "Aktiv" : "På pause"} · ${esc(scheduleWhen(s.trigger))}</p><h4>Hva tidsplanen peker på</h4><ul class="schedule-targets">${s.targets.map(scheduleTargetMarkup).join("")}</ul><div class="schedule-details two-col" style="margin-top:16px"><div><h4>Neste tre tidspunkter (eksempler)</h4><ul class="schedule-next">${s.nextFires
+                `<article class="schedule-row" data-schedule-id="${s.id}" style="padding:20px;border-top:1px solid var(--line);overflow-wrap:anywhere"><div class="schedule-head seq-actions" style="justify-content:space-between"><h3>${esc(s.name)}</h3><button class="btn small quiet" role="switch" aria-checked="${s.enabled}" aria-label="Aktiv tidsplan: ${esc(s.name)}" data-action="scheduleToggle:${s.id}">${s.enabled ? "Sett på pause" : "Fortsett"}</button></div><p>${s.enabled ? "Aktiv" : "På pause"} · ${esc(scheduleWhen(s.trigger))}</p>${s.trigger.mode === "onFinish" ? `<p class="schedule-finish-status">${esc(scheduleFinishStatus(s))}</p>` : ""}<h4>Hva tidsplanen peker på</h4><ul class="schedule-targets">${s.targets.map(scheduleTargetMarkup).join("")}</ul><div class="schedule-details two-col" style="margin-top:16px"><div><h4>Neste tre tidspunkter (eksempler)</h4><ul class="schedule-next">${s.nextFires
                   .slice(0, 3)
                   .map((at) => `<li>${esc(at)}</li>`)
                   .join(
                     "",
-                  )}</ul>${!s.enabled ? `<p>På pause. Tidspunktene står her bare som eksempler.</p>` : ""}</div><div><h4>Siste tre resultater (eksempler)</h4><ul class="schedule-history">${s.lastRuns
+                  )}</ul>${s.trigger.mode === "onFinish" ? `<p>Tidspunktet avhenger av kjøringen. Ingen klokke brukes.</p>` : ""}${!s.enabled ? `<p>På pause. Tidspunktene står her bare som eksempler.</p>` : ""}</div><div><h4>Siste tre resultater (eksempler)</h4><ul class="schedule-history">${(s
+                  .trigger.mode === "onFinish"
+                  ? s.lastRuns.slice(-3).reverse()
+                  : s.lastRuns
+                )
                   .slice(0, 3)
                   .map((r) => `<li>${esc(r.at)} · ${esc(r.outcome)}</li>`)
                   .join(
@@ -7505,7 +7574,7 @@
             .join("")}</section>`;
         }
         function scheduleStrip() {
-          return `<div class="schedule-strip seq-strip" aria-label="Tidsplaner i arbeidsområdet">${st.schedules.map((s) => `<button class="shiori-nav" data-action="schedules" data-schedule-status="${s.id}">${esc(s.name)} · ${s.enabled ? "Aktiv" : "På pause"}</button>`).join("")}<p class="small dim">Bare eksempler. Ingenting kjøres.</p></div>`;
+          return `<div class="schedule-strip seq-strip" aria-label="Tidsplaner i arbeidsområdet">${st.schedules.map((s) => `<button class="shiori-nav" data-action="schedules" data-schedule-status="${s.id}">${esc(s.name)} · ${s.enabled ? "Aktiv" : "På pause"}${s.trigger.mode === "onFinish" ? ` · ${esc(scheduleFinishStatus(s))}` : ""}</button>`).join("")}<p class="small dim">Bare eksempler. Ingenting kjøres.</p></div>`;
         }
 
         function scheduleForm() {
@@ -7515,10 +7584,11 @@
             ...scheduleRunTargets().map((r) => ({ kind: "run", ref: r.ref })),
             ...st.taskList.map((t) => ({ kind: "task", ref: t.id })),
           ];
-          return `<p class="section-caption">Lag et eksempel. Ingenting kjøres. De tre tidspunktene og resultatene som legges til er faste eksempler; de beregnes ikke fra valgene dine.</p>${st.scheduleError ? `<p role="alert">${esc(st.scheduleError)}</p>` : ""}<div class="form-row"><label for="schedule-name">Navn</label><input id="schedule-name" data-focus-group="schedule" value="${esc(d.name)}"></div><fieldset><legend>Hva tidsplanen peker på (velg én eller flere)</legend>${choices.map((t) => `<label class="schedule-choice seq-actions" style="padding:8px 0;flex-wrap:nowrap"><input type="checkbox" data-action="scheduleTarget:${t.kind}:${t.ref}" ${d.targets.some((x) => x.kind === t.kind && x.ref === t.ref) ? "checked" : ""}><span style="min-width:0;flex:1">${esc(scheduleTargetTitle(t))}</span></label>`).join("")}</fieldset><div class="form-row"><label for="schedule-mode">Når</label><select id="schedule-mode">${[
+          return `<p class="section-caption">Lag et eksempel. Ingenting kjøres. Ved tidsvalg er de tre tidspunktene og resultatene faste eksempler; de beregnes ikke fra valgene dine. Når vi venter på en kjøring, legges et eksempel til først når du fullfører den her.</p>${st.scheduleError ? `<p role="alert">${esc(st.scheduleError)}</p>` : ""}<div class="form-row"><label for="schedule-name">Navn</label><input id="schedule-name" data-focus-group="schedule" value="${esc(d.name)}"></div><fieldset><legend>Hva tidsplanen peker på (velg én eller flere)</legend>${choices.map((t) => `<label class="schedule-choice seq-actions" style="padding:8px 0;flex-wrap:nowrap"><input type="checkbox" data-action="scheduleTarget:${t.kind}:${t.ref}" ${d.targets.some((x) => x.kind === t.kind && x.ref === t.ref) ? "checked" : ""}><span style="min-width:0;flex:1">${esc(scheduleTargetTitle(t))}</span></label>`).join("")}</fieldset><div class="form-row"><label for="schedule-mode">Når</label><select id="schedule-mode">${[
             ["time", "Én gang"],
             ["cadence", "Med fast mellomrom"],
             ["weekdays", "På valgte ukedager"],
+            ["onFinish", "Når en kjøring er ferdig"],
           ]
             .map(
               ([mode, name]) =>
@@ -7526,7 +7596,7 @@
             )
             .join(
               "",
-            )}</select></div>${d.trigger.mode === "cadence" ? `<div class="form-row"><label for="schedule-every">Mellomrom, for eksempel 6 timer</label><input id="schedule-every" value="${esc(d.trigger.every)}"></div>` : `<div class="form-row"><label for="schedule-at">${d.trigger.mode === "time" ? "Tidspunkt, for eksempel man 19. okt. 07:00" : "Klokkeslett"}</label><input id="schedule-at" value="${esc(d.trigger.at)}"></div>`}${d.trigger.mode === "weekdays" ? `<fieldset><legend>Ukedager</legend>${scheduleDays.map((day) => `<label class="schedule-choice seq-actions" style="padding:8px 0"><input type="checkbox" data-action="scheduleDay:${day}" ${d.trigger.days.includes(day) ? "checked" : ""}>${day}</label>`).join("")}</fieldset>` : ""}`;
+            )}</select></div>${d.trigger.mode === "onFinish" ? `<div class="form-row"><label for="schedule-parent">Kjøringen vi venter på</label><select id="schedule-parent">${st.taskRuns.map((r) => `<option value="${esc(r.id)}" ${d.trigger.parentRef === r.id ? "selected" : ""}>${esc(scheduleTargetTitle({ kind: "run", ref: r.id }))}</option>`).join("")}</select></div><p>Et eksempel legges til når du fullfører kjøringen her. Ingenting kjøres. Fullføring på pause tas ikke igjen senere.</p>` : d.trigger.mode === "cadence" ? `<div class="form-row"><label for="schedule-every">Mellomrom, for eksempel 6 timer</label><input id="schedule-every" value="${esc(d.trigger.every)}"></div>` : `<div class="form-row"><label for="schedule-at">${d.trigger.mode === "time" ? "Tidspunkt, for eksempel man 19. okt. 07:00" : "Klokkeslett"}</label><input id="schedule-at" value="${esc(d.trigger.at)}"></div>`}${d.trigger.mode === "weekdays" ? `<fieldset><legend>Ukedager</legend>${scheduleDays.map((day) => `<label class="schedule-choice seq-actions" style="padding:8px 0"><input type="checkbox" data-action="scheduleDay:${day}" ${d.trigger.days.includes(day) ? "checked" : ""}>${day}</label>`).join("")}</fieldset>` : ""}`;
         }
         // --- Sequences (slice S11a). One run made of work that already exists: tasks from
         // the plan board, the sample run on the Runs page, or a prompt you wrote. A step
@@ -7734,6 +7804,7 @@
             st.currentRunningTask = t.id;
             st.execution = "running";
             st.runName = "RUN-" + t.id;
+            rememberTaskRun(t);
             step.status = "running";
             seq.status = "running";
             st.currentSequence = seq.id;
@@ -7918,7 +7989,10 @@
             "Sequences",
             "One run made of work that already exists: tasks from the plan board, the sample run on the Runs page, or a prompt you wrote. A sequence points at that work. It never holds a copy of it, and it runs nothing by itself.",
             "PROJECT / SEQUENCES",
-            btn("New sequence from the plan board", "sequenceFromQueue", "btn primary"),
+            btn("New sequence from the plan board", "sequenceFromQueue", "btn primary") +
+              (seq
+                ? btn("Legg til i en tidsplan", `scheduleAdd:sequence:${seq.id}`, "btn quiet")
+                : ""),
           );
           if (!seq)
             return `<div style="margin-top:30px">${head}<div class="plain-section"><div class="section-label"><h2>No sequence yet</h2></div><p class="section-caption">A sequence is the order you want work to happen in. Make one from the tasks on the plan board, add the sample run to it, or start from the order the plan names.</p><div class="seq-actions" style="margin-top:14px">${btn(
@@ -8101,6 +8175,28 @@
           const [cmd, ...rest] = key.split(":");
           const val = rest[0];
           switch (cmd) {
+            case "scheduleAdd":
+              if (scheduleSourceExists(val, rest[1])) {
+                st.scheduleSource = { kind: val, ref: rest[1] };
+                st.modal = "scheduleLink";
+              }
+              break;
+            case "scheduleAttach": {
+              const s = st.schedules.find((s) => s.id === val);
+              const source = st.scheduleSource;
+              if (!s || !source || !scheduleSourceExists(source.kind, source.ref)) break;
+              if (!s.targets.some((t) => t.kind === source.kind && t.ref === source.ref))
+                s.targets.push({ kind: source.kind, ref: source.ref });
+              navigate("schedules");
+              break;
+            }
+            case "scheduleCreate": {
+              const source = st.scheduleSource;
+              if (!source || !scheduleSourceExists(source.kind, source.ref)) break;
+              action("scheduleNew");
+              st.scheduleDraft.targets.push({ kind: source.kind, ref: source.ref });
+              break;
+            }
             case "scheduleNew":
               st.scheduleDraft = {
                 name: "",
@@ -8110,6 +8206,7 @@
                   at: "man 19. okt. 07:00",
                   every: "6 timer",
                   days: ["mandag"],
+                  parentRef: "RUN-TASK-24",
                 },
               };
               st.scheduleError = "";
@@ -8125,11 +8222,16 @@
               if (!d) break;
               const value = rest.slice(1).join(":");
               if (val === "name") d.name = value;
-              else if (val === "mode" && ["time", "cadence", "weekdays"].includes(value)) {
+              else if (
+                val === "mode" &&
+                ["time", "cadence", "weekdays", "onFinish"].includes(value)
+              ) {
                 d.trigger.mode = value;
                 if (value === "time") d.trigger.at = "man 19. okt. 07:00";
                 if (value === "weekdays") d.trigger.at = "07:00";
               } else if (["at", "every"].includes(val)) d.trigger[val] = value;
+              else if (val === "parentRef" && st.taskRuns.some((r) => r.id === value))
+                d.trigger.parentRef = value;
               break;
             }
             case "scheduleTarget": {
@@ -8160,36 +8262,48 @@
               if (
                 !d.name.trim() ||
                 !d.targets.length ||
-                (d.trigger.mode === "cadence" ? !d.trigger.every.trim() : !d.trigger.at.trim()) ||
+                (d.trigger.mode === "onFinish"
+                  ? !st.taskRuns.some((r) => r.id === d.trigger.parentRef)
+                  : d.trigger.mode === "cadence"
+                    ? !d.trigger.every.trim()
+                    : !d.trigger.at.trim()) ||
                 (d.trigger.mode === "weekdays" && !d.trigger.days.length)
               ) {
                 st.scheduleError = "Skriv et navn, velg arbeid og fyll ut når tidsplanen gjelder.";
                 break;
               }
               const trigger =
-                d.trigger.mode === "cadence"
-                  ? { mode: "cadence", every: d.trigger.every.trim() }
-                  : {
-                      mode: d.trigger.mode,
-                      at: d.trigger.at.trim(),
-                      ...(d.trigger.mode === "weekdays" ? { days: [...d.trigger.days] } : {}),
-                    };
+                d.trigger.mode === "onFinish"
+                  ? { mode: "onFinish", parentRef: d.trigger.parentRef }
+                  : d.trigger.mode === "cadence"
+                    ? { mode: "cadence", every: d.trigger.every.trim() }
+                    : {
+                        mode: d.trigger.mode,
+                        at: d.trigger.at.trim(),
+                        ...(d.trigger.mode === "weekdays" ? { days: [...d.trigger.days] } : {}),
+                      };
               st.schedules.push({
                 id: `schedule-${++st.scheduleSeq}`,
                 name: d.name.trim(),
                 targets: d.targets.map((t) => ({ ...t })),
                 trigger,
                 enabled: true,
-                nextFires: ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
-                lastRuns: [
-                  { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
-                  { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
-                  { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
-                ],
+                nextFires:
+                  trigger.mode === "onFinish"
+                    ? []
+                    : ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
+                lastRuns:
+                  trigger.mode === "onFinish"
+                    ? []
+                    : [
+                        { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
+                        { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
+                        { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
+                      ],
               });
               st.scheduleDraft = null;
               st.scheduleError = "";
-              st.modal = null;
+              navigate("schedules");
               break;
             }
             case "toggleInspector":
@@ -8477,6 +8591,7 @@
               st.currentRunningTask = t.id;
               st.execution = "running";
               st.runName = "RUN-" + t.id;
+              rememberTaskRun(t);
               st.inspector = "agents";
               toast(`${t.id} started in sample state. No real execution.`);
               break;
@@ -8484,11 +8599,16 @@
             case "finishRun": {
               let t = task(st.currentRunningTask);
               if (!t || t.status !== "running") {
-                toast("No sample run in progress.");
+                toast(
+                  st.taskRuns.some((r) => r.id === st.runName && r.completed)
+                    ? "Denne eksempelkjøringen er allerede ferdig. Resultatet legges ikke til på nytt."
+                    : "Ingen eksempelkjøring pågår.",
+                );
                 break;
               }
               t.status = "done";
               st.execution = "finished";
+              recordScheduleCompletion("RUN-" + t.id);
               recalc();
               st.inspector = "task";
               st.selectedTask = t.id;
@@ -9329,6 +9449,10 @@
           }
         });
         document.addEventListener("change", (e) => {
+          if (e.target.id === "schedule-parent") {
+            action("scheduleField:parentRef:" + e.target.value);
+            return;
+          }
           if (e.target.id === "schedule-mode") {
             action("scheduleField:mode:" + e.target.value);
             return;

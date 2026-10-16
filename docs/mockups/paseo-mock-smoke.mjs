@@ -356,6 +356,77 @@ page("workspace:schedule-paused", () => {
   return render();
 });
 
+// S11b-2: waiting, recorded and paused completions, plus every work-to-schedule entry.
+page("schedules:onFinish:waiting", () => {
+  resetFinishSample();
+  action("schedules");
+  action("clearToast");
+  return render();
+});
+page("schedules:link:run", () => {
+  action("project:seicho");
+  action("section:runs");
+  action("scheduleAdd:run:RUN-S21");
+  action("clearToast");
+  return render();
+});
+page("schedules:link:sequence", () => {
+  action("modal:close");
+  action("sequenceNew");
+  action(`scheduleAdd:sequence:${st.selectedSequence}`);
+  action("clearToast");
+  return render();
+});
+page("schedules:link:task", () => {
+  action("modal:close");
+  action("task:TASK-24");
+  action("scheduleAdd:task:TASK-24");
+  action("clearToast");
+  return render();
+});
+page("schedules:form:onFinish", () => {
+  action("scheduleCreate");
+  action("scheduleField:mode:onFinish");
+  action("clearToast");
+  return render();
+});
+page("schedules:onFinish:recorded", () => {
+  action("modal:close");
+  resetFinishSample();
+  startSampleRun();
+  action("finishRun");
+  action("schedules");
+  action("clearToast");
+  return render();
+});
+page("workspace:schedule-recorded", () => {
+  action("workspace:seicho");
+  action("inspect:shioriHome");
+  action("clearToast");
+  return render();
+});
+page("schedules:onFinish:paused-completion", () => {
+  resetFinishSample();
+  action("scheduleToggle:schedule-3");
+  startSampleRun();
+  action("finishRun");
+  action("schedules");
+  action("clearToast");
+  return render();
+});
+page("workspace:schedule-paused-completion", () => {
+  action("workspace:seicho");
+  action("inspect:shioriHome");
+  action("clearToast");
+  return render();
+});
+page("schedules:onFinish:resumed", () => {
+  action("scheduleToggle:schedule-3");
+  action("schedules");
+  action("clearToast");
+  return render();
+});
+
 // ---------------------------------------------------------------- 2. no leaked placeholders
 
 const LEAK = /\bundefined\b|\bNaN\b|\[object Object\]|\[object Object\]|>\s*null\s*</g;
@@ -438,6 +509,11 @@ for (const { label, out } of pages) {
 }
 restore(pageSnapshots.get("home") ?? snapshot());
 render();
+check(
+  "toast-only control count stays at the 20-control checkpoint",
+  toastOnly.size === 20,
+  `found ${toastOnly.size} toast-only controls`,
+);
 
 function add(map, key, label) {
   if (!map.has(key)) map.set(key, label);
@@ -570,7 +646,276 @@ function scheduleStripMarkup(out) {
   return strip[1];
 }
 
+function resetFinishSample() {
+  resetSampleTasks();
+  const parent = st.taskRuns.find((r) => r.id === "RUN-TASK-24");
+  parent.completed = false;
+  const s = st.schedules.find((record) => record.id === "schedule-3");
+  s.enabled = true;
+  s.lastRuns = [];
+  delete s.finishNote;
+}
+
 const scenarios = [
+  {
+    name: "onFinish names its parent from the run record and lists its target separately",
+    setup: resetFinishSample,
+    run: () => {
+      const parent = st.taskRuns.find((r) => r.id === "RUN-TASK-24");
+      action("schedules");
+      const before = scheduleRow(render(), "schedule-3");
+      parent.name = "Nytt navn på kjøringen";
+      const after = scheduleRow(render(), "schedule-3");
+      return (
+        before.includes(`Når Kjøring · ${parent.id} · Arbeid med ordlisten er ferdig`) &&
+        after.includes(`Når Kjøring · ${parent.id} · ${parent.name} er ferdig`) &&
+        after.includes(`Oppgave · ${api.task("TASK-21").name}`) &&
+        after.includes("Venter på at kjøringen blir ferdig.")
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "finishing a parent appends exactly one sample outcome only to its matching schedule, visible in row and sidebar",
+    setup: resetFinishSample,
+    run: () => {
+      const s = st.schedules.find((record) => record.id === "schedule-3");
+      const histories = st.schedules.map((record) => JSON.stringify(record.lastRuns));
+      // Make another task run through its own surface so the parent selector can use it.
+      api.task("TASK-21").status = "ready";
+      action("task:TASK-21");
+      action("authorizeRun");
+      action("finishRun");
+      action("scheduleNew");
+      action("scheduleField:name:En annen kjøring");
+      action("scheduleTarget:task:TASK-24");
+      action("scheduleField:mode:onFinish");
+      action("scheduleField:parentRef:RUN-TASK-21");
+      action("scheduleSave");
+      const other = st.schedules[st.schedules.length - 1];
+      const otherHistory = JSON.stringify(other.lastRuns);
+      startSampleRun();
+      action("finishRun");
+      action("schedules");
+      const row = scheduleRow(render(), s.id);
+      const otherRow = scheduleRow(render(), other.id);
+      const result = s.lastRuns[0];
+      const unchanged = st.schedules
+        .slice(0, histories.length)
+        .every(
+          (record, i) => record.id === s.id || JSON.stringify(record.lastRuns) === histories[i],
+        );
+      action("workspace:seicho");
+      action("inspect:shioriHome");
+      const sidebar = scheduleStripMarkup(render());
+      action("finishRun");
+      return (
+        s.lastRuns.length === 1 &&
+        unchanged &&
+        other.trigger.parentRef === "RUN-TASK-21" &&
+        JSON.stringify(other.lastRuns) === otherHistory &&
+        otherRow.includes("Kjøringen var allerede ferdig da tidsplanen ble lagt til.") &&
+        result.at === "man 19. okt. 09:22" &&
+        result.outcome.includes("ingenting kjørte") &&
+        scheduleList(row, "schedule-history")[0] === `${result.at} · ${result.outcome}` &&
+        row.includes("Ferdig registrert én gang") &&
+        sidebar.includes("Ferdig registrert én gang") &&
+        st.toast.includes("allerede ferdig. Resultatet legges ikke til på nytt.")
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "paused onFinish acknowledges completion without recording it and resume retains the explicit skipped result",
+    setup: resetFinishSample,
+    run: () => {
+      const s = st.schedules.find((record) => record.id === "schedule-3");
+      const before = JSON.stringify(s.lastRuns);
+      action(`scheduleToggle:${s.id}`);
+      startSampleRun();
+      action("finishRun");
+      action("schedules");
+      const paused = scheduleRow(render(), s.id);
+      action("workspace:seicho");
+      action("inspect:shioriHome");
+      const sidebar = scheduleStripMarkup(render());
+      action(`scheduleToggle:${s.id}`);
+      action("schedules");
+      const resumed = scheduleRow(render(), s.id);
+      return (
+        st.taskRuns.find((r) => r.id === s.trigger.parentRef).completed === true &&
+        api.task("TASK-24").status === "done" &&
+        JSON.stringify(s.lastRuns) === before &&
+        paused.includes('aria-checked="false"') &&
+        paused.includes("Resultatet ble ikke lagt til.") &&
+        sidebar.includes("Resultatet ble ikke lagt til.") &&
+        s.enabled === true &&
+        resumed.includes('aria-checked="true"') &&
+        resumed.includes("Det legges heller ikke til når du fortsetter.")
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  ...["existing", "new"].map((destination) => ({
+    name: `run surface adds a live run pointer to a ${destination} schedule and follows a later record edit`,
+    setup: resetFinishSample,
+    run: () => {
+      startSampleRun();
+      action("task:TASK-24");
+      const out = render();
+      const parent = st.taskRuns.find((r) => r.id === "RUN-TASK-24");
+      if (!inspectorMarkup(out).includes(`data-action="scheduleAdd:run:${parent.id}"`))
+        throw new Error("task run surface has no schedule entry");
+      action(`scheduleAdd:run:${parent.id}`);
+      const chooser = render();
+      if (
+        !chooser.includes('data-action="scheduleCreate"') ||
+        !chooser.includes('data-action="scheduleAttach:schedule-2"')
+      )
+        throw new Error("chooser must offer both existing and new schedules");
+      let s;
+      if (destination === "existing") {
+        action("scheduleAttach:schedule-2");
+        s = st.schedules.find((record) => record.id === "schedule-2");
+      } else {
+        action("scheduleCreate");
+        action("scheduleField:name:Fra kjøringen");
+        action("scheduleField:mode:onFinish");
+        action("scheduleSave");
+        s = st.schedules[st.schedules.length - 1];
+      }
+      parent.name = "Endret kjøring etter at den ble lagt til";
+      action("schedules");
+      const target = s.targets.find((t) => t.kind === "run" && t.ref === parent.id);
+      return (
+        JSON.stringify(Object.keys(target).sort()) === JSON.stringify(["kind", "ref"]) &&
+        scheduleRow(render(), s.id).includes(`Kjøring · ${parent.id} · ${parent.name}`) &&
+        s.targets.filter((t) => t.kind === "run" && t.ref === parent.id).length === 1
+      );
+    },
+    expect: (ok) => ok === true,
+  })),
+  ...["sequence", "task", "run"].flatMap((kind) =>
+    ["existing", "new"].map((destination) => ({
+      name: `${kind} work surface offers a ${destination} schedule with a live reference`,
+      setup: resetFinishSample,
+      run: () => {
+        let record, ref;
+        if (kind === "sequence") {
+          action("sequenceNew");
+          record = seqOf(st.selectedSequence);
+          ref = record.id;
+        } else if (kind === "task") {
+          action("task:TASK-24");
+          record = api.task("TASK-24");
+          ref = record.id;
+        } else {
+          action("project:seicho");
+          action("section:runs");
+          ref = "RUN-S21";
+        }
+        if (!render().includes(`data-action="scheduleAdd:${kind}:${ref}"`))
+          throw new Error("work surface has no schedule entry");
+        action(`scheduleAdd:${kind}:${ref}`);
+        let s;
+        if (destination === "existing") {
+          action("scheduleAttach:schedule-2");
+          s = st.schedules.find((schedule) => schedule.id === "schedule-2");
+        } else {
+          action("scheduleCreate");
+          action("scheduleField:name:Fra arbeidet");
+          action("scheduleSave");
+          s = st.schedules[st.schedules.length - 1];
+        }
+        const target = s.targets.find((t) => t.kind === kind && t.ref === ref);
+        action("schedules");
+        if (record) {
+          const oldName = record.name;
+          record.name = "Endret etter at tidsplanen ble laget";
+          const follows = scheduleRow(render(), s.id).includes(record.name);
+          record.name = oldName;
+          if (!follows) throw new Error("schedule copied the work instead of referencing it");
+        }
+        return (
+          JSON.stringify(target) === JSON.stringify({ kind, ref }) &&
+          scheduleRow(render(), s.id).includes(`data-schedule-target="${kind}:${ref}"`) &&
+          s.targets.filter((t) => t.kind === kind && t.ref === ref).length === 1
+        );
+      },
+      expect: (ok) => ok === true,
+    })),
+  ),
+  {
+    name: "onFinish form, linking, pause, resume and completion paths all work with a throwing Date",
+    setup: resetFinishSample,
+    run: () => {
+      const realDate = sandbox.Date;
+      sandbox.Date = class {
+        constructor() {
+          throw new Error("onFinish consulted the clock");
+        }
+        static now() {
+          throw new Error("onFinish consulted the clock");
+        }
+      };
+      try {
+        startSampleRun();
+        action("scheduleAdd:run:RUN-TASK-24");
+        action("scheduleAttach:schedule-2");
+        action("sequenceNew");
+        action(`scheduleAdd:sequence:${st.selectedSequence}`);
+        action("scheduleCreate");
+        action("scheduleField:name:Etter kjøringen uten klokke");
+        action("scheduleField:mode:onFinish");
+        action("scheduleField:parentRef:RUN-TASK-24");
+        const form = render();
+        action("scheduleSave");
+        const s = st.schedules[st.schedules.length - 1];
+        action(`scheduleToggle:${s.id}`);
+        action(`scheduleToggle:${s.id}`);
+        action("scheduleToggle:schedule-3");
+        action("finishRun");
+        action("scheduleToggle:schedule-3");
+        action("finishRun");
+        action("schedules");
+        const row = scheduleRow(render(), s.id);
+        action("workspace:seicho");
+        action("inspect:shioriHome");
+        const paused = st.schedules.find((schedule) => schedule.id === "schedule-3");
+        return (
+          form.includes('id="schedule-parent"') &&
+          s.trigger.mode === "onFinish" &&
+          s.lastRuns.length === 1 &&
+          paused.lastRuns.length === 0 &&
+          paused.finishNote.includes("mens tidsplanen var på pause") &&
+          row.includes("Ferdig registrert én gang") &&
+          scheduleStripMarkup(render()).includes("Ferdig registrert én gang")
+        );
+      } finally {
+        sandbox.Date = realDate;
+      }
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "sequence task completion uses the same onFinish record as the task surface",
+    setup: resetFinishSample,
+    run: () => {
+      const id = sequenceFromBoard();
+      action(`sequenceStart:${id}`);
+      action(`sequenceRun:${id}`); // TASK-20 was already done.
+      action(`sequenceRun:${id}`); // TASK-24 starts the sample run.
+      action("finishRun");
+      const s = st.schedules.find((record) => record.id === "schedule-3");
+      action("schedules");
+      return (
+        seqOf(id).steps.find((step) => step.ref === "TASK-24").status === "done" &&
+        s.lastRuns.length === 1 &&
+        scheduleRow(render(), s.id).includes("Ferdig registrert én gang")
+      );
+    },
+    expect: (ok) => ok === true,
+  },
   {
     name: "schedule controls work without a clock and preserve execution, tasks and sequence state",
     setup: () => action("schedules"),
