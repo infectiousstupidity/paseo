@@ -2023,7 +2023,8 @@ function ComposerContentImpl({
 
       event.preventDefault();
       promptHistoryRef.current = result.cursor ? { sessionKey, cursor: result.cursor } : null;
-      replaceUserInput(result.text);
+      const end = result.text.length;
+      replaceUserInput(result.text, { start: end, end });
       return true;
     },
     [agentId, hasAgent, inputMode, isComposerLocked, readOnly, replaceUserInput, serverId],
