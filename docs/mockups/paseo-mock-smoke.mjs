@@ -310,6 +310,52 @@ page("project:seicho/sequences:ask", () => {
   return render();
 });
 
+// S11b-1: every schedule state is reached with the same commands its controls use.
+page("schedules:paused", () => {
+  action("schedules");
+  action("scheduleToggle:schedule-1");
+  return render();
+});
+page("schedules:form", () => {
+  action("scheduleToggle:schedule-1");
+  action("scheduleNew");
+  return render();
+});
+page("schedules:form:cadence", () => {
+  action("scheduleField:mode:cadence");
+  return render();
+});
+page("schedules:form:weekdays", () => {
+  action("scheduleField:mode:weekdays");
+  return render();
+});
+page("schedules:form:error", () => {
+  action("scheduleSave");
+  return render();
+});
+page("schedules:form:sequence", () => {
+  action("modal:close");
+  action("sequenceFromQueue");
+  const seq = st.sequences[st.sequences.length - 1];
+  action("schedules");
+  action("scheduleNew");
+  action("scheduleField:name:Gå gjennom oppgavene");
+  action(`scheduleTarget:sequence:${seq.id}`);
+  action("scheduleField:mode:weekdays");
+  action("scheduleDay:fredag");
+  return render();
+});
+page("schedules:sequence", () => {
+  action("scheduleSave");
+  return render();
+});
+page("workspace:schedule-paused", () => {
+  action("scheduleToggle:schedule-1");
+  action("workspace:seicho");
+  action("inspect:shioriHome");
+  return render();
+});
+
 // ---------------------------------------------------------------- 2. no leaked placeholders
 
 const LEAK = /\bundefined\b|\bNaN\b|\[object Object\]|\[object Object\]|>\s*null\s*</g;
@@ -504,7 +550,257 @@ function stripMarkup(out) {
   return out.slice(from, out.indexOf("</button>", from) + 9);
 }
 
+function scheduleRow(out, id) {
+  const row = out.match(
+    new RegExp(
+      `<article class="schedule-row" data-schedule-id="${id}"[^>]*>([\\s\\S]*?)</article>`,
+    ),
+  );
+  if (!row) throw new Error(`no schedule row ${id}`);
+  return row[1];
+}
+function scheduleList(row, className) {
+  const list = row.match(new RegExp(`<ul class="${className}">([\\s\\S]*?)</ul>`));
+  if (!list) throw new Error(`no ${className} list`);
+  return [...list[1].matchAll(/<li>([^<]+)<\/li>/g)].map((m) => m[1]);
+}
+function scheduleStripMarkup(out) {
+  const strip = out.match(/<div class="schedule-strip seq-strip"[^>]*>([\s\S]*?)<\/div>/);
+  if (!strip) throw new Error("no isolated schedule sidebar strip");
+  return strip[1];
+}
+
 const scenarios = [
+  {
+    name: "schedule controls work without a clock and preserve execution, tasks and sequence state",
+    setup: () => action("schedules"),
+    run: () => {
+      const workState = () =>
+        JSON.stringify({
+          execution: st.execution,
+          runName: st.runName,
+          currentRunningTask: st.currentRunningTask,
+          tasks: st.taskList,
+          sequences: st.sequences,
+          agents: st.agentState,
+        });
+      const before = workState();
+      const realDate = sandbox.Date;
+      sandbox.Date = class {
+        constructor() {
+          throw new Error("schedule consulted the clock");
+        }
+        static now() {
+          throw new Error("schedule consulted the clock");
+        }
+      };
+      try {
+        action("scheduleToggle:schedule-1");
+        action("scheduleToggle:schedule-1");
+        action("scheduleNew");
+        action("scheduleField:name:Uten klokke");
+        action("scheduleTarget:run:RUN-S21");
+        action("scheduleSave");
+        render();
+        return (
+          workState() === before && st.schedules[st.schedules.length - 1].name === "Uten klokke"
+        );
+      } finally {
+        sandbox.Date = realDate;
+      }
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "weekday schedule holds two run pointers and a solo task, with three sample times and outcomes",
+    setup: () => action("schedules"),
+    run: () => {
+      const s = st.schedules.find((record) => record.id === "schedule-1");
+      const row = scheduleRow(render(), s.id);
+      const targets = [...row.matchAll(/data-schedule-target="([^"]+)"/g)].map((m) => m[1]);
+      const expected = s.targets.map((t) => `${t.kind}:${t.ref}`);
+      // The row names each target by the record behind it, not by a bare id.
+      const taskName = st.taskList.find((t) => t.id === "TASK-24")?.name;
+      return (
+        s.trigger.mode === "weekdays" &&
+        s.trigger.days.length === 3 &&
+        s.targets.filter((t) => t.kind === "run").length === 2 &&
+        s.targets.filter((t) => t.kind === "task").length === 1 &&
+        JSON.stringify(targets) === JSON.stringify(expected) &&
+        row.includes(`Oppgave · ${taskName}`) &&
+        JSON.stringify(scheduleList(row, "schedule-next")) === JSON.stringify(s.nextFires) &&
+        JSON.stringify(scheduleList(row, "schedule-history")) ===
+          JSON.stringify(s.lastRuns.map((r) => `${r.at} · ${r.outcome}`))
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "pause and resume change the flag and the isolated workspace sidebar, preserving sample records",
+    setup: () => action("schedules"),
+    run: () => {
+      const s = st.schedules[0];
+      const before = JSON.stringify({ ...s, enabled: true });
+      action(`scheduleToggle:${s.id}`);
+      const pausedRow = scheduleRow(render(), s.id);
+      action("workspace:seicho");
+      action("inspect:shioriHome");
+      const pausedStrip = scheduleStripMarkup(render());
+      if (
+        s.enabled !== false ||
+        !pausedRow.includes('aria-checked="false"') ||
+        !pausedStrip.includes(`data-schedule-status="${s.id}">${s.name} · På pause`)
+      )
+        throw new Error("paused flag, switch and sidebar disagree");
+      action(`scheduleToggle:${s.id}`);
+      const activeStrip = scheduleStripMarkup(render());
+      action("schedules");
+      return (
+        s.enabled === true &&
+        scheduleRow(render(), s.id).includes('aria-checked="true"') &&
+        activeStrip.includes(`data-schedule-status="${s.id}">${s.name} · Aktiv`) &&
+        JSON.stringify(s) === before
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "New schedule form saves a named mixed-target weekday row, including the chosen time and days",
+    setup: () => action("schedules"),
+    run: () => {
+      const count = st.schedules.length;
+      action("scheduleNew");
+      if (st.modal !== "schedule" || !render().includes('id="schedule-name"'))
+        throw new Error("new schedule did not open its form");
+      action("scheduleField:name:  Morgenarbeid  ");
+      action("scheduleTarget:run:RUN-S21");
+      action("scheduleTarget:run:implementer");
+      action("scheduleTarget:task:TASK-24");
+      action("scheduleField:mode:weekdays");
+      action("scheduleField:at:08:30");
+      action("scheduleDay:onsdag");
+      action("scheduleDay:fredag");
+      action("scheduleDay:mandag");
+      action("scheduleSave");
+      const s = st.schedules[st.schedules.length - 1];
+      const row = scheduleRow(render(), s.id);
+      return (
+        st.schedules.length === count + 1 &&
+        s.name === "Morgenarbeid" &&
+        s.enabled === true &&
+        JSON.stringify(s.targets) ===
+          JSON.stringify([
+            { kind: "run", ref: "RUN-S21" },
+            { kind: "run", ref: "implementer" },
+            { kind: "task", ref: "TASK-24" },
+          ]) &&
+        JSON.stringify(s.trigger) ===
+          JSON.stringify({ mode: "weekdays", at: "08:30", days: ["onsdag", "fredag"] }) &&
+        row.includes(s.name) &&
+        row.includes("08:30") &&
+        scheduleList(row, "schedule-next").length === 3 &&
+        scheduleList(row, "schedule-history").length === 3
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  ...["time", "cadence"].map((mode) => ({
+    name: `New schedule form saves a solo task with a ${mode} trigger`,
+    setup: () => action("schedules"),
+    run: () => {
+      action("scheduleNew");
+      action("scheduleField:name:Ordlisten");
+      action("scheduleTarget:task:TASK-24");
+      action(`scheduleField:mode:${mode}`);
+      action(
+        mode === "time" ? "scheduleField:at:tir 20. okt. 09:00" : "scheduleField:every:8 timer",
+      );
+      action("scheduleSave");
+      const s = st.schedules[st.schedules.length - 1];
+      return (
+        s.trigger.mode === mode &&
+        s.targets.length === 1 &&
+        s.trigger[mode === "time" ? "at" : "every"] ===
+          (mode === "time" ? "tir 20. okt. 09:00" : "8 timer") &&
+        scheduleRow(render(), s.id).includes(mode === "time" ? "tir 20. okt. 09:00" : "8 timer")
+      );
+    },
+    expect: (ok) => ok === true,
+  })),
+  {
+    name: "invalid schedule form shows an error, retains typed input through renders, and accepts a correction",
+    setup: () => action("schedules"),
+    run: () => {
+      action("scheduleNew");
+      action("scheduleField:name:Behold dette navnet");
+      action("scheduleSave");
+      const out = render();
+      if (
+        st.modal !== "schedule" ||
+        !st.scheduleError ||
+        !out.includes('role="alert"') ||
+        !out.includes('value="Behold dette navnet"')
+      )
+        throw new Error("form lost its input or validation error");
+      action("scheduleTarget:task:TASK-24");
+      render();
+      if (st.scheduleDraft.name !== "Behold dette navnet")
+        throw new Error("target selection lost the name");
+      action("scheduleSave");
+      const s = st.schedules[st.schedules.length - 1];
+      return s.name === "Behold dette navnet" && scheduleRow(render(), s.id).includes(s.name);
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "scheduled sequence steps are live references, following reordered and added steps on its record",
+    setup: () => action("schedules"),
+    run: () => {
+      action("sequenceFromQueue");
+      const seq = st.sequences[st.sequences.length - 1];
+      action("schedules");
+      action("scheduleNew");
+      action("scheduleField:name:Oppgavene i rekkefølge");
+      action(`scheduleTarget:sequence:${seq.id}`);
+      action("scheduleSave");
+      const s = st.schedules[st.schedules.length - 1];
+      const order = () =>
+        [...scheduleRow(render(), s.id).matchAll(/data-step-ref="([^"]+)"/g)].map((m) => m[1]);
+      if (JSON.stringify(order()) !== JSON.stringify(seq.steps.map((step) => step.ref)))
+        throw new Error("initial sequence order differs");
+      action(`seqMove:${seq.id}:0:down`);
+      seq.steps.push({ kind: "task", ref: "TASK-24", gate: "auto", status: "pending" });
+      seq.steps[0].ref = "TASK-25";
+      seq.name = "Endret rekkefølge";
+      action("schedules");
+      return (
+        JSON.stringify(order()) === JSON.stringify(seq.steps.map((step) => step.ref)) &&
+        scheduleRow(render(), s.id).includes(seq.name) &&
+        JSON.stringify(s.targets) === JSON.stringify([{ kind: "sequence", ref: seq.id }])
+      );
+    },
+    expect: (ok) => ok === true,
+  },
+  {
+    name: "schedule rows and their sidebar explain in Norwegian that times and results are examples and nothing runs",
+    setup: () => action("schedules"),
+    run: () => {
+      for (const s of st.schedules) {
+        const row = scheduleRow(render(), s.id);
+        if (
+          !row.includes("Dette er et eksempel. Ingenting kjøres.") ||
+          !row.includes("Neste tre tidspunkter (eksempler)") ||
+          !row.includes("Siste tre resultater (eksempler)")
+        )
+          throw new Error("row implies real execution");
+      }
+      action("workspace:seicho");
+      action("inspect:shioriHome");
+      return scheduleStripMarkup(render()).includes("Bare eksempler. Ingenting kjøres.");
+    },
+    expect: (ok) => ok === true,
+  },
+
   {
     name: "closing a tab in a one-tab pane does not break the workspace",
     setup: () => action("workspace"),

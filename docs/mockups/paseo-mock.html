@@ -5467,6 +5467,43 @@
         st.sequenceSeq = 0;
         st.selectedSequence = null;
         st.currentSequence = null;
+        // S11b-1: in-memory sample records only. Times and outcomes are fixture text;
+        // toggling enabled never starts or stops work, and no clock is consulted.
+        st.schedules = [
+          {
+            id: "schedule-1",
+            name: "Ukentlig gjennomgang",
+            targets: [
+              { kind: "run", ref: "RUN-S21" },
+              { kind: "run", ref: "implementer" },
+              { kind: "task", ref: "TASK-24" },
+            ],
+            trigger: { mode: "weekdays", at: "07:00", days: ["mandag", "onsdag", "fredag"] },
+            enabled: true,
+            nextFires: ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
+            lastRuns: [
+              { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
+              { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
+              { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
+            ],
+          },
+          {
+            id: "schedule-2",
+            name: "Se over ordlisten",
+            targets: [{ kind: "task", ref: "TASK-24" }],
+            trigger: { mode: "cadence", every: "6 timer" },
+            enabled: true,
+            nextFires: ["man 19. okt. 07:00", "man 19. okt. 13:00", "man 19. okt. 19:00"],
+            lastRuns: [
+              { at: "fre 16. okt. 19:00", outcome: "Forslag klart" },
+              { at: "fre 16. okt. 13:00", outcome: "Ventet på godkjenning" },
+              { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
+            ],
+          },
+        ];
+        st.scheduleSeq = 2;
+        st.scheduleDraft = null;
+        st.scheduleError = "";
         const storedSnippets = readStored("paseo-snippet-library", []);
         st.savedSnippets = Array.isArray(storedSnippets)
           ? storedSnippets
@@ -5753,7 +5790,7 @@
             ["home", "Home", "home"],
             ["projects", "Projects", "folder"],
             ["history", "History", "history"],
-            ["schedules", "Schedules", "clock"],
+            ["schedules", "Tidsplaner", "clock"],
           ];
           const query = st.priorityQuery.toLowerCase();
           const pendingReviews =
@@ -5792,7 +5829,7 @@
                     home: "Home",
                     projects: "Projects",
                     history: "History",
-                    schedules: "Schedules",
+                    schedules: "Tidsplaner",
                     tools: "Tools",
                     hosts: "Hosts",
                     usage: "Usage",
@@ -6815,7 +6852,7 @@
         }
         function shioriSidebar() {
           const project = getProject(st.project);
-          return `<div class="shiori-sidebar-heading"><span class="project-icon ${esc(st.project)}">${esc(project.name.slice(0, 2).toUpperCase())}</span><h2>${esc(project.name)}</h2></div><div class="section-label"><h2>Now</h2></div><button class="sidebar-now" data-action="inspect:agents">${ico("pulse", "sm")}<span><strong>${st.execution === "running" ? "Execution running" : "Awaiting review"}</strong><small>${esc(st.runName)} · Open execution</small></span>${chevron}</button>${sequenceStrip()}<div class="section-label"><h2>Next</h2></div><p>Review the current result before starting dependent tasks.</p><div class="section-label"><h2>Navigate</h2></div>${[
+          return `<div class="shiori-sidebar-heading"><span class="project-icon ${esc(st.project)}">${esc(project.name.slice(0, 2).toUpperCase())}</span><h2>${esc(project.name)}</h2></div><div class="section-label"><h2>Now</h2></div><button class="sidebar-now" data-action="inspect:agents">${ico("pulse", "sm")}<span><strong>${st.execution === "running" ? "Execution running" : "Awaiting review"}</strong><small>${esc(st.runName)} · Open execution</small></span>${chevron}</button>${sequenceStrip()}${scheduleStrip()}<div class="section-label"><h2>Next</h2></div><p>Review the current result before starting dependent tasks.</p><div class="section-label"><h2>Navigate</h2></div>${[
             ["Review task", "review:" + st.reviewInspector, "check"],
             ["Tasks", "section:plan", "layers"],
             ["Sequences", "sequencePage", "layers"],
@@ -6894,7 +6931,7 @@
           let r = st.route;
           let meta = {
             history: ["Session history", ""],
-            schedules: ["Schedules", ""],
+            schedules: ["Tidsplaner", ""],
             hosts: ["Connected hosts", ""],
             usage: ["Provider usage", ""],
             tools: ["Skills and optimization", ""],
@@ -6915,8 +6952,8 @@
               )
               .join("")}</div>`;
           if (r === "schedules")
-            content = `<div class="two-col"><div><section class="sheet"><div class="sheet-head"><h3>Scheduled research</h3>${btn("New schedule", "modal:schedule", "btn small primary")}</div><div class="sheet-inner"><div class="list-row"><div class="info"><strong>Weekly Paseo competitor delta</strong><p>Mondays · proposal-only output · no auto-updates</p></div>${status("planned")}</div></div></section><section class="sheet" style="margin-top:22px"><div class="sheet-head"><h3>Sequences</h3>${btn(
-              "New sequence (the plan's order)",
+            content = `<div class="two-col"><div>${schedulesContent()}<section class="sheet" style="margin-top:22px"><div class="sheet-head"><h3>Rekkefølger</h3>${btn(
+              "Ny rekkefølge (fra planen)",
               "sequenceNew",
               "btn small primary",
             )}</div><div class="sheet-inner">${
@@ -6928,13 +6965,13 @@
                           s.id
                         }"><span class="rail"></span><div class="info"><strong>${esc(
                           s.name,
-                        )}</strong><p>step ${sequencePosition(s)} of ${s.steps.length} · ${s.steps
-                          .map(stepPreviewName)
-                          .join(" → ")}</p></div>${sequenceChip(s)}${chevron}</button>`,
+                        )}</strong><p>Steg ${sequencePosition(s)} av ${s.steps.length} · ${s.steps
+                          .map((step) => (step.kind === "prompt" ? "Din beskjed" : step.ref))
+                          .join(" → ")}</p></div>${chevron}</button>`,
                     )
                     .join("")
-                : `<p class="section-caption">An ordered list of work that already exists: tasks, a run, or a prompt you wrote. Make one here and it lives with the tasks and the run it points at.</p>`
-            }</div></section></div><aside class="aside-panel"><h3>Proposed start condition</h3><p>Runs only when verified cloud capacity is available and the task is already authorized</p><div class="note-line">Sample schedule. No quota is checked and no job is scheduled.</div></aside></div>`;
+                : `<p class="section-caption">En ordnet liste over arbeid som finnes fra før: oppgaver, kjøringer eller en beskjed du skrev. Listen starter ingenting av seg selv.</p>`
+            }</div></section></div><aside class="aside-panel"><h3>Bare et eksempel</h3><p>En tidsplan peker på arbeid som finnes fra før. Ingenting kjøres her.</p><div class="note-line">Tidspunkter og resultater er eksempler, ikke en klokke eller en logg fra virkelig arbeid. Pause endrer bare valget på tidsplanen.</div></aside></div>`;
           if (r === "hosts")
             content = `<div class="sheet"><div class="sheet-head"><h3>Host topology</h3><span class="status idle">Telemetry unavailable</span></div><div class="sheet-inner"><div class="dd-head"><div><h3>Execution locations</h3><p>Shows where work runs. It is not an agent performance dashboard.</p></div></div><svg class="diagram-svg" viewBox="0 0 1000 250" role="group" aria-label="Example host topology"><path class="edge" d="M245 125H365M625 125H745"/>${svgNode(10, 75, 235, 103, "WINDOWS 11", "ANON-PC", "Paseo · native sessions", "workspace:seicho", "active")}${svgNode(365, 75, 260, 103, "UBUNTU / ANON2", "Model gateway", "LiteLLM · embedding", "hostInfo", "")}${svgNode(745, 75, 240, 103, "UBUNTU / ANON3", "Inference host", "Qwen · 2× RTX 3090", "hostInfo", "")}</svg><div class="mobile-diagram-list"><button data-action="hostInfo">ANON-PC → anon2 → anon3</button></div></div></div>`;
           if (r === "usage")
@@ -6956,7 +6993,7 @@
             content = `<div class="sheet"><div class="sheet-head"><h3>Application settings</h3></div>${["General", "Appearance", "Sidebar", "Chat", "Terminal", "Browser", "Editor", "Shortcuts", "Integrations", "Notifications", "Permissions", "Diagnostics", "Hosts", "Agents", "Plugins"].map((n) => `<button class="list-row" style="padding:14px 20px" data-action="setting:${n}"><div class="info"><strong>${n}</strong></div>${chevron}</button>`).join("")}</div>`;
           if (r === "standalone")
             content = `<div class="two-col"><div class="sheet"><div class="sheet-head"><h3>Independent sessions</h3></div><div class="sheet-inner"><p class="section-caption">Start Pi or a terminal without attaching it to a project or Shiori task. Host and model selection remain explicit.</p>${btn("New standalone agent", "newAgent", "btn primary")} ${btn("New terminal", "newTerminal", "btn quiet")}</div></div></div>`;
-          return `<main class="view"><div class="screen compact">${pageHead(title, desc, "PASEO / " + r.toUpperCase(), r === "hosts" ? btn("Pair host", "modal:pair", "btn quiet") : "")}${content}</div></main>`;
+          return `<main class="view"><div class="screen compact">${pageHead(title, desc, "PASEO / " + (r === "schedules" ? "TIDSPLANER" : r.toUpperCase()), r === "hosts" ? btn("Pair host", "modal:pair", "btn quiet") : "")}${content}</div></main>`;
         }
         function overlay() {
           if (st.command)
@@ -6995,7 +7032,7 @@
               addTask: "New task proposal",
               import: "Import artifact",
               importSession: "Import session",
-              schedule: "New schedule",
+              schedule: "Ny tidsplan",
               skill: "Review skill or tool",
               pair: "Pair host",
               addProject: "Add project",
@@ -7010,6 +7047,9 @@
           if (m === "prototype") {
             body = `<p class="section-caption">A versioned, inspectable HTML design reference. Generating a prototype and accepting it are separate actions.</p><div class="thumb-ui"><div class="windowbar">Recipe import interface · v2 · sample</div><div class="bar" style="width:94%"></div><div class="bar" style="width:72%"></div><div class="bar short"></div></div><div class="kv"><span>Template</span><strong>Paseo / native dark</strong><span>Revision</span><strong>design-v2</strong><span>Browser capture</span><strong>Sample capture</strong><span>Accepted</span><strong>${st.acceptedDesign ? "Yes" : "No"}</strong></div>`;
             confirm = st.acceptedDesign ? "Close" : "Accept reference v2";
+          } else if (m === "schedule") {
+            body = scheduleForm();
+            confirm = "Legg til tidsplan";
           } else if (m === "capture" || m === "addTask") {
             body = `<div class="form-row"><label>Project</label><input value="${esc(getProject(st.project).name)}" disabled></div><div class="form-row"><label>${m === "addTask" ? "Task proposal" : "Thought"}</label><textarea data-focus-group="modal" id="modal-draft" placeholder="Describe the outcome and relevant context…">${esc(st.formDraft)}</textarea></div><p class="section-caption">Saving this draft does not authorize execution</p>`;
             confirm = "Save proposal";
@@ -7028,7 +7068,7 @@
             body = `<p class="section-caption">Prototype screen. The navigation works; nothing is written to a host, deployment, credential, or external service.</p><div class="form-row"><label>${title}</label><input data-focus-group="modal" id="modal-draft" placeholder="Optional sample details"></div>`;
             confirm = "Save sample entry";
           }
-          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="Close dialog">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn("Cancel", "modal:close", "btn quiet")}${btn(confirm, "modalConfirm", "btn primary")}</div></div></div>`;
+          return `<div class="overlay" data-action="modalClose"><div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="dialog-head"><h2>${esc(title)}</h2><button class="top-icon" data-action="modal:close" aria-label="${m === "schedule" ? "Lukk skjema" : "Close dialog"}">${ico("close")}</button></div><div class="dialog-body">${body}</div><div class="dialog-actions">${btn(m === "schedule" ? "Avbryt" : "Cancel", "modal:close", "btn quiet")}${btn(confirm, m === "schedule" ? "scheduleSave" : "modalConfirm", "btn primary")}</div></div></div>`;
         }
         let previousDialog = false,
           dialogOpener = null;
@@ -7415,6 +7455,78 @@
             .join(
               "",
             )}<button class="steer-open" data-action="inspect:agents">Open the queue</button></div>`;
+        }
+        // Schedule targets remain pointers, including sequence steps read at render time.
+        const scheduleDays = [
+          "mandag",
+          "tirsdag",
+          "onsdag",
+          "torsdag",
+          "fredag",
+          "lørdag",
+          "søndag",
+        ];
+        const scheduleRunTargets = () => [
+          { ref: "RUN-S21", name: "Hovedkjøringen" },
+          ...agentRuns.slice(1).map((r) => ({ ref: r.id, name: "Hjelpeagentens kjøring" })),
+        ];
+        function scheduleTargetTitle(target) {
+          if (target.kind === "sequence")
+            return `Rekkefølge · ${sequence(target.ref)?.name || target.ref}`;
+          if (target.kind === "task") return `Oppgave · ${task(target.ref)?.name || target.ref}`;
+          const run = scheduleRunTargets().find((r) => r.ref === target.ref);
+          return `Kjøring · ${target.ref} · ${run?.name || "Ukjent kjøring"}`;
+        }
+        function scheduleWhen(trigger) {
+          if (trigger.mode === "cadence") return `Hver ${trigger.every}`;
+          if (trigger.mode === "weekdays") return `${trigger.days.join(", ")} kl. ${trigger.at}`;
+          return `Én gang · ${trigger.at}`;
+        }
+        function scheduleTargetMarkup(target) {
+          const seq = target.kind === "sequence" ? sequence(target.ref) : null;
+          return `<li data-schedule-target="${esc(target.kind)}:${esc(target.ref)}">${esc(scheduleTargetTitle(target))}${seq ? `<ol class="schedule-steps">${seq.steps.map((step) => `<li data-step-ref="${esc(step.ref || "prompt")}">${esc(step.kind === "prompt" ? step.prompt : step.ref)}</li>`).join("")}</ol>` : ""}</li>`;
+        }
+        function schedulesContent() {
+          return `<section class="sheet" id="schedules-list"><div class="sheet-head"><h3>Tidsplaner</h3>${btn("Ny tidsplan", "scheduleNew", "btn small primary")}</div>${st.schedules
+            .map(
+              (s) =>
+                `<article class="schedule-row" data-schedule-id="${s.id}" style="padding:20px;border-top:1px solid var(--line);overflow-wrap:anywhere"><div class="schedule-head seq-actions" style="justify-content:space-between"><h3>${esc(s.name)}</h3><button class="btn small quiet" role="switch" aria-checked="${s.enabled}" aria-label="Aktiv tidsplan: ${esc(s.name)}" data-action="scheduleToggle:${s.id}">${s.enabled ? "Sett på pause" : "Fortsett"}</button></div><p>${s.enabled ? "Aktiv" : "På pause"} · ${esc(scheduleWhen(s.trigger))}</p><h4>Hva tidsplanen peker på</h4><ul class="schedule-targets">${s.targets.map(scheduleTargetMarkup).join("")}</ul><div class="schedule-details two-col" style="margin-top:16px"><div><h4>Neste tre tidspunkter (eksempler)</h4><ul class="schedule-next">${s.nextFires
+                  .slice(0, 3)
+                  .map((at) => `<li>${esc(at)}</li>`)
+                  .join(
+                    "",
+                  )}</ul>${!s.enabled ? `<p>På pause. Tidspunktene står her bare som eksempler.</p>` : ""}</div><div><h4>Siste tre resultater (eksempler)</h4><ul class="schedule-history">${s.lastRuns
+                  .slice(0, 3)
+                  .map((r) => `<li>${esc(r.at)} · ${esc(r.outcome)}</li>`)
+                  .join(
+                    "",
+                  )}</ul></div></div><p class="small dim">Dette er et eksempel. Ingenting kjøres.</p></article>`,
+            )
+            .join("")}</section>`;
+        }
+        function scheduleStrip() {
+          return `<div class="schedule-strip seq-strip" aria-label="Tidsplaner i arbeidsområdet">${st.schedules.map((s) => `<button class="shiori-nav" data-action="schedules" data-schedule-status="${s.id}">${esc(s.name)} · ${s.enabled ? "Aktiv" : "På pause"}</button>`).join("")}<p class="small dim">Bare eksempler. Ingenting kjøres.</p></div>`;
+        }
+
+        function scheduleForm() {
+          const d = st.scheduleDraft;
+          const choices = [
+            ...st.sequences.map((s) => ({ kind: "sequence", ref: s.id })),
+            ...scheduleRunTargets().map((r) => ({ kind: "run", ref: r.ref })),
+            ...st.taskList.map((t) => ({ kind: "task", ref: t.id })),
+          ];
+          return `<p class="section-caption">Lag et eksempel. Ingenting kjøres. De tre tidspunktene og resultatene som legges til er faste eksempler; de beregnes ikke fra valgene dine.</p>${st.scheduleError ? `<p role="alert">${esc(st.scheduleError)}</p>` : ""}<div class="form-row"><label for="schedule-name">Navn</label><input id="schedule-name" data-focus-group="schedule" value="${esc(d.name)}"></div><fieldset><legend>Hva tidsplanen peker på (velg én eller flere)</legend>${choices.map((t) => `<label class="schedule-choice seq-actions" style="padding:8px 0;flex-wrap:nowrap"><input type="checkbox" data-action="scheduleTarget:${t.kind}:${t.ref}" ${d.targets.some((x) => x.kind === t.kind && x.ref === t.ref) ? "checked" : ""}><span style="min-width:0;flex:1">${esc(scheduleTargetTitle(t))}</span></label>`).join("")}</fieldset><div class="form-row"><label for="schedule-mode">Når</label><select id="schedule-mode">${[
+            ["time", "Én gang"],
+            ["cadence", "Med fast mellomrom"],
+            ["weekdays", "På valgte ukedager"],
+          ]
+            .map(
+              ([mode, name]) =>
+                `<option value="${mode}" ${d.trigger.mode === mode ? "selected" : ""}>${name}</option>`,
+            )
+            .join(
+              "",
+            )}</select></div>${d.trigger.mode === "cadence" ? `<div class="form-row"><label for="schedule-every">Mellomrom, for eksempel 6 timer</label><input id="schedule-every" value="${esc(d.trigger.every)}"></div>` : `<div class="form-row"><label for="schedule-at">${d.trigger.mode === "time" ? "Tidspunkt, for eksempel man 19. okt. 07:00" : "Klokkeslett"}</label><input id="schedule-at" value="${esc(d.trigger.at)}"></div>`}${d.trigger.mode === "weekdays" ? `<fieldset><legend>Ukedager</legend>${scheduleDays.map((day) => `<label class="schedule-choice seq-actions" style="padding:8px 0"><input type="checkbox" data-action="scheduleDay:${day}" ${d.trigger.days.includes(day) ? "checked" : ""}>${day}</label>`).join("")}</fieldset>` : ""}`;
         }
         // --- Sequences (slice S11a). One run made of work that already exists: tasks from
         // the plan board, the sample run on the Runs page, or a prompt you wrote. A step
@@ -7989,6 +8101,97 @@
           const [cmd, ...rest] = key.split(":");
           const val = rest[0];
           switch (cmd) {
+            case "scheduleNew":
+              st.scheduleDraft = {
+                name: "",
+                targets: [],
+                trigger: {
+                  mode: "time",
+                  at: "man 19. okt. 07:00",
+                  every: "6 timer",
+                  days: ["mandag"],
+                },
+              };
+              st.scheduleError = "";
+              st.modal = "schedule";
+              break;
+            case "scheduleToggle": {
+              const s = st.schedules.find((s) => s.id === val);
+              if (s) s.enabled = !s.enabled;
+              break;
+            }
+            case "scheduleField": {
+              const d = st.scheduleDraft;
+              if (!d) break;
+              const value = rest.slice(1).join(":");
+              if (val === "name") d.name = value;
+              else if (val === "mode" && ["time", "cadence", "weekdays"].includes(value)) {
+                d.trigger.mode = value;
+                if (value === "time") d.trigger.at = "man 19. okt. 07:00";
+                if (value === "weekdays") d.trigger.at = "07:00";
+              } else if (["at", "every"].includes(val)) d.trigger[val] = value;
+              break;
+            }
+            case "scheduleTarget": {
+              const d = st.scheduleDraft;
+              if (!d) break;
+              const ref = rest[1];
+              const index = d.targets.findIndex((t) => t.kind === val && t.ref === ref);
+              if (index >= 0) d.targets.splice(index, 1);
+              else if (
+                (val === "sequence" && sequence(ref)) ||
+                (val === "task" && task(ref)) ||
+                (val === "run" && scheduleRunTargets().some((r) => r.ref === ref))
+              )
+                d.targets.push({ kind: val, ref });
+              break;
+            }
+            case "scheduleDay": {
+              const days = st.scheduleDraft?.trigger.days;
+              if (!days || !scheduleDays.includes(val)) break;
+              const index = days.indexOf(val);
+              if (index >= 0) days.splice(index, 1);
+              else days.push(val);
+              break;
+            }
+            case "scheduleSave": {
+              const d = st.scheduleDraft;
+              if (!d) break;
+              if (
+                !d.name.trim() ||
+                !d.targets.length ||
+                (d.trigger.mode === "cadence" ? !d.trigger.every.trim() : !d.trigger.at.trim()) ||
+                (d.trigger.mode === "weekdays" && !d.trigger.days.length)
+              ) {
+                st.scheduleError = "Skriv et navn, velg arbeid og fyll ut når tidsplanen gjelder.";
+                break;
+              }
+              const trigger =
+                d.trigger.mode === "cadence"
+                  ? { mode: "cadence", every: d.trigger.every.trim() }
+                  : {
+                      mode: d.trigger.mode,
+                      at: d.trigger.at.trim(),
+                      ...(d.trigger.mode === "weekdays" ? { days: [...d.trigger.days] } : {}),
+                    };
+              st.schedules.push({
+                id: `schedule-${++st.scheduleSeq}`,
+                name: d.name.trim(),
+                targets: d.targets.map((t) => ({ ...t })),
+                trigger,
+                enabled: true,
+                nextFires: ["man 19. okt. 07:00", "ons 21. okt. 07:00", "fre 23. okt. 07:00"],
+                lastRuns: [
+                  { at: "fre 16. okt. 07:00", outcome: "Forslag klart" },
+                  { at: "ons 14. okt. 07:00", outcome: "Ventet på godkjenning" },
+                  { at: "man 12. okt. 07:00", outcome: "Hoppet over" },
+                ],
+              });
+              st.scheduleDraft = null;
+              st.scheduleError = "";
+              st.modal = null;
+              break;
+            }
             case "toggleInspector":
               st.inspector = st.inspector ? null : st.lastInspector;
               break;
@@ -8903,6 +9106,10 @@
               st.modal = cmd;
               break;
             case "modal":
+              if (val === "schedule") {
+                action("scheduleNew");
+                break;
+              }
               st.modal = val === "close" ? null : val;
               break;
             case "modalConfirm": {
@@ -9088,6 +9295,11 @@
         });
         document.addEventListener("input", (e) => {
           const id = e.target.id;
+          if (["schedule-name", "schedule-at", "schedule-every"].includes(id) && st.scheduleDraft) {
+            const field = id.slice("schedule-".length);
+            if (field === "name") st.scheduleDraft.name = e.target.value;
+            else st.scheduleDraft.trigger[field] = e.target.value;
+          }
           if (id === "snippet-name") st.snippetName = e.target.value;
           if (id === "terminal-command") {
             const t = currentTab();
@@ -9117,6 +9329,10 @@
           }
         });
         document.addEventListener("change", (e) => {
+          if (e.target.id === "schedule-mode") {
+            action("scheduleField:mode:" + e.target.value);
+            return;
+          }
           if (e.target.dataset.reasoningTab) {
             const t = st.tabsById[e.target.dataset.reasoningTab];
             t.reasoning = e.target.value;

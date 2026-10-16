@@ -200,7 +200,25 @@ const SCREENS = [
   },
   { name: "thinking-trace-changes", actions: ["workspace", "whyChange:6", "traceDiff:2"] },
   { name: "history", actions: ["history"] },
-  { name: "schedules", actions: ["schedules"] },
+  { name: "schedules", actions: ["sideClose", "schedules"] },
+  { name: "schedules-paused", actions: ["schedules", "scheduleToggle:schedule-1"] },
+  { name: "schedules-form", actions: ["schedules", "scheduleNew"] },
+  {
+    name: "schedules-form-weekdays",
+    actions: ["schedules", "scheduleNew", "scheduleField:mode:weekdays"],
+  },
+  {
+    name: "schedules-sequence",
+    actions: [
+      "sequenceFromQueue",
+      "schedules",
+      "scheduleNew",
+      "scheduleField:name:Oppgavene i rekkefølge",
+      "scheduleTarget:sequence:$seq",
+      "scheduleSave",
+    ],
+  },
+  { name: "schedules-sidebar", actions: ["workspace:seicho", "inspect:shioriHome"] },
   { name: "settings", actions: ["settings"] },
   // Slice S11a: one run made of work that already exists. The order chain, a step that
   // cannot be taken, the choice the policy puts in front of you, and the strip the workspace
