@@ -1,6 +1,8 @@
 # Replica cache one-pass reads
 
-> Status: Current implementation plan for [getpaseo/paseo#4813](https://github.com/getpaseo/paseo/issues/4813).
+> Status: **Partly superseded.** Task 01 is implemented in this fork. Upstream shipped its own fix for [getpaseo/paseo#4813](https://github.com/getpaseo/paseo/issues/4813) in `e0de0fdf6` (#7074): reads retry on matching keys instead of the host-wide revision, and persist failures back off. Upstream kept `syncPending()` at the top of `readRows()`, so a read still forces a persist, and it has no pending-row overlay. [Upstream sync 02](../tasks/upstream-sync-02-replica-cache-take-upstream.md) takes upstream's file; [Upstream sync 03](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md) restores the missing half on top of it. Task 02 below is paused until that lands.
+>
+> Two parts of this plan are now obsolete rather than rejected: the host-lifetime generation is unnecessary (upstream's `activeReads` invalidation covers remove, re-add, and `reconcileServerId()` with tests), and "no persistence retry work" no longer applies because upstream already shipped the backoff.
 
 ## Goal
 
@@ -138,10 +140,11 @@ The existing shared queue can make one host wait behind another host's store ope
 
 ## Ordered tasks
 
-1. [Make replica-cache reads one-pass logical reads](../tasks/replica-cache-01-one-pass-reads.md)
-2. [Prove the read contract on real storage and the browser path](../tasks/replica-cache-02-real-store-validation.md)
+1. [Make replica-cache reads one-pass logical reads](../tasks/replica-cache-01-one-pass-reads.md) — implemented in the fork, dropped by the upstream merge.
+2. [Prove the read contract on real storage and the browser path](../tasks/replica-cache-02-real-store-validation.md) — paused.
+3. [Restore barrier-free reads on upstream's structure](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md) — the live path forward.
 
-Task 02 depends on Task 01.
+Task 02 depends on Task 01. Task 03 replaces the fork's Task 01 shape and must land before Task 02 is worth running.
 
 ## Done
 

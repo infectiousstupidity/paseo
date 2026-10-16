@@ -1,5 +1,7 @@
 # Replica cache 02: Prove one-pass reads on real storage and the browser path
 
+Status: **paused.** The read contract it would prove is being re-landed on upstream's module by [Upstream sync 03](upstream-sync-03-replica-cache-one-pass-read-restore.md). Revisit this Task once that lands.
+
 ## Outcome
 
 The one-pass replica-cache read contract from Task 01 is proven against the real SQLite adapter and the browser IndexedDB path, including the actual user scenario: open cached agent A while agent B on the same host is continuously streaming.
@@ -36,7 +38,7 @@ Reuse the existing SQLite test harnesses and `replica-cache-performance.spec.ts`
    - accepted pending changes for requested rows overlay older durable rows;
    - reads do not force persistence;
    - host lifetime changes invalidate old in-flight reads.
-   Do not restate the implementation or copy the plan into the data-model doc.
+     Do not restate the implementation or copy the plan into the data-model doc.
 8. Do not change production behavior in this Task unless a real-store test exposes a correctness bug in Task 01. Any production correction must stay within the Task 01 invariants.
 
 ## Acceptance

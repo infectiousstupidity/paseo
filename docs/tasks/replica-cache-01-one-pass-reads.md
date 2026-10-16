@@ -1,5 +1,7 @@
 # Replica cache 01: Make reads one-pass logical reads
 
+Status: **implemented in this fork, superseded by the upstream merge.** [Upstream sync 02](upstream-sync-02-replica-cache-take-upstream.md) takes upstream's `e0de0fdf6` version of the module, and [Upstream sync 03](upstream-sync-03-replica-cache-one-pass-read-restore.md) restores the barrier-free read on top of it. Do not re-implement this Task's `hostGenerations` shape.
+
 ## Outcome
 
 `ReplicaCache` reads a requested cache row exactly once from durable storage, applies matching accepted pending changes in memory, and returns without forcing persistence or retrying because unrelated rows changed.
