@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SubagentExpandedDetails } from "./expanded-details";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
 import type { ProviderSubagentRow } from "./select";
+import type { SubagentActivity } from "./subagent-activity";
 
 const theme = vi.hoisted(() => ({
   spacing: { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24 },
@@ -29,6 +30,7 @@ const theme = vi.hoisted(() => ({
 vi.mock("react-native-unistyles", () => ({
   StyleSheet: { create: (factory: (theme: unknown) => unknown) => factory(theme) },
   useUnistyles: () => ({ theme }),
+  withUnistyles: (component: unknown) => component,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -42,8 +44,29 @@ vi.mock("react-native", () => ({
     React.createElement("div", { "data-testid": testID }, children),
   Text: ({ children, testID }: { children?: React.ReactNode; testID?: string }) =>
     React.createElement("span", { "data-testid": testID }, children),
+  Pressable: ({
+    children,
+    testID,
+    onPress,
+  }: {
+    children?: React.ReactNode;
+    testID?: string;
+    onPress?: () => void;
+  }) =>
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        "data-testid": testID,
+        onClick: onPress,
+      },
+      children,
+    ),
   TextInput: ({
-    testID, value, onChangeText, placeholder,
+    testID,
+    value,
+    onChangeText,
+    placeholder,
   }: {
     testID?: string;
     value: string;
@@ -51,23 +74,35 @@ vi.mock("react-native", () => ({
     placeholder?: string;
   }) =>
     React.createElement("textarea", {
-      "data-testid": testID, value, placeholder,
+      "data-testid": testID,
+      value,
+      placeholder,
       onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChangeText(event.target.value),
     }),
 }));
 
 vi.mock("@/components/ui/button", () => ({
   Button: ({
-    children, testID, disabled, onPress,
+    children,
+    testID,
+    disabled,
+    onPress,
   }: {
     children: React.ReactNode;
     testID?: string;
     disabled?: boolean;
     onPress: () => void;
   }) =>
-    React.createElement("button", {
-      type: "button", "data-testid": testID, disabled, onClick: onPress,
-    }, children),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        "data-testid": testID,
+        disabled,
+        onClick: onPress,
+      },
+      children,
+    ),
 }));
 
 const row: ProviderSubagentRow = {
@@ -104,6 +139,12 @@ function addDescriptor(overrides: Partial<ProviderSubagentDescriptorPayload> = {
   });
 }
 
+const OBSERVED_ACTIVITY: SubagentActivity = { kind: "response", text: "Two findings observed." };
+
+function clientFor(controlProviderSubagent: TestControlMethod): DaemonClient {
+  return { controlProviderSubagent } as unknown as DaemonClient;
+}
+
 interface ControlReceipt {
   success: boolean;
   state?: string;
@@ -116,7 +157,9 @@ type TestControlMethod = (input: { action: string }) => Promise<ControlReceipt>;
 
 function renderDetails(
   controlProviderSubagent: TestControlMethod = vi.fn(async () => ({
-    success: true, state: "running", runState: "running",
+    success: true,
+    state: "running",
+    runState: "running",
   })),
   options: { stopping?: boolean; supportsControls?: boolean; row?: ProviderSubagentRow } = {},
 ) {
@@ -126,9 +169,9 @@ function renderDetails(
     <SubagentExpandedDetails
       row={options.row ?? row}
       serverId="server"
-      client={{ controlProviderSubagent } as unknown as DaemonClient}
+      client={clientFor(controlProviderSubagent)}
       supportsControls={options.supportsControls ?? true}
-      activity={{ kind: "response", text: "Two findings observed." }}
+      activity={OBSERVED_ACTIVITY}
       age="5m"
       stopping={options.stopping ?? false}
       onStopAccepted={onStopAccepted}
@@ -154,9 +197,17 @@ describe("scoped Pi subagent panel controls", () => {
     fireEvent.click(screen.getByTestId("subagents-track-open-worker-2"));
     expect(onOpenSession).toHaveBeenCalledTimes(1);
     rerender(
-      <SubagentExpandedDetails row={row} serverId="server"
-        client={null} supportsControls={false} activity={null} age={null}
-        stopping={false} onStopAccepted={vi.fn()} onOpenSession={vi.fn()} />,
+      <SubagentExpandedDetails
+        row={row}
+        serverId="server"
+        client={null}
+        supportsControls={false}
+        activity={null}
+        age={null}
+        stopping={false}
+        onStopAccepted={vi.fn()}
+        onOpenSession={vi.fn()}
+      />,
     );
     expect(screen.queryByTestId("subagents-track-stop-worker-2")).toBeNull();
     expect(screen.queryByTestId("subagents-track-status-worker-2")).toBeNull();
@@ -175,14 +226,23 @@ describe("scoped Pi subagent panel controls", () => {
     await waitFor(() => expect(onStopAccepted).toHaveBeenCalledTimes(1));
     expect(client).toHaveBeenCalledTimes(1);
     expect(client).toHaveBeenCalledWith({
-      parentAgentId: "parent-1", subagentId: "worker-2", action: "stop",
+      parentAgentId: "parent-1",
+      subagentId: "worker-2",
+      action: "stop",
     });
     // Parent owns pending stop across collapse/reopen until an observed terminal status.
     rerender(
-      <SubagentExpandedDetails row={row} serverId="server"
-        client={{ controlProviderSubagent: client } as unknown as DaemonClient}
-        supportsControls activity={null} age={null} stopping
-        onStopAccepted={onStopAccepted} onOpenSession={vi.fn()} />,
+      <SubagentExpandedDetails
+        row={row}
+        serverId="server"
+        client={clientFor(client)}
+        supportsControls
+        activity={null}
+        age={null}
+        stopping
+        onStopAccepted={onStopAccepted}
+        onOpenSession={vi.fn()}
+      />,
     );
     expect(screen.queryByTestId("subagents-track-stop-worker-2")).toBeNull();
     expect(screen.getByTestId("subagents-track-stopping-worker-2")).toBeTruthy();
@@ -205,11 +265,16 @@ describe("scoped Pi subagent panel controls", () => {
     fireEvent.click(screen.getByTestId("subagents-track-steer-worker-2"));
     await waitFor(() => expect(client).toHaveBeenCalledTimes(2));
     expect(client).toHaveBeenLastCalledWith({
-      parentAgentId: "parent-1", subagentId: "worker-2",
-      action: "steer", message: "Focus on tests",
+      parentAgentId: "parent-1",
+      subagentId: "worker-2",
+      action: "steer",
+      message: "Focus on tests",
     });
-    await waitFor(() => expect(screen.getByTestId("subagents-track-feedback-worker-2").textContent)
-      .toBe("subagents.panel.queued"));
+    await waitFor(() =>
+      expect(screen.getByTestId("subagents-track-feedback-worker-2").textContent).toBe(
+        "subagents.panel.queued",
+      ),
+    );
   });
 
   it("fails closed on stale or wrong-session identity without sending an RPC", () => {
@@ -219,7 +284,8 @@ describe("scoped Pi subagent panel controls", () => {
     fireEvent.click(screen.getByTestId("subagents-track-stop-worker-2"));
     fireEvent.click(screen.getByTestId("subagents-track-confirm-stop-worker-2"));
     expect(client).not.toHaveBeenCalled();
-    expect(screen.getByTestId("subagents-track-feedback-worker-2").textContent)
-      .toBe("subagents.panel.unavailableControl");
+    expect(screen.getByTestId("subagents-track-feedback-worker-2").textContent).toBe(
+      "subagents.panel.unavailableControl",
+    );
   });
 });
