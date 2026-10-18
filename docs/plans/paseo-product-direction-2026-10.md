@@ -77,8 +77,10 @@ One durable linked feature/work item should navigate its ideas, conversations, r
 
 ## Prototypes and external artifacts
 
+**Future native workflow:** [Embedded HTML mock preview and feedback in Paseo](paseo-embedded-html-mock-workflow.md) — an in-workspace live Preview pane beside the agent, anchored annotations, explicit submit -> agent edit -> hot reload, and versioned acceptance. This is a future implementation idea, distinct from the current standalone interactive mock task; no embedded production runtime is claimed.
+
 - Deterministic **Prototype Profiles** define approved design tokens, typography, layout, preferred dependencies (e.g. React, Mantine, Tailwind where compatible, Joyride for tours, Agentation for development), scaffold, browser/test fixture, viewports, export and version. Defaults plus project overrides; avoid installing libraries without need.
-- Prefer a pinned runnable Vite/React project as canonical when dependencies are used; optionally generate portable HTML. Approved starter components, layouts and visual references reduce repetitive re-prompting, not creativity.
+- Prefer a pinned runnable Vite/React project as canonical when dependencies are used; optionally generate portable HTML. Approved starter components, layouts and visual references reduce repetitive re-prompting, not creativity. The future native Preview should read this project artifact directly instead of requiring HTML download/re-upload.
 - A prototype revision preserves source, lockfile/profile version, captured screenshots, verified states, accepted interactions and design decision. Screenshot comparison + functional checks run with controlled browser/Electron capture, without stealing desktop focus; bound fixer iterations and label unverified results.
 - **Export for AI chat:** select exact assets and bounded context, redact/check secrets, generate portable files and a copyable request; no invented external chat integration. **Import:** drag files onto project/feature/folder, show real host/path/conflict, safe file/ZIP handling and real on-disk write through authenticated host. Display immediately in explorer/Git; import alone is not acceptance of generated content.
 - Embedded ChatGPT/Claude/etc. in Paseo browser is optional and contingent on real login/site/embedding constraints; external Firefox workflow must work independently.
