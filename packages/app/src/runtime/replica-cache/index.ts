@@ -1018,22 +1018,17 @@ export class ReplicaCache {
     try {
       await this.prepareStore();
       while (this.activeServerIds.has(serverId)) {
-        // A read may only answer from rows the store already holds, so it waits for this host's
-        // accepted commits to land. A store that rejects them will keep rejecting them: fail closed
-        // rather than re-attempt the write on every pass. A write rejected for another host leaves
-        // this host's stored rows readable.
+        // A read answers from the rows the store holds plus the accepted state that has not
+        // reached it, so it never writes. Draining another host's pending batch here is what made
+        // opening one agent serialize a streaming agent's rows. A host removed, re-added, or
+        // reconciled mid-read invalidates it and the loop re-reads; rows accepted mid-read are
+        // answered by the overlay, not by a second store pass.
         const read: ReplicaRead = { serverId, kinds, ids, invalidated: false };
         this.activeReads.add(read);
         try {
-          if (!(await this.syncPending()) && this.hasPendingHostChanges(serverId)) return [];
-          if (read.invalidated || this.hasPendingReadChanges(read)) continue;
           const rows = await this.rowStore.read(serverId, kinds, ids);
-          if (
-            this.activeServerIds.has(serverId) &&
-            !read.invalidated &&
-            !this.hasPendingReadChanges(read)
-          ) {
-            return rows;
+          if (this.activeServerIds.has(serverId) && !read.invalidated) {
+            return this.overlayPendingRows(read, rows);
           }
         } finally {
           this.activeReads.delete(read);
@@ -1278,14 +1273,12 @@ export class ReplicaCache {
   }
 
   private queueUpsert(row: StructuredReplicaUpsert): void {
-    this.invalidateRowReads(row);
     const key = pendingRowKey(row);
     this.pendingDeletes.delete(key);
     this.pendingUpserts.set(key, row);
   }
 
   private queueDelete(key: ReplicaRowKey): void {
-    this.invalidateRowReads(key);
     const pendingKey = pendingRowKey(key);
     this.pendingUpserts.delete(pendingKey);
     this.pendingDeletes.set(pendingKey, key);
@@ -1297,23 +1290,29 @@ export class ReplicaCache {
     );
   }
 
-  private hasPendingReadChanges(read: ReplicaRead): boolean {
-    if (
-      this.pendingBaselines.has(read.serverId) &&
-      read.kinds.some((kind) => kind !== "timeline")
-    ) {
-      return true;
+  // Accepted state that has not reached the store is the newest truth for the keys it covers, so
+  // the read answers from it. Only the requested keys are materialized: reading agent A must not
+  // serialize agent B's timeline.
+  private overlayPendingRows(read: ReplicaRead, storedRows: ReplicaRow[]): ReplicaRow[] {
+    const visibleRows = new Map<string, ReplicaRow>();
+    for (const row of storedRows) {
+      if (matchesReplicaRead(read, row)) visibleRows.set(rowKey(row), row);
     }
-    return (
-      [...this.pendingUpserts.values()].some((row) => matchesReplicaRead(read, row)) ||
-      [...this.pendingDeletes.values()].some((row) => matchesReplicaRead(read, row))
-    );
-  }
-
-  private invalidateRowReads(row: ReplicaRowKey): void {
-    for (const read of this.activeReads) {
-      if (matchesReplicaRead(read, row)) read.invalidated = true;
+    if (this.pendingBaselines.has(read.serverId)) {
+      for (const [key, row] of visibleRows) {
+        if (row.kind !== "timeline") visibleRows.delete(key);
+      }
     }
+    for (const row of this.pendingDeletes.values()) {
+      if (matchesReplicaRead(read, row)) visibleRows.delete(rowKey(row));
+    }
+    for (const upsert of this.pendingUpserts.values()) {
+      if (!matchesReplicaRead(read, upsert)) continue;
+      const row = this.materializeUpsert(upsert);
+      if (row) visibleRows.set(rowKey(row), row);
+      else visibleRows.delete(rowKey(upsert));
+    }
+    return [...visibleRows.values()];
   }
 
   private invalidateHostReads(serverId: string, kinds?: readonly ReplicaRowKind[]): void {
@@ -1325,17 +1324,6 @@ export class ReplicaCache {
         read.invalidated = true;
       }
     }
-  }
-
-  private hasPendingHostChanges(serverId: string): boolean {
-    if (this.pendingBaselines.has(serverId)) return true;
-    for (const row of this.pendingUpserts.values()) {
-      if (row.serverId === serverId) return true;
-    }
-    for (const row of this.pendingDeletes.values()) {
-      if (row.serverId === serverId) return true;
-    }
-    return false;
   }
 
   private drainPendingChanges(): PendingReplicaChanges {
