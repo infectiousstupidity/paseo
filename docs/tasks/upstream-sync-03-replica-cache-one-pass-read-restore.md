@@ -1,10 +1,12 @@
 # Upstream sync 03: restore barrier-free replica cache reads
 
-Status: **Accepted — implemented in `f8d30c62d`, on top of the merge `69359e8cb`.** Depends on [Upstream sync 02](../tasks/upstream-sync-02-replica-cache-take-upstream.md), merged into `main` as `69359e8cb`. Design reference: [Replica cache one-pass reads](../plans/replica-cache-read-path.md).
+Status: **Done — implemented in `f8d30c62d`, on top of the merge `69359e8cb`.** [Upstream sync 02](upstream-sync-02-replica-cache-take-upstream.md) is also complete. Design reference: [Replica cache one-pass reads](../plans/replica-cache-read-path.md).
+
+At the 2026-10-19 refresh, upstream `23e388b05..9a0b95aa1` changes no replica-cache file, and the dry-run merge carries this task's delta without conflict. Do not re-land the patch or take upstream's cache over it. This work stays fork-only; no upstream PR is planned.
 
 ## Outcome
 
-On top of upstream's replica cache, a cache read never triggers a store write, and rows accepted in memory but not yet durable answer the read for the requested keys. Upstream's read-invalidation vocabulary and persist backoff stay.
+On top of upstream's replica cache, a valid cache read never persists pending state, and rows accepted in memory but not yet durable answer the read for the requested keys. Corrupt-row repair remains a separate pre-existing write path. Host-lifetime invalidation and upstream's persist backoff stay.
 
 ## Evidence
 
@@ -20,7 +22,9 @@ Upstream's merged code is narrower than its PR description, which claims "A read
 
 Upstream did solve the invalidation half, and better than the fork's plan proposed. `activeReads` plus `invalidateHostReads()` already covers host remove, re-add, and `reconcileServerId()` (`index.ts:1190, 1202-1203`), tested at `index.test.ts:606` and `:625`. The fork's `hostGenerations` map is therefore **not** worth re-landing.
 
-## Proposed fix
+## Original implementation plan
+
+This is historical context, not work still to execute. The deviations below describe the implemented contract.
 
 Keep upstream's structure; change one call and add one overlay.
 
@@ -36,13 +40,13 @@ Keep upstream's structure; change one call and add one overlay.
 
 ## Review
 
-- **Decide fork-only vs upstream PR.** Upstream's #7074 already claims this behavior in its description. A PR that adds the overlay and drops the read-side `syncPending()` is small, matches their stated intent, and removes a permanent fork delta. If the reviewer rejects upstreaming, keep this as a fork commit and expect to re-apply it at every sync.
+- **Keep the fork delta through future merges.** The fork-only decision is settled. Compare against the last integrated upstream commit, not an empty-diff requirement that would erase the overlay. An unchanged upstream cache needs no manual reapplication.
 - **Do not re-land `hostGenerations`.** Upstream's `activeReads` invalidation covers the same invariant with tests already in place. Re-adding a second invalidation net is the failure mode the fork's own plan warns about.
 - Confirm no caller relies on a read forcing a flush. `flush()` remains the explicit way to persist.
 
-## Verification
+## Verification (historical implementation runs)
 
-Run from `packages/app` (a root-level `vitest src/...` filter loads no app projects and dies with `SyntaxError: Unexpected token 'typeof'`). Task 02 landed in the merge `69359e8cb`; this task is `f8d30c62d`, cherry-picked onto it. The earlier merge `553430f40` (branch `sync-backup-2026-10`) staged the payload onto the fork's tree and is not an ancestor of `main`.
+These results predate the task-doc refresh; no full suite was re-run for it. Run future focused checks from `packages/app` (a root-level `vitest src/...` filter loads no app projects and dies with `SyntaxError: Unexpected token 'typeof'`). Task 02 landed in the merge `69359e8cb`; this task is `f8d30c62d`, cherry-picked onto it. The earlier merge `553430f40` (branch `sync-backup-2026-10`) staged the payload onto the fork's tree and is not an ancestor of `main`.
 
 - `npx vitest run src/runtime/replica-cache` → **4 files, 71 tests passed** (45 in `index.test.ts`, up from 42).
 - Counting evidence, no sleeps: the streaming cluster (`while another agent streams timeline|directory updates`) asserts exact store counts — `readAgent` 1 read / 0 writes, `readTimeline` 1 read / 0 writes, `readWorkspace` 2 reads / 0 writes (it reads the workspace row then the project row by construction), with the stream producing one chunk per read. The five ported counting tests assert 1 read + 0 writes for an accepted delete, an accepted upsert, an unrelated pending change (`textReads === 0` proves the unrelated timeline is never materialized), a same-row accept in flight, and a pending baseline that keeps timelines.
@@ -60,7 +64,7 @@ Run from `packages/app` (a root-level `vitest src/...` filter loads no app proje
 
 ## Upstreaming decision
 
-Open an upstream PR: upstream's own #7074 description claims barrier-free reads, so a small PR that adds `overlayPendingRows()` and drops the read-side `syncPending()` removes a permanent fork delta. Until it merges, this is a fork commit on `main` and must be re-applied (trivially — it is one method plus two deletions) at every sync.
+Fork-only. No PR to `getpaseo/paseo` is planned. Preserve the overlay in the fork; revisit it only when upstream changes the same code or supplies equivalent behavior.
 
 ## Acceptance
 
@@ -74,8 +78,8 @@ Open an upstream PR: upstream's own #7074 description claims barrier-free reads,
 ## Focused checks
 
 ```bash
-npx vitest run packages/app/src/runtime/replica-cache/index.test.ts --bail=1
-npx vitest run packages/app/src/timeline/replica.test.ts packages/app/src/runtime/directory-sync/index.test.ts --bail=1
+(cd packages/app && npx vitest run src/runtime/replica-cache/index.test.ts --bail=1)
+(cd packages/app && npx vitest run src/timeline/replica.test.ts src/runtime/directory-sync/index.test.ts --bail=1)
 npm run typecheck
 npm run lint -- packages/app/src/runtime/replica-cache/index.ts packages/app/src/runtime/replica-cache/index.test.ts
 npm run format:check

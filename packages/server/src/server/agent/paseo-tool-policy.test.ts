@@ -22,6 +22,20 @@ describe("Paseo tool policy", () => {
     expect(isPaseoToolEnabled(undefined, "list_agents")).toBe(true);
   });
 
+  test("omits the automation families under toolset core and keeps them under full or absent", () => {
+    expect(isPaseoToolEnabled({ toolset: "core" }, "create_schedule")).toBe(false);
+    expect(isPaseoToolEnabled({ toolset: "core" }, "create_terminal")).toBe(false);
+    expect(isPaseoToolEnabled({ toolset: "core" }, "start_workspace_script")).toBe(false);
+    expect(isPaseoToolEnabled({ toolset: "core" }, "create_agent")).toBe(true);
+    expect(isPaseoToolEnabled({ toolset: "core" }, "create_workspace")).toBe(true);
+    expect(isPaseoToolEnabled({ toolset: "core" }, "speak")).toBe(true);
+    expect(isPaseoToolEnabled({ toolset: "full" }, "create_schedule")).toBe(true);
+    expect(isPaseoToolEnabled(undefined, "create_schedule")).toBe(true);
+    expect(
+      isPaseoToolEnabled({ toolset: "core", disabledTools: ["create_agent"] }, "create_agent"),
+    ).toBe(false);
+  });
+
   test("applies the provider gate and sparse disabled tools without filtering speak", () => {
     expect(isPaseoToolEnabled({ enabled: false }, "list_agents")).toBe(false);
     expect(isPaseoToolEnabled({ enabled: false }, "speak")).toBe(true);

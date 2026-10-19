@@ -536,6 +536,10 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "toolset": {
+                    "type": "string",
+                    "enum": ["core", "full"]
                   }
                 }
               },

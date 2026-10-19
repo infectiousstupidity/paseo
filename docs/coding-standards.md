@@ -106,6 +106,10 @@ Inactive retained panels use `display: none`, so DOM and layout APIs report zero
 - Enforce the rule at the measurement boundary shared by every trigger. Guarding only an `onLayout` or `ResizeObserver` callback still lets effects, content changes, and imperative remeasurement publish hidden geometry.
 - Test the hide-and-reveal path through a real retained surface. Settled assertions do not catch stale geometry painted during the first returned frames.
 
+## Docs
+
+The doc contract — integrate don't append, one fact one doc, layers, voice: [Writing Docs](writing-docs.md). Platform gating: [Platform Gating](platform-gating.md).
+
 ## Naming
 
 - Names describe meaning, not mechanics. `submitForm` over `handleOnClickButtonSubmit`. `running` over `filteredArrayOfRunningAgents`.

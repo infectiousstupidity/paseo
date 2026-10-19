@@ -1,97 +1,94 @@
 # Upstream sync: merge getpaseo/paseo main
 
-> Status: **Proposed.** A dry-run merge on 2026-10-16 found 4 conflicted files and 2 failures that merge cleanly but break the build. No merge was performed. Each finding has a task document with a proposed fix. Review each task, accept or revise it, then implement.
+> Status: **Refresh reviewed on 2026-10-19; implementation pending.** The first sync is already merged through upstream `23e388b05`. A fresh fetch found seven more commits through `9a0b95aa1` (0.12.0). The current dry run has one conflicted file, not the original four. This refresh changes documentation only; no merge, install, commit, or push was performed.
 
-## Inputs
+## Reviewed refs
 
-| Ref                  | Commit      | Notes                                                              |
-| -------------------- | ----------- | ------------------------------------------------------------------ |
-| `origin/main` (fork) | `c267f0cf2` | 232 commits ahead of upstream                                      |
-| `upstream/main`      | `98559bf72` | 47 commits the fork does not have                                  |
-| merge base           | `9ab99a6e1` | `feat(website): show sponsors on the homepage and website (#6870)` |
+| Ref                                             | Commit      | State at refresh                                                   |
+| ----------------------------------------------- | ----------- | ------------------------------------------------------------------ |
+| Local `main` / `HEAD`                           | `999d51cb2` | Contains the first real upstream merge and replica-cache follow-up |
+| `origin/main` (fork)                            | `7c35c4a8f` | One commit absent locally: archive fencing for automated prompts   |
+| `upstream/main` (getpaseo)                      | `9a0b95aa1` | Seven commits absent locally                                       |
+| Last integrated upstream / merge base with HEAD | `23e388b05` | Parent of merge `69359e8cb`                                        |
 
-Working tree at review time: local `main` is 1 commit behind `origin/main`, and `docs/mockups/paseo-mock-old.html` and `docs/mockups/paseo-mock-old2.html` are staged. Commit or stash both before merging.
+Local `main` is **123 commits ahead and 1 behind** `origin/main` by ancestry, not six unpublished commits ahead. These counts include the upstream history. Fetch both remotes before implementation and recheck the refs; never infer synchronization from the old counts.
 
-## Reproduce the dry run
+The checkout has unrelated tracked and untracked documentation/tool-policy changes. Preserve them. Do not stage everything, reset the checkout, automatically stash another worker's edits, or run an install here. Use a clean integration checkout after the operator decides which fork work belongs in the sync.
+
+## What is already done
+
+| Task                                                                                                 | Completion  | Retained result                                            |
+| ---------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- |
+| [01 — model cache](../tasks/upstream-sync-01-agent-stream-model-cache.md)                            | `69359e8cb` | Upstream's model; no current delta                         |
+| [02 — replica cache base](../tasks/upstream-sync-02-replica-cache-take-upstream.md)                  | `69359e8cb` | Upstream's cache at the merge commit                       |
+| [03 — accepted-state read overlay](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md) | `f8d30c62d` | Intentional fork delta on top; preserve it                 |
+| [04 — sheet-stack navigation](../tasks/upstream-sync-04-subagents-track-opens-in-sheet.md)           | `69359e8cb` | Fork inspector plus upstream sheet/tab rule and facts line |
+| [05 — locale parity](../tasks/upstream-sync-05-i18n-subagents-panel-parity.md)                       | `6fc9e613e` | All 29 panel keys in all nine locales                      |
+
+Upstream's seven new commits change none of the model cache, replica cache, or locale resources. Do not repeat Tasks 01–05 or check out upstream's cache over Task 03. The renderer migration originally covered by Task 06 is also merged; its remaining installer defect is described in that task.
+
+## New upstream commits
+
+| Commit      | Change                                                    | Integration handling                                                                                                                                                                                                          |
+| ----------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `644d66ba4` | Complete Korean terminal words on long press (#7353)      | Clean merge; unit selection coverage plus Android evidence                                                                                                                                                                    |
+| `d61dcaf1d` | Compact subagent rows and standard press feedback (#7364) | [Task 08](../tasks/upstream-sync-08-subagents-compact-feedback.md) resolves the track and adapts the fork-only disclosure; [09](../tasks/upstream-sync-09-windows-lint-rule-runner.md) repairs the new test runner on Windows |
+| `b8bcd204a` | Dismiss touch composer focus when switching tabs (#7352)  | Clean merge; retain fork modifier-key additions                                                                                                                                                                               |
+| `8dd3e2e34` | Prepare 0.12.0 changelog                                  | Take upstream metadata                                                                                                                                                                                                        |
+| `cafe4b01c` | Cut 0.12.0                                                | Take release versions while preserving fork scripts                                                                                                                                                                           |
+| `9be154774` | Show promoted git action once in compact menu (#7355)     | Clean merge; policy tests and compact-menu browser spec                                                                                                                                                                       |
+| `9a0b95aa1` | Update lockfile signatures and Nix hash                   | Keep paired lockfile/hash updates; verify on merged manifests                                                                                                                                                                 |
+
+Forty paths change upstream. Six also differ on the fork since the merge base: `docs/design.md`, `packages/app/src/composer/input/input.tsx`, `packages/app/src/composer/tracks.tsx`, `packages/app/src/subagents/track.tsx`, `packages/desktop/package.json`, and `packages/server/package.json`. Only the track conflicts textually. Inspect the clean overlaps too, including the operator's current design-doc changes when they are ready to integrate.
+
+## Reproduce without touching the working tree
 
 ```bash
+git fetch origin
 git fetch upstream
-git merge-tree --write-tree --name-only origin/main upstream/main
+git rev-parse HEAD origin/main upstream/main
+git merge-base HEAD upstream/main
+git log --oneline HEAD..upstream/main
+git merge-tree --write-tree --name-only HEAD origin/main
+git merge-tree --write-tree --name-only HEAD upstream/main
 ```
 
-Exit code 1. The first output line is the merged tree (`6913321435da13da24c6ee1f8d1eeb5fe48085cf`); the next four are the conflicted paths. Read a conflicted file out of that tree without touching the working tree:
+For the pinned refs above, the origin dry run exits 0, tree `d9ad391d8a6f1e4b9580696abc7649df384fe39a`. The upstream dry run exits 1, tree `cefd4ccaab8474aedb13ce5310c92fcf20ac6b53`, with only `packages/app/src/subagents/track.tsx` conflicted (three regions). The tree contains conflict markers; it is evidence, not a tree to commit.
 
 ```bash
-git cat-file -p 6913321435da13da24c6ee1f8d1eeb5fe48085cf:packages/app/src/subagents/track.tsx
+git cat-file -p cefd4ccaab8474aedb13ce5310c92fcf20ac6b53:packages/app/src/subagents/track.tsx
+git diff 23e388b05 upstream/main --stat
 ```
 
-`git merge-tree` reports textual conflicts only. Findings 05 and 06 surface at `npm run typecheck` and `npm install` time instead.
+Textual merge success does not establish semantic compatibility. In the track, clean hunks add required props while the surviving fork call site lacks them. The raw-pressable rule also rejects a fork-only file that never conflicts. Task 08 covers both.
 
-## Findings
+## Remaining tasks and order
 
-| #   | Area                            | Why it does not merge cleanly                                                                                              | Proposed resolution                                     | Task                                                                                     |
-| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 01  | `agent-stream/model.ts`         | Both sides added a rendered-tail cache for the same long-chat cost (fork `160a887ba`, upstream `8d424e039` / #7052)        | Take upstream, drop the fork's duplicate cache          | [Upstream sync 01](../tasks/upstream-sync-01-agent-stream-model-cache.md)                |
-| 02  | `runtime/replica-cache/`        | The fork rewrote the read path (`0014432e6`); upstream rewrote the same module for #4813 (`e0de0fdf6` / #7074)             | Take upstream wholesale, no hunk-level merge            | [Upstream sync 02](../tasks/upstream-sync-02-replica-cache-take-upstream.md)             |
-| 03  | Replica cache read overlay      | Upstream's fix keeps a read-triggered `syncPending()`; the fork's barrier-free read is the part that still matters         | Re-land the fork's one-pass read on top of upstream     | [Upstream sync 03](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md)     |
-| 04  | `subagents/track.tsx`           | The fork rewrote the track; upstream added the `opensInSheet` sheet-stack rule (`e5124b039` / #6958)                       | Keep the fork's file, thread the new prop through       | [Upstream sync 04](../tasks/upstream-sync-04-subagents-track-opens-in-sheet.md)          |
-| 05  | i18n `subagents.panel` keys     | Merges cleanly; the fork's English-only keys already fail typecheck and the locale parity test                             | Add the 29 keys to the 8 other locales                  | [Upstream sync 05](../tasks/upstream-sync-05-i18n-subagents-panel-parity.md)             |
-| 06  | App dependencies and `patches/` | Merges cleanly; upstream replaced the markdown renderer and added a patch for a dependency the fork's `node_modules` lacks | Reinstall, rebuild declarations, re-verify              | [Upstream sync 06](../tasks/upstream-sync-06-markdown-dependency-and-patch-reconcile.md) |
-| 07  | The merge commit itself         | —                                                                                                                          | One merge commit with the accepted resolutions, then CI | [Upstream sync 07](../tasks/upstream-sync-07-merge-integration-verification.md)          |
+1. [06 — dependency/patch reconciliation](../tasks/upstream-sync-06-markdown-dependency-and-patch-reconcile.md): fix the confirmed Windows unavailable-tool failure in the existing installer; land separately before merging.
+2. [08 — compact subagent integration](../tasks/upstream-sync-08-subagents-compact-feedback.md): reconcile the fork remote, merge the seven upstream commits, resolve the one track conflict, and adapt the expanded-details disclosure to the new lint rule. Depends on 06 and the completed 04.
+3. [09 — Windows lint-rule runner](../tasks/upstream-sync-09-windows-lint-rule-runner.md): fix the new test's extensionless executable-shim invocation. Depends on 08.
+4. [07 — final integration verification](../tasks/upstream-sync-07-merge-integration-verification.md): validate preserved fork deltas, merged versions/lockfile, focused tests, browser/native evidence, and fork CI. Depends on 06, 08, 09 and the completed 01–05.
 
-## Decisions
+Task numbers retain their original identities; they are not execution order. No task requires Task 07 to complete before it can run.
 
-**Upstream owns shared app internals; the fork keeps its product features.** Where both sides fixed the same defect, take upstream's version and re-land the fork's improvement on top as a separate commit (01, 02, 03). Keeping a private variant of `agent-stream/model.ts` or `runtime/replica-cache/index.ts` means re-resolving the same file at every future sync, and upstream's version is the one its tests assert.
+## Current verification and blockers
 
-**Never hand-merge a rewritten module hunk by hunk.** The replica-cache conflict is 8 hunks in the module and 3 in its tests, with both sides renaming internals. Hunk-level resolution produces a file neither side tests.
+Evidence collected during this documentation refresh, on the existing checkout rather than a resolved merged tree:
 
-**Fix the pre-existing red before merging.** Finding 05 fails `npm run typecheck` and `packages/app/src/i18n/resources.test.ts` on `origin/main` today. Landing it first keeps the merge's verification signal clean.
+- Root `npm run typecheck`: passes all workspaces.
+- Panel-resource inspection: all eight non-English locales have all 29 keys and matching interpolation placeholders. This confirms Task 05 is implemented; it is not a new linguistic review.
+- `node --test scripts/postinstall-patches.test.mjs`: 2 passed, 1 failed on Windows. Missing tool is misclassified as patch rejection; Task 06 owns it.
+- Prospective upstream lint config/plugin, copied temporarily at the repo root: two new `paseo/no-raw-pressable` violations, in the track and expanded-details. Task 08 owns them. Existing app lint findings remain too.
+- The new lint test's Windows spawn mechanism returns `ENOENT` for `node_modules/.bin/oxlint`. Task 09 owns it; the upstream test file itself is not installed on local main yet.
+- Root `npm run lint`: **44 existing errors**, covering app, Pi/subagent/feedback server code, and proof/mockup scripts. This is an existing quality-gate blocker, not evidence that the next upstream merge regresses those files. Do not weaken lint or claim green CI. Task 07 records the baseline and stays blocked on green sign-off until the owning fork work clears it; a broad cleanup is outside these sync-resolution tasks.
+- No browser, native, or full-suite run was performed for this refresh. Earlier recorded test results are historical and remain labeled as such.
 
-## Ordered tasks
+## Integration rules and completion
 
-1. [05 — i18n `subagents.panel` parity](../tasks/upstream-sync-05-i18n-subagents-panel-parity.md) — independent, lands before the merge.
-2. [01 — agent-stream model cache](../tasks/upstream-sync-01-agent-stream-model-cache.md), [02 — replica cache to upstream](../tasks/upstream-sync-02-replica-cache-take-upstream.md), [04 — subagents track `opensInSheet`](../tasks/upstream-sync-04-subagents-track-opens-in-sheet.md) — resolutions applied inside the merge commit.
-3. [06 — dependency and patch reconcile](../tasks/upstream-sync-06-markdown-dependency-and-patch-reconcile.md) — after the conflicts are resolved.
-4. [07 — merge integration and verification](../tasks/upstream-sync-07-merge-integration-verification.md) — depends on 01, 02, 04, 05, 06.
-5. [03 — replica cache one-pass read restore](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md) — after the merge lands.
+- **Fork-only.** Push only to the fork; no PR to getpaseo is planned, including for Task 03.
+- **Real merges.** Preserve both fork histories and upstream ancestry. Do not rebase published fork commits or manufacture a merge by assigning parents to a copied tree.
+- **Preserve intentional deltas.** Upstream owns shared internals where it already supplies the same fix. That is not permission to erase the fork's accepted-state cache overlay, grouped inspector, Pi controls, Windows fixes, plugins, or package scripts.
+- **Audit relative to the merge base.** Whole-file blob inequality cannot tell whether upstream work was dropped. The first real merge is `69359e8cb`; the discarded `553430f40` attempt on backup history is not the baseline.
+- **Focused local tests only.** App Vitest commands run from `packages/app`. Full suites belong in CI. Browser specs use Chromium, not an emulator; native verification is separate. The real-provider project is not included by the default browser command.
 
-## Verification bar
-
-- Focused vitest files only, never the full suite locally; push to CI for the broad run.
-- `npm run typecheck`, `npm run lint`, `npm run format:check` clean in `packages/app`.
-- The fork's subagent e2e specs pass: `subagent-detach`, `subagent-origin-pane`, `archive-finished-subagents`, `compact-workspace-sheet`, `provider-subagents.real`.
-- The three typecheck artifacts caused by a stale `node_modules` (see 06) are gone after `npm install`.
-
-## Merge outcome (2026-10-19)
-
-`upstream/main` at `23e388b05` is a parent of `main` as of `69359e8cb`. Task 03's read path is `f8d30c62d` on top. Nothing is pushed; `origin/main` is behind by 6 commits.
-
-**Fork-only rule.** This work is not upstreamed and no PR to `getpaseo/paseo` is planned. The goal is a fork carrying every upstream update it can without losing its own additions.
-
-**A first attempt was discarded.** `553430f40` built the merge by staging the payload onto the fork's tree (`git write-tree` plus `git commit -p 9ab99a6e1 -p f0acc2c72`), so git never compared the two sides hunk by hunk. It survives on the branch `sync-backup-2026-10`; `main` was reset to `b5f8b46ea` and merged for real. A first audit of the discarded commit compared blob identity and claimed "47 files kept the fork's version, upstream work dropped"; that method counted files the **fork** changed and upstream never touched, where the fork's version is the correct result. Audit against the merge base instead.
-
-**Audit of the merge that stands**, base `9ab99a6e1`, `HEAD` against `23e388b05` for every path upstream changed:
-
-| Measure                               | Result                                                      |
-| ------------------------------------- | ----------------------------------------------------------- |
-| Upstream files deleted by the merge   | 0                                                           |
-| Upstream-changed files taken verbatim | all of them, except the 28 the fork also changed            |
-| Files carrying both sides             | 28 (1119 lines over upstream, 146 lines of upstream absent) |
-| Fork-only files preserved             | 47                                                          |
-
-The 146 absent lines are the intended divergences: 87 in `subagents/track.tsx` (the fork's row layout; upstream's facts line is folded into the row's meta line by task 04), 40 in `runtime/replica-cache/index.ts` (task 03's one-pass read), and small fork-side supersets with a reason in the file — `services/github-service.ts` keeps a GraphQL document on one argv line because Windows launches `gh` through `cmd.exe`, `plugins/plugin-process.ts` always consumes IPC send errors and guards `disconnect` on `process.connected`.
-
-**Gate results on the merged tree**, after `npm install` and `npm run build:protocol`:
-
-- `npm run typecheck` at the root: clean across all workspaces.
-- `packages/app`, `npx vitest run src/runtime/replica-cache src/agent-stream src/timeline src/subagents src/i18n`: 55 files, 734 tests passed.
-- `packages/server`, `npx vitest run src/server/agent/tool-loop src/server/agent/agent-projections src/server/terminal`: 2 files, 23 tests passed.
-- Full app suite `npx vitest run`: 643 files, 6090 tests, 5 failing files. Each of the five fails identically at the fork tip `b5f8b46ea` and at `23e388b05` on this Windows machine, so none is a merge regression: `src/git/forges/index.test.ts` (`ENOENT 'D:\D:\DEVELOPMENT\...'`), the two Markdown file-URI image tests, `src/changelog/internal/parse-changelog.test.ts` (date locale), `src/composer/draft/input-draft.live.test.tsx` (IndexedDB unavailable, hook timeout).
-
-**Loose ends found on the way.** `scripts/postinstall-patches.mjs` spawns `patch-package.cmd`, which `cmd.exe` cannot resolve when npm runs the lifecycle from Git Bash; its fallback deletes the patched packages. `npm install` from a Windows shell is fine, so this is a fork-side fix to resolve the shim through `node_modules/.bin`. Three of this plan's gates — `labels:check`, `check:i18n-untranslated`, `execable:check` — are not scripts on `main`; they live on `codex/ci-pipeline-audit`, so they were not run here.
-
-**Open after this merge:** task 05 (i18n `subagents.panel` parity) is untouched; the fork's subagent e2e specs (`subagent-detach`, `subagent-origin-pane`, `archive-finished-subagents`, `compact-workspace-sheet`, `provider-subagents.real`) need a Playwright run, which needs an emulator; `origin/main` needs the push.
-
-## Done
-
-The sync is complete when `upstream/main` is a parent of the fork's `main` ✅ (`69359e8cb`), `git diff upstream/main -- packages/app/src/agent-stream/model.ts packages/app/src/runtime/replica-cache/` shows only the intentional fork deltas from Task 03 ✅, typecheck passes ✅, and CI is green on the merge commit ⏳ (not pushed; task 05's locale parity test is still open).
+The next sync is complete only when the reviewed fork-remote and upstream tips are ancestors of the final fork branch, the model remains upstream-identical, Task 03's only intentional cache delta survives, targeted checks and platform evidence are recorded, and CI is green on the published fork tip. Task 07 must not report completion while known quality gates or required platform checks remain unresolved.

@@ -28,9 +28,14 @@ export const ProviderRuntimeSettingsSchema = z.object({
   disallowedTools: z.array(z.string()).optional(),
 });
 
+// "core" omits the automation families (schedules, heartbeats, terminals, workspace scripts).
+// Absent means "full", matching catalogs published before the toolset existed.
+export const PaseoToolsetSchema = z.enum(["core", "full"]);
+
 export const ProviderPaseoToolsPolicySchema = z.object({
   enabled: z.boolean().optional(),
   disabledTools: z.array(z.string()).optional(),
+  toolset: PaseoToolsetSchema.optional(),
 });
 
 const ProviderProfileThinkingOptionSchema = z.object({
@@ -130,6 +135,7 @@ export const AgentProviderRuntimeSettingsMapSchema = z
 
 export type ProviderCommand = z.infer<typeof ProviderCommandSchema>;
 export type ProviderRuntimeSettings = z.infer<typeof ProviderRuntimeSettingsSchema>;
+export type PaseoToolset = z.infer<typeof PaseoToolsetSchema>;
 export type ProviderPaseoToolsPolicy = z.infer<typeof ProviderPaseoToolsPolicySchema>;
 export type ProviderProfileModel = z.infer<typeof ProviderProfileModelSchema>;
 export type ProviderOverride = z.infer<typeof ProviderOverrideSchema>;

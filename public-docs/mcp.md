@@ -44,6 +44,7 @@ tool injection globally, then add `paseoTools` to the exact provider IDs you lau
         "extends": "codex",
         "label": "Codex Worker",
         "paseoTools": {
+          "toolset": "core",
           "disabledTools": ["create_agent", "send_agent_prompt", "kill_agent"]
         }
       },
@@ -63,8 +64,10 @@ Run `paseo reload` after editing `~/.paseo/config.json`, then start a new agent 
 existing one. A running session keeps the catalog it received at launch.
 
 Omitting `paseoTools` enables the complete catalog. Set `enabled` to `false` to remove the catalog,
-or list exact tool IDs in `disabledTools` to remove selected tools. Custom profiles do not inherit
-this policy from `extends`; configure each custom provider ID separately.
+set `toolset` to `core` to drop the automation families — schedules, heartbeats, host terminals, and
+workspace scripts — from profiles that should not run jobs or processes, or list exact tool IDs in
+`disabledTools` to remove selected tools. `toolset: "full"` is the default and keeps them. Custom
+profiles do not inherit this policy from `extends`; configure each custom provider ID separately.
 
 Browser tools still require browser tools to be enabled and a connected browser host. The
 voice-only `speak` tool is separate from this policy.

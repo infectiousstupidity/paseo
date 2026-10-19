@@ -21,75 +21,59 @@ This is an npm workspace monorepo:
 
 At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
 
-| Doc                                                                  | What's in it                                                                                                                   |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| [docs/product.md](docs/product.md)                                   | What Paseo is, who it's for, where it's going                                                                                  |
-| [docs/architecture.md](docs/architecture.md)                         | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
-| [docs/agent-lifecycle.md](docs/agent-lifecycle.md)                   | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
-| [docs/data-model.md](docs/data-model.md)                             | File-based JSON persistence, Zod schemas, atomic writes, no migrations                                                         |
-| [docs/glossary.md](docs/glossary.md)                                 | Authoritative terminology — UI label wins, no synonyms                                                                         |
-| [docs/coding-standards.md](docs/coding-standards.md)                 | Type hygiene, error handling, state design, React patterns, file organization                                                  |
-| [docs/design.md](docs/design.md)                                     | Design system — tokens, buttons, hierarchy, density, alignment rails, states, what's forbidden                                 |
-| [docs/visual-mock-workflow.md](docs/visual-mock-workflow.md)             | Planned Git-backed live mock iteration, visual feedback to Pi, reusable components, and verification                             |
-| [docs/forms.md](docs/forms.md)                                       | Form architecture — non-React form model, form kit, load-state gating; the schedule form is the golden example                 |
-| [docs/hover.md](docs/hover.md)                                       | Hover — the canonical pattern (plain View + onPointerEnter/Leave, separate inner Pressable) and the three ways agents break it |
-| [docs/unistyles.md](docs/unistyles.md)                               | Unistyles gotchas — `useUnistyles()` is forbidden, alternatives in order                                                       |
-| [docs/floating-panels.md](docs/floating-panels.md)                   | Anchored popovers — Portal/Modal escape for Android, lifecycle gates, keyboard-shared-value, status-bar offset, the flash      |
-| [docs/menus.md](docs/menus.md)                                       | The menu engine — popover vs sheet, submenu pages, hover intent, when a decision earns a submenu                               |
-| [docs/expo-router.md](docs/expo-router.md)                           | Expo Router route ownership, startup restore, and native blank-screen gotchas                                                  |
-| [docs/file-icons.md](docs/file-icons.md)                             | Material icon theme integration for the file explorer                                                                          |
-| [docs/providers.md](docs/providers.md)                               | Adding a new agent provider end-to-end                                                                                         |
-| [docs/forge-providers.md](docs/forge-providers.md)                   | Adding a git forge: registry/manifest, drop-in checklist, self-host/GHES, the two facts tiers                                  |
-| [docs/custom-providers.md](docs/custom-providers.md)                 | Custom provider config: Z.AI, Alibaba/Qwen, ACP agents, profiles, custom binaries                                              |
-| [docs/plugins.md](docs/plugins.md)                                   | Local plugin manifest, directory source config, RPCs, native surfaces, and attachment sources                                  |
-| [docs/service-proxy.md](docs/service-proxy.md)                       | Service proxy: exposing workspace scripts at public URLs, DNS setup, reverse proxy config                                      |
-| [docs/development.md](docs/development.md)                           | Dev server, build sync gotchas, CLI reference, agent state, Playwright MCP                                                     |
-| [docs/rpc-namespacing.md](docs/rpc-namespacing.md)                   | WebSocket RPC naming convention — dotted namespaces and `.request`/`.response` pairs                                           |
-| [docs/protocol-compatibility.md](docs/protocol-compatibility.md)     | Why app/daemon versions drift, protocol vs feature contract, capability gating, COMPAT tagging                                 |
-| [docs/protocol-validation.md](docs/protocol-validation.md)           | zod-aot generated inbound WebSocket validation, patched compiler regressions, schema-purity rules                              |
-| [docs/permissions.md](docs/permissions.md)                           | Semantic daemon permissions, principals, credentials, pairing invitations, and Hub authority                                   |
-| [docs/terminal-performance.md](docs/terminal-performance.md)         | Terminal latency pipeline, coalescing/backpressure invariants, benchmark + perf spec usage                                     |
-| [docs/agent-stream-performance.md](docs/agent-stream-performance.md) | Assistant text pipeline — coalescing window, paced reveal, why arrival lumps are smoothed at render                            |
-| [docs/markdown-renderer.md](docs/markdown-renderer.md)               | Shared Markdown engine, native selection, links, images and library constraints                                                |
-| [docs/native-text-selection.md](docs/native-text-selection.md)       | Native diagram grouping, selection boundaries and leading inline image limitations                                             |
-| [docs/file-observation.md](docs/file-observation.md)                 | Recursive watcher ownership, Linux constraints, teardown invariants, and Parcel comparison                                     |
-| [docs/testing.md](docs/testing.md)                                   | TDD workflow, determinism, real dependencies over mocks, test organization                                                     |
-| [docs/qa.md](docs/qa.md)                                             | QA evidence bar for pull requests — platform matrix, version drift, performance, UI proof                                      |
-| [docs/mobile-testing.md](docs/mobile-testing.md)                     | Maestro and mobile test workflows                                                                                              |
-| [docs/mobile-panels.md](docs/mobile-panels.md)                       | Compact left/center/right panel ownership, worklet motion, gesture revisions, and Fabric constraints                           |
-| [docs/explorer-sidebar.md](docs/explorer-sidebar.md)                 | Explorer sidebar, side-pane, and compact workspace sheet host contracts, lifecycle, placement, routing preferences             |
-| [docs/ad-hoc-daemon-testing.md](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                                                                                        |
-| [docs/browser-capture-harness.md](docs/browser-capture-harness.md)   | Real-Electron browser screenshot harness and compositor-surface gotcha                                                         |
-| [docs/android.md](docs/android.md)                                   | App variants, local/cloud builds, EAS workflows, version codes, F-Droid source builds and store metadata                       |
-| [docs/docker.md](docs/docker.md)                                     | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
-| [docs/release.md](docs/release.md)                                   | Release playbook, draft releases, completion checklist                                                                         |
-| [docs/terminal-activity.md](docs/terminal-activity.md)               | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |
-| [SECURITY.md](SECURITY.md)                                           | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
-| [public-docs/hub/security.md](public-docs/hub/security.md)           | Public Hub guide — trust boundaries, untrusted triggers, provider controls, and output authority                               |
+| Doc                                                          | What's in it                                          |
+| ------------------------------------------------------------ | ----------------------------------------------------- |
+| [product](docs/product.md)                                   | What Paseo is, who it's for, where it's going         |
+| [architecture](docs/architecture.md)                         | System design, package layering, protocol, data flow  |
+| [agent-lifecycle](docs/agent-lifecycle.md)                   | Agent states, parent/child, archive semantics         |
+| [data-model](docs/data-model.md)                             | File-based JSON persistence, Zod, atomic writes       |
+| [glossary](docs/glossary.md)                                 | Authoritative terminology — UI label wins             |
+| [coding-standards](docs/coding-standards.md)                 | Type hygiene, error handling, React patterns          |
+| [design](docs/design.md)                                     | Design system — tokens, hierarchy, what's forbidden   |
+| [platform-gating](docs/platform-gating.md)                   | Platform gates, decision matrix, Metro extensions     |
+| [hover](docs/hover.md)                                       | Canonical hover pattern; the ways agents break it     |
+| [unistyles](docs/unistyles.md)                               | Unistyles gotchas — `useUnistyles()` is forbidden     |
+| [floating-panels](docs/floating-panels.md)                   | Anchored popovers, Android escape, status-bar offsets |
+| [menus](docs/menus.md)                                       | Menu engine — popover vs sheet, when to use a submenu |
+| [mobile-panels](docs/mobile-panels.md)                       | Compact panel ownership, worklet motion, Fabric       |
+| [explorer-sidebar](docs/explorer-sidebar.md)                 | Sidebar, side-pane, compact sheet host contracts      |
+| [expo-router](docs/expo-router.md)                           | Route ownership, startup restore, blank screens       |
+| [forms](docs/forms.md)                                       | Non-React form model, form kit, load-state gating     |
+| [file-icons](docs/file-icons.md)                             | Material icon theme in the file explorer              |
+| [markdown-renderer](docs/markdown-renderer.md)               | Shared Markdown engine, native selection              |
+| [native-text-selection](docs/native-text-selection.md)       | Diagram grouping, selection boundaries                |
+| [providers](docs/providers.md)                               | Adding a new agent provider end-to-end                |
+| [forge-providers](docs/forge-providers.md)                   | Adding a git forge — registry, tiers, self-host       |
+| [custom-providers](docs/custom-providers.md)                 | Z.AI, Qwen, ACP, profiles, custom binaries            |
+| [plugins](docs/plugins.md)                                   | Plugin manifest, RPCs, native surfaces, attachments   |
+| [service-proxy](docs/service-proxy.md)                       | Workspace scripts at public URLs, reverse proxy       |
+| [rpc-namespacing](docs/rpc-namespacing.md)                   | Dotted RPC names, `.request`/`.response` pairs        |
+| [protocol-compatibility](docs/protocol-compatibility.md)     | Version drift, capability gating, COMPAT tags         |
+| [protocol-validation](docs/protocol-validation.md)           | zod-aot inbound validation, schema-purity rules       |
+| [permissions](docs/permissions.md)                           | Principals, credentials, pairing, Hub authority       |
+| [terminal-performance](docs/terminal-performance.md)         | Latency pipeline, coalescing/backpressure invariants  |
+| [agent-stream-performance](docs/agent-stream-performance.md) | Assistant text pipeline, paced reveal                 |
+| [terminal-activity](docs/terminal-activity.md)               | Activity indicators, agent hook reporting             |
+| [file-observation](docs/file-observation.md)                 | Watcher ownership, Linux limits, teardown             |
+| [development](docs/development.md)                           | Dev server, build sync gotchas, CLI reference         |
+| [testing](docs/testing.md)                                   | TDD, determinism, real dependencies, organization     |
+| [qa](docs/qa.md)                                             | QA evidence bar for pull requests                     |
+| [mobile-testing](docs/mobile-testing.md)                     | Maestro and mobile test workflows                     |
+| [ad-hoc-daemon-testing](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness               |
+| [browser-capture-harness](docs/browser-capture-harness.md)   | Real-Electron screenshot harness, compositor gotcha   |
+| [android](docs/android.md)                                   | Variants, EAS builds, version codes, F-Droid          |
+| [docker](docs/docker.md)                                     | Daemon and web UI in Docker, volumes, security        |
+| [release](docs/release.md)                                   | Release playbook, draft releases, checklist           |
+| [visual-mock-workflow](docs/visual-mock-workflow.md)         | Planned Git-backed live mock iteration                |
+| [writing-docs](docs/writing-docs.md)                         | Doc contract, layers, voice rules                     |
+| [SECURITY.md](SECURITY.md)                                   | Relay threat model, E2E encryption, agent auth        |
+| [hub security](public-docs/hub/security.md)                  | Public Hub guide — trust boundaries, output authority |
+
+Deep archives, linked from the docs that own them: `docs/plans/`, `docs/tasks/`, `docs/specs/`, `docs/references/`, `docs/evaluations/`, `docs/qa-evidence/`, `docs/refactors/`, `docs/design/`, `docs/mockups/`, [Update Paseo on Apple Silicon](docs/update-macos.md), [OpenCode global event baseline](docs/opencode-global-event-baseline.md).
 
 ### Writing docs
 
-- **Integrate, don't append.** Find the doc that owns the subject and rewrite the part that is now wrong. The standard failure is finishing a task and adding a paragraph to the bottom of the closest-looking doc; ten tasks later the doc is a pile of paragraphs in discovery order. `docs/custom-providers.md` is what that looks like.
-- **Don't document logic.** Prose that restates code drifts from the code and loses. Write down what the code can't tell you: why something is shaped the way it is, the gotcha that cost an afternoon, conventions nothing enforces, constraints that span packages or versions. If a reader could get it in two minutes by opening the file, cut it.
-- **One fact, one doc.** Every other mention is a link. If you are about to write the same paragraph in two docs, one of them is a link.
-- **Respect the layers.** `CONTRIBUTING.md` and this file name things and link out. Activity docs like `docs/qa.md` and `docs/testing.md` set the bar for a kind of work. Subject docs like `docs/unistyles.md` own one thing completely. A layer never re-explains the one below it.
-- **One subject per doc.** If the subject doesn't fit in a sentence, split the doc. A section per provider, vendor, or platform is a table plus one worked example.
-- **Delete.** Obsolete sections go. Prefer a `packages/app/src/thing.ts:120` reference over a pasted block.
-- **New doc?** Add a row to the table above and link it from the docs that should send readers there.
-- Code-level facts belong in comments next to the code, not here.
-
-### Doc voice
-
-Plain and short. Second person. State the rule, then the reason when the reason isn't obvious. Match the doc you're editing.
-
-Do not:
-
-- Write a sentence to land a point. "It's not X, it's Y", "That's not a Z, that's a W", and every other setup-and-punchline shape.
-- Add a clause that only asserts importance: "and that matters", "which is what keeps it working", "this is critical".
-- Use "honest", "robust", "seamless", "powerful", "simply", "just", "delightful".
-- Restate something you already said, in different words, for emphasis.
-- Hedge with "generally", "typically", or "you may want to" when the answer is "do this".
-- Clear your throat: "It's worth noting that", "In order to", "This section covers".
+**Integrate, don't append** — rewrite the part of the owning doc that is now wrong; never append a paragraph to the closest-looking doc. **Don't document logic** — record what the code cannot tell you. **One fact, one doc** — every other mention is a link. **One subject per doc**, **respect the layers**, **delete** obsolete sections. New doc → add a row above and link it from the docs that send readers there. Full contract, layers, and voice rules: [Writing Docs](docs/writing-docs.md).
 
 ## Quick start
 
@@ -146,51 +130,16 @@ and updating `next`, integrating it after a release, and releasing a hotfix from
 
 ## Platform gating
 
-The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is cross-platform by default. Gate only when you must. Import gates from `@/constants/platform`.
+The app runs on iOS, Android, web (browser), and web (Electron desktop). Code is cross-platform by default. Gate only when you must. Import gates from `@/constants/platform` — never write `const isWeb = Platform.OS === "web"` locally.
 
-### The four gates
+- `isWeb` — DOM APIs (`document`, `window`, `HTMLElement`, `addEventListener`). The exception, not the default. NEVER use raw DOM without this guard: DOM APIs crash native.
+- `isNative` — native-only APIs (Haptics, `StatusBar.currentHeight`, push tokens, camera).
+- `getIsElectron()` — Electron bridge: file dialogs, titlebar drag region, app updates, dock badges.
+- `useIsCompactFormFactor()` (`@/constants/layout`) — layout decisions: sidebar overlay vs pinned, modal vs full screen. Never use `Platform.OS` as a proxy for a layout capability.
 
-| Gate                       | Type      | When to use                                                                                                                 |
-| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `isWeb`                    | constant  | DOM APIs — `document`, `window`, `<div>`, `addEventListener`, `ResizeObserver`. This is the **exception**, not the default. |
-| `isNative`                 | constant  | Native-only APIs — Haptics, `StatusBar.currentHeight`, push tokens, camera/scanner, `expo-av`.                              |
-| `getIsElectron()`          | cached fn | Desktop wrapper features — file dialogs, titlebar drag region, daemon management, app updates, dock badges.                 |
-| `useIsCompactFormFactor()` | hook      | Layout decisions — sidebar overlay vs pinned, modal vs full screen, single-panel vs split. From `@/constants/layout`.       |
+NEVER use `onPointerEnter`/`onPointerLeave` — they do not fire on native iOS. Hover works on web only, so gate hover-to-show UI with `isHovered || isNative || isCompact`. Prefer Metro `.web.ts`/`.native.ts` and `.electron.tsx` file extensions over large `if (isWeb)` blocks.
 
-### Decision matrix
-
-| I need to...                                                   | Use                                                                       |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Access DOM (`document`, `window`, `<div>`, `addEventListener`) | `if (isWeb)`                                                              |
-| Use a native-only API (Haptics, push tokens, camera)           | `if (isNative)`                                                           |
-| Use an Electron bridge (file dialog, titlebar, updates)        | `if (getIsElectron())`                                                    |
-| Switch layout between phone and tablet/desktop                 | `useIsCompactFormFactor()`                                                |
-| Show something on hover, always-visible on native              | `isHovered \|\| isNative \|\| isCompact` (hover only works on web)        |
-| Gate to iOS or Android specifically                            | `Platform.OS === "ios"` / `Platform.OS === "android"` (rare, keep inline) |
-
-### Rules
-
-- **Default is cross-platform.** Don't gate unless you have a specific reason.
-- **Prefer Metro file extensions over `if` statements.** When a module has fundamentally different implementations per platform, use `.web.ts` / `.native.ts` file extensions instead of runtime `if (isWeb)` branches. Metro resolves the correct file at build time — the unused platform code is never bundled. Reserve `if (isWeb)` for small, inline checks (a single line or a few props). If you find yourself writing a large `if (isWeb) { ... } else { ... }` block, split into separate files instead.
-  ```
-  hooks/
-    use-audio-recorder.web.ts    ← uses Web Audio API
-    use-audio-recorder.native.ts ← uses expo-audio
-  ```
-  Import as `@/hooks/use-audio-recorder` — Metro picks the right file automatically.
-- **Use `.electron.ts` / `.electron.tsx` for Electron-only web modules.** Electron is still the Metro `web` platform, but desktop dev/build sets `PASEO_WEB_PLATFORM=electron`, so Metro first looks for `.electron.*` files and falls back to normal `.web.*` files. Use this when the implementation depends on Electron-only behavior such as `webviewTag`, desktop preload APIs, or the Electron bridge. Keep plain browser web in `.web.*`, and keep native fallbacks in the base file or `.native.*`.
-  ```
-  desktop/browser/pane/
-    index.electron.tsx ← Electron <webview> implementation
-    index.web.tsx      ← plain web fallback
-    index.tsx          ← native fallback
-  ```
-  Import as `@/desktop/browser/pane` — Electron desktop gets the `.electron.tsx` file, browser web gets `.web.tsx`, and native gets the native/base implementation.
-- **NEVER use raw DOM APIs without `isWeb` guard.** DOM APIs crash native. Casting a RN ref to `HTMLElement` is a red flag — ensure the block is web-only.
-- **NEVER use `onPointerEnter`/`onPointerLeave`.** They don't fire on native iOS.
-- **Hover only works on web.** React Native's `onHoverIn`/`onHoverOut` on `Pressable` does NOT fire on native iOS/iPad — the underlying W3C pointer events are behind disabled experimental flags. For hover-to-show UI (kebab menus, action buttons), use `isHovered || isNative || isCompact` so the controls are always visible on native and hover-to-show on web.
-- **Don't use Platform.OS as a proxy for layout capabilities.** Use breakpoints for layout decisions, not platform checks.
-- **Import `isWeb`/`isNative` from `@/constants/platform`.** Never write `const isWeb = Platform.OS === "web"` locally.
+The decision matrix, the Metro extension rules, and the full rule list are in [Platform Gating](docs/platform-gating.md).
 
 ## Debugging
 

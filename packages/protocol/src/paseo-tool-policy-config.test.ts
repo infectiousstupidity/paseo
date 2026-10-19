@@ -16,6 +16,12 @@ describe("provider Paseo-tool policy", () => {
     expect(ProviderOverrideSchema.parse({}).paseoTools).toBeUndefined();
   });
 
+  test("accepts the toolset knob and rejects unknown toolsets", () => {
+    expect(ProviderPaseoToolsPolicySchema.parse({ toolset: "core" })).toEqual({ toolset: "core" });
+    expect(ProviderPaseoToolsPolicySchema.parse({})).toEqual({});
+    expect(() => ProviderPaseoToolsPolicySchema.parse({ toolset: "minimal" })).toThrow();
+  });
+
   test("accepts paseoTools on persisted provider overrides", () => {
     expect(
       ProviderOverrideSchema.parse({
