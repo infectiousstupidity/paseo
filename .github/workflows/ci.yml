@@ -161,6 +161,11 @@ jobs:
       - name: Typecheck all packages
         run: npm run typecheck
 
+      # Unused-code budget: 2 unlisted imports and 4 duplicate exports are
+      # grandfathered. Lower --max-issues in package.json#knip:ci as they go away.
+      - name: Find unused code
+        run: npm run knip:ci
+
       - name: Run website tests
         run: npx vitest run packages/website/src --bail=1
 

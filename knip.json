@@ -11,30 +11,18 @@
     },
     "packages/server": {
       "entry": [
-        "src/server/index.ts",
-        "src/server/exports.ts",
-        "src/utils/tool-call-parsers.ts",
-        "src/shared/**/*.ts",
-        "src/client/**/*.ts",
         "src/server/agent/agent-sdk-types.ts",
-        "src/server/agent/provider-manifest.ts",
         "scripts/**/*.{ts,mts,mjs,cjs,js}",
-        "src/**/*.test.ts",
-        "src/**/*.test.tsx",
-        "src/**/*.e2e.ts",
-        "src/**/*.e2e.tsx"
+        "src/**/*.test.ts"
       ],
       "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{ts,mts,mjs,cjs,js}"]
     },
     "packages/app": {
       "entry": [
-        "index.ts",
+        "src/app/**/*.{ts,tsx}",
         "app.config.js",
         "babel.config.js",
-        "app/**/*.{ts,tsx}",
         "src/**/*.test.{ts,tsx}",
-        "src/**/*.e2e.{ts,tsx}",
-        "src/**/*.native.{ts,tsx}",
         "e2e/**/*.{ts,tsx}",
         "playwright.config.{ts,js}",
         "vitest.config.{ts,js}",
@@ -44,31 +32,35 @@
       "paths": {
         "@server/*": ["../server/src/*"]
       },
-      "ignore": ["android/**", "ios/**", ".expo/**", "dist/**", "scripts/reset-project.js"]
+      "expo": false
     },
     "packages/cli": {
       "entry": ["src/index.ts", "bin/paseo", "src/**/*.test.{ts,tsx}", "tests/**/*.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"]
     },
     "packages/relay": {
-      "entry": ["src/index.ts", "src/e2ee.ts", "src/cloudflare-adapter.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/website": {
-      "entry": ["src/router.tsx", "vite.config.ts", "src/routes/**/*.tsx"],
-      "project": ["src/**/*.{ts,tsx}"],
-      "ignore": ["src/routeTree.gen.ts"]
+      "entry": ["src/router.tsx", "src/routes/**/*.tsx"],
+      "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/desktop": {
-      "entry": ["src/main.ts", "src/preload.ts", "src/**/*.test.ts"],
+      "entry": ["src/preload.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/highlight": {
-      "entry": ["src/index.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/expo-two-way-audio": {
-      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/client": {
+      "entry": ["examples/**/*.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts", "examples/**/*.ts"]
+    },
+    "packages/protocol": {
+      "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"]
     }
   },
@@ -78,23 +70,9 @@
     "material-icon-theme",
     "eas-cli",
     "wait-on",
-    "concurrently",
     "get-port-cli",
     "patch-package",
-    "cross-env",
-    "expo-module-scripts",
-    "buffer",
-    "metro-config"
+    "buffer"
   ],
-  "ignoreBinaries": [
-    "expo-module",
-    "xed",
-    "eas",
-    "playwright",
-    "wrangler",
-    "powershell",
-    "tsx",
-    "vitest",
-    "open"
-  ]
+  "ignoreBinaries": ["xed", "eas", "wrangler", "powershell", "vitest", "open"]
 }
