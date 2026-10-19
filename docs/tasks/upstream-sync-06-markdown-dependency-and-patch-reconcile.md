@@ -1,83 +1,74 @@
-# Upstream sync 06: reconcile the markdown renderer swap and patch set
+# Upstream sync 06: finish dependency and patch reconciliation
 
-Status: **Proposed — awaiting review.** Follows the conflict resolutions in [Upstream sync: merge getpaseo/paseo main](../plans/upstream-sync-2026-10.md). Nothing here conflicts in git; it breaks the build if the install step is skipped.
+Status: **Complete — Windows installer fix and clean-install verification passed (2026-10-19).** Independent prerequisite for [Task 08](upstream-sync-08-subagents-compact-feedback.md). Tracked in the [upstream sync plan](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 
-After the merge, a clean install applies upstream's patch set, workspace declarations are current, and `npm run typecheck` is clean in `packages/app`. No fork-only patch or dependency is left pointing at a package that no longer exists.
+The patch installer launches the checkout's installed patch-package reliably on Windows and POSIX, never deletes dependencies because the tool could not start, and still removes a package when its patch genuinely rejects. A clean install can then verify the renderer and sheet patches without manual repair of node_modules.
 
-## Evidence
+## Current evidence (2026-10-19)
 
-Upstream `eb1a8a2ec` (`fix(markdown): one renderer on react-native-enriched-markdown for iOS, Android and web (#6973)`) replaced the markdown stack in `packages/app/package.json`:
+- The enriched-markdown migration (#6973) and its later patch-path update (#7298) are already in `69359e8cb`. The current script correctly points at `packages/app/node_modules/react-native-enriched-markdown`, not a root-hoisted copy. There is no remaining markdown migration to implement.
+- Upstream `23e388b05..9a0b95aa1` does not change the installer or patch files. It does update workspace versions and the lockfile to 0.12.0; install that merged lockfile during Task 08 rather than restoring the beta manifests.
+- `node --test scripts/postinstall-patches.test.mjs` currently reports **2 passed, 1 failed** on Windows. The real missing-tool fixture emits `'patch-package.cmd' is not recognized`; `cmd.exe` returns nonzero without `result.error`, so the script calls the outcome a rejected patch and deletes the fixture's dependency. The existing test expects a failed spawn and an intact package.
+- Successful and already-applied patches pass in the same environment. The evidence does not establish that every Git Bash install fails; the confirmed defect is shell/PATH-dependent tool discovery and destructive misclassification of an unavailable tool.
 
-- removed `react-native-markdown-display` and `react-native-uitextview`;
-- added `react-native-enriched-markdown@1.2.0-nightly-20261014-766fc0e67`, `mdast-util-from-markdown`, `mdast-util-gfm-table`, `micromark-extension-gfm-table`, `micromark-util-decode-string`;
-- added a top-level `enriched-markdown` config block (math off, code highlighting on with a fixed language list, video off).
+## Change
 
-`patches/` three-way:
-
-| Patch                                                                   | Base | Fork | Upstream | Merged tree |
-| ----------------------------------------------------------------------- | ---- | ---- | -------- | ----------- |
-| `react-native-markdown-display+7.0.2.patch`                             | yes  | yes  | removed  | removed     |
-| `@gorhom+bottom-sheet+5.2.14.patch`                                     | no   | no   | added    | added       |
-| `react-native-enriched-markdown+1.2.0-nightly-20261014-766fc0e67.patch` | no   | no   | added    | added       |
-
-The markdown-display patch came from upstream at the merge base; the fork never touched it (`git log 9ab99a6e1..origin/main -- patches/react-native-markdown-display+7.0.2.patch` is empty), and the fork has no local commits under `packages/app/src/components/markdown/`. The merged tree contains zero references to `react-native-markdown-display` or `react-native-uitextview`.
-
-`scripts/postinstall-patches.mjs` gained 11 lines upstream — explicit `patchedPackages` entries (`patchPrefix`, `nodeModulesPath`, `cwd`) for the two new patches. The script only applies a patch when the dependency is installed, so a stale patch file is dead weight rather than a failure.
-
-The gorhom patch is not cosmetic: it stops `BottomSheetModal` from overwriting a `DISMISSING` status with `MINIMIZED`, and it exports `BottomSheetModalInternalProvider`, consumed by `packages/app/src/components/ui/isolated-bottom-sheet-modal/host-scope.tsx` and stubbed in `packages/app/test-stubs/gorhom-bottom-sheet.ts`. Without the patch applied, typecheck and the isolated-sheet tests fail.
-
-In the dry-run worktree, which reused the fork's `node_modules`, typecheck reported unresolved imports for the newly added package and its patched export. Those are install artifacts, not merge defects — but they are indistinguishable from real breakage unless the install is re-run.
-
-## Proposed fix
-
-After resolving the four conflicts and before committing the merge:
-
-```bash
-npm install          # postinstall applies patches via scripts/postinstall-patches.mjs
-npm run build:client # refresh cross-workspace declarations
-npm run typecheck
-```
-
-Then confirm:
-
-- `ls node_modules/react-native-markdown-display` is absent and `node_modules/react-native-enriched-markdown` is present with the patch applied;
-- `patches/` matches the `patchedPackages` list in `scripts/postinstall-patches.mjs` — no entry without a file, no file without an entry;
-- the install-artifact typecheck errors are gone.
-
-## Review
-
-- **Decide whether the fork keeps any markdown customization.** It currently has none, so the swap is a straight take. If a fork-local markdown fix exists in a stash or an unmerged branch, it has to be re-expressed against the new renderer — flag it here rather than during the merge.
-- The nightly dependency pin (`1.2.0-nightly-20261014-766fc0e67`) is upstream's choice. Confirm the fork's CI can resolve it; a private registry mirror may need the new package.
-- Check whether the fork's `patches/react-native-markdown-display+7.0.2.patch` deletion is intentional in the fork's own history (it is, per the table above) so a reviewer does not restore it.
+- Resolve the installed patch-package Node CLI from the checkout and launch it through `process.execPath`, without a shell or dependence on an npm-provided PATH. Do not add a second Windows-only patching path.
+- Preserve each patch's working directory and relative `--patch-dir` handling, including nested app/server dependencies and paths containing spaces.
+- Treat tool-resolution/start failures as unavailable: fail the install, report the cause, and leave installed dependencies intact. Keep removal/reinstall recovery only for an actual patch rejection.
+- Extend `scripts/postinstall-patches.test.mjs` with real temporary-checkout fixtures. Once the tool is resolved independently of PATH, an empty PATH is not evidence that it is missing; make the unavailable-tool fixture actually lack the resolved CLI. Keep changed-patch recovery and idempotence coverage.
 
 ## Acceptance
 
-- `npm install` succeeds and applies eight patches without warnings about missing packages.
-- `npm run typecheck` is clean in `packages/app` apart from anything Task 05 has not yet fixed.
-- Markdown unit tests pass: `packages/app/src/components/markdown/renderer.test.ts`, `part-groups.test.ts`, `html-ish.test.ts`.
-- CI runs `packages/app/e2e/browser/plan-card-markdown.spec.ts` and `streaming-markdown.spec.ts` green.
+- The existing three behaviors pass on Windows and POSIX: apply/idempotence, genuine rejection recovery, and unavailable tool without deleting a dependency.
+- Root and nested workspace patches run from the correct directory, including a checkout path with spaces. Invocation failures clean up temporary patch directories.
+- A clean checkout/install applies the patches for the dependencies it actually installs. Partial-workspace installs may legitimately skip packages; do not require an unconditional count of eight patches.
+- The enriched-markdown patch and `BottomSheetModalInternalProvider` export are present after install. No removed markdown-display/uitextview dependency is reintroduced.
 
-## Focused checks
+## Verify
+
+Use the existing script-test suite and existing CI jobs; no feature-specific workflow. Run install experiments in a disposable checkout, not the operator's dirty working tree.
 
 ```bash
-npx vitest run packages/app/src/components/markdown/renderer.test.ts --bail=1
-npx vitest run packages/app/src/components/ui/isolated-bottom-sheet-modal --bail=1
+node --test scripts/postinstall-patches.test.mjs
+npm ci
+npm run build:client
 npm run typecheck
-npm run lint
-npm run format:check
+npm run lint -- scripts/postinstall-patches.mjs scripts/postinstall-patches.test.mjs
+npm run format:check:files -- scripts/postinstall-patches.mjs scripts/postinstall-patches.test.mjs
+(cd packages/app && npx vitest run src/components/markdown/renderer.test.ts --bail=1)
+(cd packages/app && npx vitest run src/components/ui/isolated-bottom-sheet-modal/index.test.tsx --bail=1)
 ```
+
+Record actual results and platforms. Do not claim browser markdown flows were exercised by these unit tests; [Task 07](upstream-sync-07-merge-integration-verification.md) owns that evidence.
 
 ## Constraints
 
-- Do not keep the removed markdown packages installed for compatibility.
-- Do not hand-edit `node_modules`; changes go through `patches/` and `scripts/postinstall-patches.mjs`.
-- Do not run the full e2e suite locally; use CI.
+- No hand-edits to node_modules or stale dependency compatibility installs.
+- No blanket suppression of patch failures or dependency removal on process-launch failure.
+- Do not restart a running daemon or run the full test suite.
+
+## Completion
+
+Implemented checkout-local CLI resolution and direct `process.execPath` invocation without shell/PATH discovery. Resolution, file preparation, spawn errors, and signal termination fail without removing dependencies; genuine nonzero patch exits retain reinstall recovery. Temporary patch directories are cleaned in `finally`. The real-tool fixtures cover root, app, and server working directories with spaces in checkout paths and an empty PATH; the unavailable fixture has no installed CLI.
+
+Verification on Windows (Git Bash, Node v24.20.0), 2026-10-19:
+
+- `node --test scripts/postinstall-patches.test.mjs`: **6 passed**, both in the operator checkout and in the disposable install checkout.
+- `npm ci`: **passed** in a disposable HEAD archive with the changed installer/tests copied in and its own Git repository initialized. All eight dependencies present in this full install patched successfully. The first archive-only attempt applied every patch but failed at Lefthook prepare because the archive lacked `.git`; initializing that disposable repository and rerunning `npm ci` completed normally. No install ran in the operator checkout.
+- Checked installed enriched-markdown JNI `sourceType` patch markers and `BottomSheetModalInternalProvider` exports in both source and declarations. `npm ls react-native-markdown-display react-native-uitextview --all` returned an empty tree.
+- `npm run build:client` and root `npm run typecheck`: **passed** in the operator checkout.
+- `npm run build:app-deps`: **passed** in the disposable checkout. The specified renderer test file passed **136 tests** and isolated-sheet test file passed **5 tests** there, against the clean install.
+- Targeted installer/test lint and `format:check:files`: **passed**. Ran `format:files` for changed scripts; full `npm run format` passed in the disposable checkout to avoid rewriting unrelated dirty operator files.
+- Install reported **159 dependency audit vulnerabilities** (9 low, 44 moderate, 91 high, 15 critical); dependency upgrades/audit remediation are outside this installer fix.
+
+POSIX execution was not available in this session; the cross-platform fixtures remain for existing CI. No browser markdown flows, native UI flows, daemon restart, upstream merge, or full test suite were exercised. Task 07 still owns integration evidence. This fix is committed separately before Task 08's merge.
 
 ## Required context
 
-- [Upstream sync plan](../plans/upstream-sync-2026-10.md)
-- [Development setup](../development.md)
-- [QA evidence bar](../qa.md)
-- [Postinstall patch script](../../scripts/postinstall-patches.mjs)
+- [Development](../development.md)
+- [Testing](../testing.md)
+- [Patch installer](../../scripts/postinstall-patches.mjs)
+- [Installer tests](../../scripts/postinstall-patches.test.mjs)
