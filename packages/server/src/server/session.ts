@@ -8354,6 +8354,7 @@ export class Session {
             : undefined,
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
+          unarchive: msg.unarchive,
           clearPendingPermissions: true,
           logger: this.sessionLogger,
         });
@@ -8372,6 +8373,7 @@ export class Session {
           request: {
             prompt,
             sourceAgentId: msg.sourceAgentId,
+            unarchive: msg.unarchive,
             activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           },
           prepare: async () => {

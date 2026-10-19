@@ -200,6 +200,8 @@ export interface AgentRunOptions {
   resumeFrom?: AgentPersistenceHandle;
   maxThinkingTokens?: number;
   clientMessageId?: string;
+  /** Reject a queued send after its agent was archived, even if restored later. */
+  nonReactivating?: boolean;
 }
 
 export interface AgentSteerOptions extends AgentRunOptions {

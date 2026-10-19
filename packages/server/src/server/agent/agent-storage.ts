@@ -10,6 +10,8 @@ import type { ManagedAgent } from "./agent-manager.js";
 import type { AgentSessionConfig } from "./agent-sdk-types.js";
 import { AgentOwnerSchema, daemonExecutionKey, type DaemonAgentOwner } from "./agent-owner.js";
 
+export const AUTOMATION_REVOKED_LABEL = "paseo.automation-revoked";
+
 const SERIALIZABLE_CONFIG_SCHEMA = z
   .object({
     modeId: z.string().nullable().optional(),
@@ -258,6 +260,10 @@ export class AgentStorage {
       // stale pre-archive record after the archive mutation.
       if (existing && existing.archivedAt !== undefined) {
         record.archivedAt = existing.archivedAt;
+      }
+      // A human restore cannot reenable sends queued before archival.
+      if (existing?.labels?.[AUTOMATION_REVOKED_LABEL] === "true") {
+        record.labels = { ...record.labels, [AUTOMATION_REVOKED_LABEL]: "true" };
       }
       return record;
     });
