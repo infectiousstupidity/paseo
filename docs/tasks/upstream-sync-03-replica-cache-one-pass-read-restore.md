@@ -1,6 +1,6 @@
 # Upstream sync 03: restore barrier-free replica cache reads
 
-Status: **Accepted — implemented in the commit that carries this note.** Depends on [Upstream sync 02](../tasks/upstream-sync-02-replica-cache-take-upstream.md), which is staged on `main` for the merge commit. Design reference: [Replica cache one-pass reads](../plans/replica-cache-read-path.md).
+Status: **Accepted — implemented in `f8d30c62d`, on top of the merge `69359e8cb`.** Depends on [Upstream sync 02](../tasks/upstream-sync-02-replica-cache-take-upstream.md), merged into `main` as `69359e8cb`. Design reference: [Replica cache one-pass reads](../plans/replica-cache-read-path.md).
 
 ## Outcome
 
@@ -42,12 +42,13 @@ Keep upstream's structure; change one call and add one overlay.
 
 ## Verification
 
-Run from `packages/app` (a root-level `vitest src/...` filter loads no app projects and dies with `SyntaxError: Unexpected token 'typeof'`). Commit hashes for the staged task 02 delta: see the plan table row for task 02.
+Run from `packages/app` (a root-level `vitest src/...` filter loads no app projects and dies with `SyntaxError: Unexpected token 'typeof'`). Task 02 landed in the merge `69359e8cb`; this task is `f8d30c62d`, cherry-picked onto it. The earlier merge `553430f40` (branch `sync-backup-2026-10`) staged the payload onto the fork's tree and is not an ancestor of `main`.
 
 - `npx vitest run src/runtime/replica-cache` → **4 files, 71 tests passed** (45 in `index.test.ts`, up from 42).
 - Counting evidence, no sleeps: the streaming cluster (`while another agent streams timeline|directory updates`) asserts exact store counts — `readAgent` 1 read / 0 writes, `readTimeline` 1 read / 0 writes, `readWorkspace` 2 reads / 0 writes (it reads the workspace row then the project row by construction), with the stream producing one chunk per read. The five ported counting tests assert 1 read + 0 writes for an accepted delete, an accepted upsert, an unrelated pending change (`textReads === 0` proves the unrelated timeline is never materialized), a same-row accept in flight, and a pending baseline that keeps timelines.
 - `npx tsgo --noEmit` (app): clean. `npx oxlint packages/app/src/runtime/replica-cache` from the repo root: 0 warnings, 0 errors (from `packages/app` it errors on `options.typeAware` in the root `.oxlintrc.json` — run oxlint from the root). `npx oxfmt --check`: clean.
 - Full app suite: 6066 passed, 7 skipped, 3 test failures in 5 files, all machine-environment: two Markdown image tests (Windows temp path `\\C:\Users\...\My Apps\Мои\test.png`), `parse-changelog` date locale (`8 September 2026` vs `September 8, 2026`), `input-draft.live` (IndexedDB unavailable, hook timeout), `git/forges` (`ENOENT 'D:\D:\DEVELOPMENT\...'` path join). Each of those five files imports zero `replica-cache` modules, so none is reachable from this change.
+- Re-run on the real merge (`69359e8cb` + this commit) after `npm install`: focused replica-cache **10 files, 226 tests passed**; focused five-directory run 55 files, 734 tests; full app suite 643 files, 6090 tests with the same five machine-environment files failing, each of which fails identically at the fork tip `b5f8b46ea` and at upstream `23e388b05`.
 
 ## Deviations from the implementation section
 

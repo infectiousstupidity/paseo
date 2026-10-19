@@ -1,6 +1,6 @@
 # Upstream sync 02: take upstream's replica cache
 
-Status: **Proposed — awaiting review.** Resolution for the largest merge conflict in [Upstream sync: merge getpaseo/paseo main](../plans/upstream-sync-2026-10.md). The follow-up that restores the fork's advantage is [Upstream sync 03](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md).
+Status: **Done — merged in `69359e8cb`, see Verification.** Resolution for the largest merge conflict in [Upstream sync: merge getpaseo/paseo main](../plans/upstream-sync-2026-10.md). The follow-up that restores the fork's advantage is [Upstream sync 03](../tasks/upstream-sync-03-replica-cache-one-pass-read-restore.md).
 
 ## Outcome
 
@@ -71,3 +71,18 @@ Stop and ask if taking upstream's file requires changing directory or timeline o
 - [Replica cache one-pass reads](../plans/replica-cache-read-path.md)
 - [Data model](../data-model.md)
 - [Replica cache](../../packages/app/src/runtime/replica-cache/index.ts)
+
+## Verification (commands, evidence, commit hashes)
+
+The merge that carries this resolution is `69359e8cb` (`Merge upstream/main (23e388b05) into main`); task 03's restore of the fork's read path is `f8d30c62d`. An earlier merge, `553430f40`, staged the payload onto the fork's tree instead of merging three-way, so it kept the fork's version of files upstream had rewritten. It is kept on the branch `sync-backup-2026-10` and is not an ancestor of `main`.
+
+- `npm run typecheck` from the repo root: clean across all workspaces.
+- From `packages/app`, `npx vitest run src/runtime/replica-cache src/agent-stream src/timeline src/subagents src/i18n`: **55 files, 734 tests passed**.
+- Full app suite `npx vitest run`: 643 files, 6090 tests. Five files fail on this Windows machine, and the same five fail at the fork tip `b5f8b46ea` and at `23e388b05`: `src/git/forges/index.test.ts` (`ENOENT 'D:\D:\DEVELOPMENT\...'`, a `file://` pathname join), the two Markdown file-URI image tests (`src/utils/assistant-markdown-image-source.test.ts` and upstream's `src/components/markdown/image-source.test.ts`), `src/changelog/internal/parse-changelog.test.ts` (date locale), `src/composer/draft/input-draft.live.test.tsx` (IndexedDB unavailable, 10s hook timeout). None is a merge regression.
+- Merge audit against the merge base `9ab99a6e1`, comparing `HEAD` with `23e388b05` for every path upstream changed: 0 upstream files deleted; upstream's version taken verbatim everywhere the fork did not touch the file; 28 files carry both sides; 47 fork-only files preserved.
+- Where `HEAD` differs from upstream across those 28 files it adds 1119 lines and lacks 146, concentrated in `track.tsx` (87 — the fork's row layout, with upstream's facts line folded in by task 04) and `replica-cache/index.ts` (40 — task 03's read path). The rest are fork-side supersets, each with a reason in the file: `github-service.ts` keeps the GraphQL document on one argv line because Windows launches `gh` through `cmd.exe`; `plugin-process.ts` always consumes IPC send errors and guards `disconnect` on `process.connected`.
+- The fork's 30-line `matchesReplicaRead` and 570-line test file are not in `main`; task 03 restored the read path on top of upstream's file.
+
+## Upstreaming decision
+
+Not upstreamed. Fork-only feature on top of upstream's file.

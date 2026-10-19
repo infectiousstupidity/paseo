@@ -1,6 +1,6 @@
 # Upstream sync 04: keep the fork's subagents track and honor the sheet-stack rule
 
-Status: **Proposed — awaiting review.** Resolution for the `subagents/track.tsx` merge conflict in [Upstream sync: merge getpaseo/paseo main](../plans/upstream-sync-2026-10.md).
+Status: **Done — merged in `69359e8cb`, see Verification.** Resolution for the `subagents/track.tsx` merge conflict in [Upstream sync: merge getpaseo/paseo main](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 
@@ -89,3 +89,17 @@ The e2e specs `subagent-detach`, `subagent-origin-pane`, `archive-finished-subag
 - [Agent lifecycle — subagents track](../agent-lifecycle.md)
 - [Menus](../menus.md)
 - [Subagents track](../../packages/app/src/subagents/track.tsx)
+
+## Verification (commands, evidence, commit hashes)
+
+Landed in the merge `69359e8cb`.
+
+- The conflict resolved to the fork's track plus both of upstream's #6958 changes to the file: the `opensInSheet` sheet-stack rule, and the agent facts line (`@/panels/agent-facts-line`, which does not exist on the fork). `packages/app/src/subagents/track-sessions.ts` declares `opensInSheet: (row: SubagentRow) => boolean` and `track-sessions-section.tsx` passes `opensInSheet: (row) => isAgentPanelOpenInSheet(...)`; both merged cleanly, so the only local line is the threading.
+- `handleOpenSession` closes the track only for tab targets (`selectItem(..., !opensInSheet)`) and the row passes `closeOnSelect={!opensInSheet}` to `ComposerTrackRow`.
+- A Paseo row leads its meta line with `useAgentFactsLine(serverId, row.id)` — model, thinking, mode, context usage — falling back to `presentation.subtitle` before the agent has a model. The fork's row keeps its runtime label, started-ago line, state word, activity line, and hover action cluster, so none of the fork's row features were traded away for upstream's `rowText`/`rowFacts` layout.
+- From `packages/app`: `npx vitest run src/subagents` → **10 files, 133 tests passed**. Full focused run (`src/runtime/replica-cache src/agent-stream src/timeline src/subagents src/i18n`): 55 files, 734 tests.
+- `npm run typecheck` from the repo root: clean.
+
+## Upstreaming decision
+
+Not upstreamed. The prop contract, the sheet-stack rule, and the facts line are upstream's (getpaseo/paseo#6958); only the threading through the fork's rewrite is local, and it disappears when the fork's subagents panel is rebased onto upstream's.
