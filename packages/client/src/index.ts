@@ -487,7 +487,7 @@ export interface PaseoConfigActions {
 
 export interface PaseoApi {
   /** This host never reactivates an archived agent for a send with unarchive=false. */
-  readonly supportsNonReactivatingSend: true;
+  readonly supportsNonReactivatingSend?: true;
   dispose(): Promise<void>;
   observeEvents: DaemonClient["observeEvents"];
   readonly terminals: PaseoTerminalActions;
