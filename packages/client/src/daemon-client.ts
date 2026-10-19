@@ -428,6 +428,7 @@ export interface DaemonClientTrace {
 export interface SendMessageOptions {
   sourceAgentId?: string;
   messageId?: string;
+  unarchive?: boolean;
   /** What happens when the agent is mid-turn. The daemon interrupts the turn when omitted. */
   activeTurnBehavior?: ActiveTurnBehavior;
   images?: Array<{ data: string; mimeType: string }>;
@@ -3543,6 +3544,7 @@ export class DaemonClient {
       text,
       sourceAgentId: options?.sourceAgentId,
       ...(messageId ? { messageId } : {}),
+      ...(options?.unarchive !== undefined ? { unarchive: options.unarchive } : {}),
       ...(options?.activeTurnBehavior ? { activeTurnBehavior: options.activeTurnBehavior } : {}),
       ...(options?.images ? { images: options.images } : {}),
       ...(options?.attachments ? { attachments: options.attachments } : {}),
