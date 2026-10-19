@@ -1,6 +1,6 @@
 # Upstream sync 09: run the new lint-rule tests on Windows
 
-Status: **Pending.** Depends on [08](upstream-sync-08-subagents-compact-feedback.md), which brings in the new test file. Tracked in the [upstream sync plan](../plans/upstream-sync-2026-10.md).
+Status: **Implemented — Windows checks passed; POSIX verification remains for CI.** Depends on [08](upstream-sync-08-subagents-compact-feedback.md), which brings in the new test file. Tracked in the [upstream sync plan](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 
@@ -38,6 +38,14 @@ npm run format:check:files -- scripts/oxlint/paseo-plugin.mjs scripts/oxlint/pas
 ## Completion
 
 Record results/platforms and commit the test-runner fix as a fork follow-up after Task 08. Do not push anything to upstream.
+
+### Implementation and verification
+
+- Resolve the installed oxlint package's Node CLI and launch it through `process.execPath` with separate argv. Spawn errors throw a launcher-specific error with the original cause; signal termination cannot count as a lint result. Existing fixtures and cleanup remain intact. No new tests, scripts, or CI changes.
+- Windows / Git Bash / Node v24.20.0: all three existing rule cases passed. A temporary copy under a path containing spaces also passed all three. A disposable runner copy targeting a nonexistent executable reported `Failed to launch oxlint` with `ENOENT`; fixture directories were removed after both successful and failed launches. Disposable copies were removed.
+- `npm run typecheck`, targeted lint, and targeted format check passed. Ran `npm run format` and restored unrelated formatter-only changes.
+- CI contract test: 12 passed, 1 unrelated failure at `scripts/ci-workflow.test.mjs:246`: Windows paths from `filesUnder` do not match the forward-slash `packages/app/e2e/browser/` prefix assertion. The workflow and contract test were not changed.
+- POSIX was not run locally; existing CI retains that verification. No push performed.
 
 ## Required context
 
