@@ -60,6 +60,8 @@ import { useContainerWidthBelow } from "@/hooks/use-container-width";
 import { reconcileMissingAgentStateWithPresentAgent } from "@/panels/agent-panel-load-state";
 import { TimelineSyncStatus } from "@/timeline/sync-status";
 import { usePaneContext, usePaneFocus } from "@/panels/pane-context";
+import { useAgentFactsLine } from "@/panels/agent-facts-line";
+import { PaneSubtitle } from "@/panels/pane-subtitle";
 import { definePanel, type PanelDescriptor } from "@/panels/panel-registry";
 import { RenderProfile } from "@/utils/render-profiler";
 import { useHasPluginComposerPills } from "@/plugins";
@@ -1247,6 +1249,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   ) : null;
   const streamContent = (
     <View style={animatedStaticStyles.content}>
+      {showsComposer ? null : <SheetAgentFacts serverId={serverId} agentId={agentId} />}
       <RenderProfile id={`AgentStreamSection:${agentId}`}>
         <AgentStreamSection
           streamViewRef={streamViewRef}
@@ -1373,6 +1376,15 @@ function TimelineSyncErrorCallout({
       </View>
     </View>
   );
+}
+
+/**
+ * What the composer's controls and context meter would show, as one line, for an agent shown
+ * without its composer.
+ */
+function SheetAgentFacts({ serverId, agentId }: { serverId: string; agentId: string }) {
+  const text = useAgentFactsLine(serverId, agentId);
+  return text ? <PaneSubtitle text={text} testID="agent-pane-subtitle" /> : null;
 }
 
 const AgentStreamSection = memo(function AgentStreamSection({

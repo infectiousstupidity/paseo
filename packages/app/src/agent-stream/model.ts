@@ -47,33 +47,32 @@ const EMPTY_AUXILIARY: StreamRenderAuxiliary = {
   turnFooter: null,
 };
 
-const renderedTailCache = new WeakMap<StreamItem[], Map<number, StreamItem[]>>();
 const orderedTailCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const orderedHeadCache = new WeakMap<StreamItem[], Map<string, StreamItem[]>>();
 const splitHistoryCache = new WeakMap<
   StreamItem[],
   Map<string, Pick<AgentStreamRenderModel, "history" | "segments">>
 >();
-const turnTimingCache = new WeakMap<
+// A streamed delta rebuilds the model with the same tail. Everything below is keyed on
+// the rendered tail's identity, so the slice has to be reused, not recomputed.
+const renderedTailCache = new WeakMap<
   StreamItem[],
-  WeakMap<StreamItem[], Map<string, StreamTurnTiming>>
+  { historyStart: number; rendered: StreamItem[] }
 >();
 
 function getRenderedTail(tail: StreamItem[], historyStart: number | undefined): StreamItem[] {
   if (!historyStart) {
+    renderedTailCache.delete(tail);
     return tail;
   }
-  let cachedByStart = renderedTailCache.get(tail);
-  if (!cachedByStart) {
-    cachedByStart = new Map();
-    renderedTailCache.set(tail, cachedByStart);
-  }
-  const cached = cachedByStart.get(historyStart);
-  if (cached) {
-    return cached;
+  const cached = renderedTailCache.get(tail);
+  if (cached?.historyStart === historyStart) {
+    return cached.rendered;
   }
   const rendered = tail.slice(historyStart);
-  cachedByStart.set(historyStart, rendered);
+  // Revealing older history replaces the previous window, allowing its arrays and
+  // downstream layouts to be collected while the unchanged source tail stays alive.
+  renderedTailCache.set(tail, { historyStart, rendered });
   return rendered;
 }
 
@@ -148,32 +147,6 @@ function splitOrderedTail(params: {
   return split;
 }
 
-function getTurnTiming(params: {
-  isTurnActive: boolean;
-  activeTurnStartedAt: Date | null;
-  tail: StreamItem[];
-  head: StreamItem[];
-}): StreamTurnTiming {
-  let cachedByHead = turnTimingCache.get(params.tail);
-  if (!cachedByHead) {
-    cachedByHead = new WeakMap();
-    turnTimingCache.set(params.tail, cachedByHead);
-  }
-  let cachedByActivity = cachedByHead.get(params.head);
-  if (!cachedByActivity) {
-    cachedByActivity = new Map();
-    cachedByHead.set(params.head, cachedByActivity);
-  }
-  const activityKey = `${params.isTurnActive}:${params.activeTurnStartedAt?.getTime() ?? "none"}`;
-  const cached = cachedByActivity.get(activityKey);
-  if (cached) {
-    return cached;
-  }
-  const timing = deriveStreamTurnTiming(params);
-  cachedByActivity.set(activityKey, timing);
-  return timing;
-}
-
 export function buildAgentStreamRenderModel(
   input: BuildAgentStreamRenderModelInput,
 ): AgentStreamRenderModel {
@@ -208,7 +181,7 @@ export function buildAgentStreamRenderModel(
     platform: input.platform,
     isMobileBreakpoint: input.isMobileBreakpoint,
   });
-  const turnTiming = getTurnTiming({
+  const turnTiming = deriveStreamTurnTiming({
     isTurnActive: input.isTurnActive,
     activeTurnStartedAt: input.activeTurnStartedAt,
     tail: renderedTail,

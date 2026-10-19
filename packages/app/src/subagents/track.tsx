@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import React, { useCallback, useEffect, useState, type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,7 @@ import {
   type WorkspaceTabPresentation,
 } from "@/screens/workspace/workspace-tab-presentation";
 import type { Theme } from "@/styles/theme";
+import { useAgentFactsLine } from "@/panels/agent-facts-line";
 import { getPanelManifest } from "@/panels/panel-manifest";
 import type { SubagentRow } from "./select";
 import type { ArchiveFinishedStatus } from "./use-archive-finished";
@@ -51,6 +52,11 @@ export interface SubagentsTrackProps {
   rows: SubagentRow[];
   onOpenSubagent: (id: string) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
+  /**
+   * Whether opening this row shows it in a sheet. A sheet stacks over the list and uncovers it on
+   * close, so the list stays open; a tab replaces the list's pane, so choosing it ends the list.
+   */
+  opensInSheet: (row: SubagentRow) => boolean;
   onArchiveSubagent: (id: string) => void;
   onArchiveFinished?: () => void;
   archiveFinishedStatus?: ArchiveFinishedStatus;
@@ -102,6 +108,7 @@ export function SubagentsTrack({
   rows,
   onOpenSubagent,
   onOpenProviderSubagent,
+  opensInSheet,
   onArchiveSubagent,
   onArchiveFinished,
   archiveFinishedStatus = IDLE_ARCHIVE_FINISHED_STATUS,
@@ -124,14 +131,18 @@ export function SubagentsTrack({
   useEffect(() => {
     // Stop remains pending after RPC acceptance until an observed terminal child update.
     setStoppingKeys((previous) => {
-      const next = new Set([...previous].filter((key) =>
-        rows.some((row) => subagentTrackKey(row) === key && resolveSubagentState(row) === "running"),
-      ));
+      const next = new Set(
+        [...previous].filter((key) =>
+          rows.some(
+            (row) => subagentTrackKey(row) === key && resolveSubagentState(row) === "running",
+          ),
+        ),
+      );
       return next.size === previous.size ? previous : next;
     });
   }, [rows]);
   const toggleDetails = useCallback((key: string) => {
-    setExpandedKey((previous) => previous === key ? null : key);
+    setExpandedKey((previous) => (previous === key ? null : key));
   }, []);
   const markStopping = useCallback((key: string) => {
     setStoppingKeys((previous) => new Set(previous).add(key));
@@ -155,11 +166,13 @@ export function SubagentsTrack({
       panelTitle={t("subagents.title")}
       widePanel
     >
-      {([
-        ["attention", groups.attention, t("subagents.panel.needsAttention")],
-        ["working", groups.working, t("subagents.panel.working")],
-        ["recent", groups.recent, t("subagents.panel.recentResults")],
-      ] as const).map(([section, sectionRows, label]) =>
+      {(
+        [
+          ["attention", groups.attention, t("subagents.panel.needsAttention")],
+          ["working", groups.working, t("subagents.panel.working")],
+          ["recent", groups.recent, t("subagents.panel.recentResults")],
+        ] as const
+      ).map(([section, sectionRows, label]) =>
         sectionRows.length > 0 ? (
           <View key={section} style={styles.section} testID={`subagents-track-section-${section}`}>
             <View style={styles.sectionHeader}>
@@ -181,6 +194,7 @@ export function SubagentsTrack({
                   onStopAccepted={() => markStopping(key)}
                   onOpenSubagent={onOpenSubagent}
                   onOpenProviderSubagent={onOpenProviderSubagent}
+                  opensInSheet={opensInSheet(row)}
                   onArchiveSubagent={onArchiveSubagent}
                   onDetachSubagent={onDetachSubagent}
                 />
@@ -272,6 +286,7 @@ interface SubagentsTrackRowProps {
   onStopAccepted: () => void;
   onOpenSubagent: (id: string) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
+  opensInSheet: boolean;
   onArchiveSubagent: (id: string) => void;
   onDetachSubagent?: (id: string) => void;
 }
@@ -294,6 +309,7 @@ function SubagentsTrackRow({
   onStopAccepted,
   onOpenSubagent,
   onOpenProviderSubagent,
+  opensInSheet,
   onArchiveSubagent,
   onDetachSubagent,
 }: SubagentsTrackRowProps): ReactElement {
@@ -313,14 +329,23 @@ function SubagentsTrackRow({
   const shownActivity = row.kind === "provider" ? activity : null;
   // Dense rows use one meaningful outcome/activity line; exact metadata is available on expansion.
   const runtime = subagentRuntimeLabel(row);
-  const context = [presentation.subtitle, runtime,
-    age ? t("subagents.panel.startedAgo", { age }) : null].filter(Boolean).join(" · ");
+  // A Paseo agent has no provider subtitle, so its row leads with the same facts line the agent's
+  // sheet shows under its title: model, thinking, mode, context usage.
+  const factsLine = useAgentFactsLine(serverId, row.id);
+  const lead = row.kind === "paseo" ? (factsLine ?? presentation.subtitle) : presentation.subtitle;
+  const context = [lead, runtime, age ? t("subagents.panel.startedAgo", { age }) : null]
+    .filter(Boolean)
+    .join(" · ");
   const metadata =
-    shownActivity?.kind === "response" ? shownActivity.text
-    : shownActivity?.kind === "tool" ? shownActivity.label
-    : shownActivity?.kind === "none"
-      ? (state === "running" ? t("subagents.activityAwaiting") : t("subagents.panel.resultUnavailable"))
-      : null;
+    shownActivity?.kind === "response"
+      ? shownActivity.text
+      : shownActivity?.kind === "tool"
+        ? shownActivity.label
+        : shownActivity?.kind === "none"
+          ? state === "running"
+            ? t("subagents.activityAwaiting")
+            : t("subagents.panel.resultUnavailable")
+          : null;
   const [hovered, setHovered] = useState(false);
   const actionsAlwaysVisible = isNative || isCompact;
   const actionsVisible = actionsAlwaysVisible || hovered;
@@ -331,8 +356,8 @@ function SubagentsTrackRow({
       } else {
         onOpenSubagent(row.id);
       }
-    }, true);
-  }, [onOpenProviderSubagent, onOpenSubagent, row, selectItem]);
+    }, !opensInSheet);
+  }, [onOpenProviderSubagent, onOpenSubagent, row, selectItem, opensInSheet]);
   const handleArchivePress = useCallback(() => {
     onArchiveSubagent(row.id);
   }, [onArchiveSubagent, row.id]);
@@ -366,7 +391,11 @@ function SubagentsTrackRow({
             ) : null}
           </View>
           {context ? (
-            <Text style={styles.rowMeta} numberOfLines={1} testID={`subagents-track-context-${row.id}`}>
+            <Text
+              style={styles.rowMeta}
+              numberOfLines={1}
+              testID={`subagents-track-context-${row.id}`}
+            >
               {context}
             </Text>
           ) : null}
@@ -389,7 +418,21 @@ function SubagentsTrackRow({
         </View>
       </>
     ),
-    [context, displayLabel, expanded, metadata, presentation, row.id, row.kind, state, stateWord, stopping, t, theme.colors.foreground, theme.colors.foregroundMuted],
+    [
+      context,
+      displayLabel,
+      expanded,
+      metadata,
+      presentation,
+      row.id,
+      row.kind,
+      state,
+      stateWord,
+      stopping,
+      t,
+      theme.colors.foreground,
+      theme.colors.foregroundMuted,
+    ],
   );
 
   return (
