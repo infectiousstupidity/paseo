@@ -2555,7 +2555,17 @@ export class AgentManager {
   }): Promise<string> {
     const { agent, agentId, pendingRun, prompt, options } = params;
     try {
-      const result = await agent.session.startTurn(prompt, options);
+      // Archive and provider turn admission share the same lifecycle lane.
+      // A send queued before archive may start first, but archive then waits
+      // for its acceptance and closes it. A send after archive is rejected.
+      const result = await this.runLifecycleMutation(agentId, async () => {
+        if (pendingRun.settled) {
+          throw new Error(`Agent ${agentId} run was canceled before its turn started`);
+        }
+        const record = await this.registry?.get(agentId);
+        if (record?.archivedAt) throw new Error(`Agent is archived: ${agentId}`);
+        return agent.session.startTurn(prompt, options);
+      });
       if (pendingRun.settled) {
         throw new Error(`Agent ${agentId} run was canceled before its turn started`);
       }
