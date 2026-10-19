@@ -16,7 +16,11 @@ import { join } from "node:path";
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
-import { sendPromptToAgent, setupFinishNotification, waitForAgentRunStartWithTimeout } from "./agent-prompt.js";
+import {
+  sendPromptToAgent,
+  setupFinishNotification,
+  waitForAgentRunStartWithTimeout,
+} from "./agent-prompt.js";
 import type { AgentManagerEvent, ManagedAgent } from "./agent-manager.js";
 import type {
   AgentClient,
@@ -273,14 +277,16 @@ test("an automated send refuses to reactivate an archived worker", async () => {
   } as unknown as AgentStorage;
   const unarchiveSnapshot = vi.fn();
   const agentManager = { unarchiveSnapshot } as unknown as AgentManager;
-  await expect(sendPromptToAgent({
-    agentManager,
-    agentStorage,
-    agentId: "archived-worker",
-    prompt: "Late automated continuation",
-    unarchive: false,
-    logger: createTestLogger(),
-  })).rejects.toThrow("Agent is archived: archived-worker");
+  await expect(
+    sendPromptToAgent({
+      agentManager,
+      agentStorage,
+      agentId: "archived-worker",
+      prompt: "Late automated continuation",
+      unarchive: false,
+      logger: createTestLogger(),
+    }),
+  ).rejects.toThrow("Agent is archived: archived-worker");
   expect(unarchiveSnapshot).not.toHaveBeenCalled();
 });
 
