@@ -1,6 +1,6 @@
 # Upstream sync 07: finish integration verification and fork delivery
 
-Status: **Pending — blocked on 09, native/platform evidence, and quality-gate sign-off.** Tasks 06 and 08 are implemented; Task 08 records local checks and the unavailable native device. Tasks 01–05 and the first merge are already implemented. [Task 08](upstream-sync-08-subagents-compact-feedback.md) now owns the next merge; this task verifies and delivers the resulting branch. Current refs, evidence, and ordering: [upstream sync plan](../plans/upstream-sync-2026-10.md).
+Status: **Blocked — refreshed upstream has three unintegrated commits; scope decision required before final verification.** Tasks 06, 08, and 09 are committed. Native/platform evidence and quality-gate sign-off remain outstanding. See [preflight evidence](#preflight-evidence) and the [upstream sync plan](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 
@@ -85,3 +85,24 @@ Before a merge commit, use `git merge --abort` in its integration checkout. Afte
 ## Completion
 
 Update this task and the plan with final commit IDs, commands, output/artifact links, platform coverage, and the fork CI URL. Publish only with the operator's delivery authorization; never infer permission to include unrelated dirty work.
+
+### Preflight evidence
+
+Verification target: `567a91d0d988d549d14840861b911d6b515374fe` (Task 09). Started with a clean checkout and no merge in progress. Prerequisite commits are present: Task 06 `8bad0df74`, Task 08 merge `ab40481df`, and Task 09 `567a91d0d`.
+
+- `git fetch origin` and `git fetch upstream`: succeeded. Origin is `567a91d0d988d549d14840861b911d6b515374fe`; upstream is `b6dde61a7f56eff276196f6670d9705bd45a9849`.
+- `git merge-base --is-ancestor 7c35c4a8f HEAD` and `git merge-base --is-ancestor 9a0b95aa1 HEAD`: both exited 0.
+- `git rev-list --count HEAD..origin/main`: **0**. `git rev-list --count HEAD..upstream/main`: **3**, so the refreshed upstream ancestry gate fails. The [plan](../plans/upstream-sync-2026-10.md#refreshed-upstream-delta) records the new scope.
+- `git diff --exit-code 9a0b95aa1 HEAD -- packages/app/src/agent-stream/model.ts`: exited 0, empty.
+- `git diff --exit-code f8d30c62d HEAD -- packages/app/src/runtime/replica-cache`: exited 0, empty; the Task 03 overlay is preserved.
+
+Stopped at the ref-refresh precondition rather than silently merging new scope. No install, build, focused unit/browser/real-provider run, native run, Nix verification, or delivery CI sign-off was performed in this attempt. Earlier Task 06/08/09 evidence remains attributed to those tasks, not a green final integration matrix. Task 09 still records the Windows CI-contract path failure; Task 08 records 35 baseline lint errors and no attached Android device. iOS and Electron coverage remain unestablished; web coverage is limited to Task 08's recorded browser runs. No push, history rewrite, daemon restart, or full local suite.
+
+Documentation-change checks on Windows / Git Bash (no source changes):
+
+- `npm run typecheck`: passed, exit 0, all workspaces.
+- `npm run lint`: failed, exit 1, **0 warnings / 35 errors**, matching Task 08's recorded baseline count. Only the two Markdown documents changed; no lint suppression or provider cleanup was attempted. Local raw output: `/tmp/upstream-sync-07-lint.log`.
+- `npm run format`: passed. Restored all unrelated formatter-only edits from the initially clean checkout; retained only this task and the plan.
+- `npm run format:check`: failed, exit 1, **65 pre-existing files** need formatting after restoring unrelated edits. Local raw output: `/tmp/upstream-sync-07-format-check.log`. This is another blocked root quality gate, not a passing check.
+
+To resume, the operator must choose whether to keep this sync pinned to `9a0b95aa1` (and revise the refreshed-tip acceptance gate) or authorize integration of the additional upstream delta under a reviewed merge task. Then complete the remaining quality, provider, platform, Nix, and exact-delivered-SHA CI gates. Publishing still requires delivery authorization.

@@ -1,6 +1,6 @@
 # Upstream sync: merge getpaseo/paseo main
 
-> Status: **Task 08 implemented on 2026-10-19; Tasks 09 and 07 remain.** The real merge includes pinned upstream `9a0b95aa1` (0.12.0), preserves the fork-remote reconciliation, and resolves compact subagent actions without replacing the fork inspector. [Task 08 completion evidence](../tasks/upstream-sync-08-subagents-compact-feedback.md#implementation-and-verification-2026-10-19) records install, typecheck, focused tests, and remaining native/CI evidence. The fetched upstream tip is now `c575464e8`; its extra workspace-layout commit is outside this pinned sync.
+> Status: **Tasks 06, 08, and 09 implemented; Task 07 blocked at refreshed upstream scope.** The real merge includes pinned upstream `9a0b95aa1` (0.12.0) and preserves the fork inspector and fork-remote reconciliation. Refreshed upstream is `b6dde61a7`, three unintegrated commits ahead. [Task 07 preflight evidence](../tasks/upstream-sync-07-merge-integration-verification.md#preflight-evidence) records the ancestry/cache checks and outstanding delivery gates.
 
 ## Reviewed refs (historical planning snapshot)
 
@@ -71,17 +71,30 @@ Textual merge success does not establish semantic compatibility. In the track, c
 
 Task numbers retain their original identities; they are not execution order. No task requires Task 07 to complete before it can run.
 
+## Refreshed upstream delta
+
+Task 07 fetched both remotes at `HEAD=567a91d0d` (Task 09). Origin matches HEAD; upstream is `b6dde61a7`. The reviewed `7c35c4a8f` and `9a0b95aa1` remain ancestors, but `HEAD..upstream/main` contains three commits:
+
+| Commit      | Change                                          | Scope needing review before another merge                                                                                                 |
+| ----------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `c575464e8` | Skip saving unchanged workspace layouts (#7358) | Validated persistence and workspace-layout store; deduplicates saves and changes persistence bookkeeping.                                 |
+| `1e0e56c72` | Unify built-in file panel selection (#7366)     | Moves preview ownership to `file-panels`, introduces a catalog/resolver, and changes file-pane selection and stored settings.             |
+| `b6dde61a7` | Inline SVG and component plugin icons (#7368)   | Broad plugin SDK/client icon contract and rendering changes, shared SVG validation, server compiler SVG loader, and plugin examples/docs. |
+
+`git log --oneline --stat HEAD..upstream/main`, the three commit diffs, and `git diff --stat 9a0b95aa1 upstream/main` were inspected: 65 paths, 1,449 insertions, 366 deletions overall. This is a scope inventory, not merge-resolution or semantic-compatibility approval. No additional commits were merged.
+
+Choose one before resuming Task 07:
+
+- Keep the sync pinned to `9a0b95aa1` and explicitly revise the refreshed-tip acceptance gate to exclude these commits.
+- Authorize a reviewed follow-up merge task for the new persistence, file-panel, and plugin changes, then verify the resulting combined tree. Do not fold these changes into the verification-only task.
+
 ## Current verification and blockers
 
-Evidence collected during this documentation refresh, on the existing checkout rather than a resolved merged tree:
-
-- Root `npm run typecheck`: passes all workspaces.
-- Panel-resource inspection: all eight non-English locales have all 29 keys and matching interpolation placeholders. This confirms Task 05 is implemented; it is not a new linguistic review.
-- `node --test scripts/postinstall-patches.test.mjs`: 2 passed, 1 failed on Windows. Missing tool is misclassified as patch rejection; Task 06 owns it.
-- Prospective upstream lint config/plugin, copied temporarily at the repo root: two new `paseo/no-raw-pressable` violations, in the track and expanded-details. Task 08 owns them. Existing app lint findings remain too.
-- The new lint test's Windows spawn mechanism returns `ENOENT` for `node_modules/.bin/oxlint`. Task 09 owns it; the upstream test file itself is not installed on local main yet.
-- Root `npm run lint`: **44 existing errors**, covering app, Pi/subagent/feedback server code, and proof/mockup scripts. This is an existing quality-gate blocker, not evidence that the next upstream merge regresses those files. Do not weaken lint or claim green CI. Task 07 records the baseline and stays blocked on green sign-off until the owning fork work clears it; a broad cleanup is outside these sync-resolution tasks.
-- No browser, native, or full-suite run was performed for this refresh. Earlier recorded test results are historical and remain labeled as such.
+- Prerequisites are committed: 06 `8bad0df74`, 08 `ab40481df`, 09 `567a91d0d`. Their task documents own the detailed implementation/check evidence.
+- Task 07's [preflight evidence](../tasks/upstream-sync-07-merge-integration-verification.md#preflight-evidence) confirms the pinned ancestry, empty model delta, and unchanged Task 03 replica-cache overlay. The current upstream ancestry gate fails with three missing commits.
+- Task 08 reports passing install and targeted unit/browser checks. Task 07 reran root typecheck (passed), lint (35 baseline errors), and format check (65 baseline files); see its [preflight evidence](../tasks/upstream-sync-07-merge-integration-verification.md#preflight-evidence). No quality-gate waiver applies.
+- Task 09 reports passing Windows rule tests, including a path with spaces; POSIX execution remains for CI. Its CI-contract check reports 12 passing tests and one Windows path-prefix failure.
+- Required real-provider, Android terminal/native feedback, other platform coverage, merged-graph Nix hash verification, and green CI on the exact delivered tip remain unestablished. No final delivery sign-off or push occurred in Task 07's preflight attempt.
 
 ## Integration rules and completion
 
