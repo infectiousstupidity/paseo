@@ -56,7 +56,11 @@ import {
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
-import { AUTOMATION_REVOKED_LABEL, type StoredAgentRecord, type AgentStorage } from "./agent-storage.js";
+import {
+  AUTOMATION_REVOKED_LABEL,
+  type StoredAgentRecord,
+  type AgentStorage,
+} from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -1967,10 +1971,13 @@ export class AgentManager {
     record: StoredAgentRecord,
     options: { archivedAt: string; updatedAt?: string },
   ): Promise<ArchivedStoredAgentRecord> {
-    const archivedRecord = buildArchivedAgentRecord({
-      ...record,
-      labels: { ...record.labels, [AUTOMATION_REVOKED_LABEL]: "true" },
-    }, options);
+    const archivedRecord = buildArchivedAgentRecord(
+      {
+        ...record,
+        labels: { ...record.labels, [AUTOMATION_REVOKED_LABEL]: "true" },
+      },
+      options,
+    );
     await this.requireRegistry().upsert(archivedRecord);
     if (!record.archivedAt && !record.internal) {
       this.pluginLifecycle?.emit("agent.archived", {
