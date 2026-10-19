@@ -348,9 +348,11 @@ export async function sendPromptToAgent(
 
   const source = await resolvePromptSource(params.source, params.agentManager, params.agentStorage);
   const delivery = prepareAgentMessage(params.prompt, source, params.messageId);
-  const runOptions = delivery.messageId
-    ? { ...params.runOptions, clientMessageId: delivery.messageId }
-    : params.runOptions;
+  const runOptions = {
+    ...params.runOptions,
+    ...(delivery.messageId ? { clientMessageId: delivery.messageId } : {}),
+    ...(unarchive ? {} : { nonReactivating: true }),
+  };
 
   return await startAgentRun(params.agentManager, params.agentId, delivery.prompt, params.logger, {
     replaceRunning: true,
