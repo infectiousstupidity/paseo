@@ -1,6 +1,6 @@
 # Upstream sync 07: finish integration verification and fork delivery
 
-Status: **Pending — blocked on 06, 08, 09 and quality-gate sign-off.** Tasks 01–05 and the first merge are already implemented. [Task 08](upstream-sync-08-subagents-compact-feedback.md) now owns the next merge; this task verifies and delivers the resulting branch. Current refs, evidence, and ordering: [upstream sync plan](../plans/upstream-sync-2026-10.md).
+Status: **Pending — blocked on 09, native/platform evidence, and quality-gate sign-off.** Tasks 06 and 08 are implemented; Task 08 records local checks and the unavailable native device. Tasks 01–05 and the first merge are already implemented. [Task 08](upstream-sync-08-subagents-compact-feedback.md) now owns the next merge; this task verifies and delivers the resulting branch. Current refs, evidence, and ordering: [upstream sync plan](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 

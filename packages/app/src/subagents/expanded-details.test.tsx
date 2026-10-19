@@ -81,6 +81,33 @@ vi.mock("react-native", () => ({
     }),
 }));
 
+vi.mock("@/composer/tracks", () => ({
+  ComposerTrackRow: ({
+    children,
+    testID,
+    expanded,
+    closeOnSelect,
+    onPress,
+  }: {
+    children: React.ReactNode;
+    testID?: string;
+    expanded?: boolean;
+    closeOnSelect?: boolean;
+    onPress: () => void;
+  }) =>
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        "data-testid": testID,
+        "aria-expanded": expanded,
+        "data-close-on-select": closeOnSelect,
+        onClick: onPress,
+      },
+      children,
+    ),
+}));
+
 vi.mock("@/components/ui/button", () => ({
   Button: ({
     children,
@@ -211,6 +238,22 @@ describe("scoped Pi subagent panel controls", () => {
     );
     expect(screen.queryByTestId("subagents-track-stop-worker-2")).toBeNull();
     expect(screen.queryByTestId("subagents-track-status-worker-2")).toBeNull();
+  });
+
+  it("discloses and hides the original task without selecting away from the list", () => {
+    renderDetails();
+    const toggle = screen.getByTestId("subagents-track-original-task-toggle-worker-2");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("data-close-on-select")).toBe("false");
+    expect(screen.queryByTestId("subagents-track-original-task-worker-2")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("subagents-track-original-task-worker-2").textContent).toBe(
+      "Inspect the second child",
+    );
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("subagents-track-original-task-worker-2")).toBeNull();
   });
 
   it("requires explicit confirmation and accepts stopping without claiming terminal state", async () => {

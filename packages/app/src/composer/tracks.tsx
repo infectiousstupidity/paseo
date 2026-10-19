@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState, type ReactElement, type ReactNode } fro
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
+  MENU_ITEM_HEIGHT,
   MenuRoot,
   MenuSeparator,
   MenuSurface,
@@ -90,7 +91,9 @@ export function ComposerTrackPill({
 }: ComposerTrackPillProps): ReactElement {
   const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
   const wideWidth = widePanel ? Math.max(0, Math.min(860, viewportWidth - 24)) : undefined;
-  const panelHeight = widePanel ? Math.min(720, Math.floor(viewportHeight * 0.8)) : PANEL_MAX_HEIGHT;
+  const panelHeight = widePanel
+    ? Math.min(720, Math.floor(viewportHeight * 0.8))
+    : PANEL_MAX_HEIGHT;
   return (
     <MenuRoot compactMode="sheet">
       <ComposerTrackPillTrigger
@@ -104,7 +107,9 @@ export function ComposerTrackPill({
         offset={PANEL_OFFSET}
         sheetTitle={panelTitle}
         width={wideWidth}
-        minWidth={widePanel ? Math.min(PANEL_MIN_WIDTH, wideWidth ?? PANEL_MIN_WIDTH) : PANEL_MIN_WIDTH}
+        minWidth={
+          widePanel ? Math.min(PANEL_MIN_WIDTH, wideWidth ?? PANEL_MIN_WIDTH) : PANEL_MIN_WIDTH
+        }
         maxWidth={wideWidth ?? PANEL_MAX_WIDTH}
         maxHeight={panelHeight}
         scrollable
@@ -234,6 +239,10 @@ export function ComposerTrackRow({
   testID,
 }: ComposerTrackRowProps): ReactElement {
   const { selectItem } = useMenuContext("ComposerTrackRow");
+  const accessibilityState = useMemo(
+    () => (expanded === undefined ? undefined : { expanded }),
+    [expanded],
+  );
   const [hovered, setHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
   const handlePointerLeave = useCallback(() => setHovered(false), []);
@@ -264,7 +273,7 @@ export function ComposerTrackRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={expanded === undefined ? undefined : { expanded }}
+        accessibilityState={accessibilityState}
         aria-expanded={expanded}
         testID={testID}
         disabled={disabled}
@@ -324,6 +333,22 @@ const styles = StyleSheet.create((theme) => {
     backgroundColor: getStatusDotColor({ theme, bucket, showDoneAsInactive: true }) ?? undefined,
   });
 
+  // The rail every panel row sits on: inset from the panel edge so the fill is a rounded block
+  // inside it, and tall enough that revealing an action button cannot resize the row.
+  //
+  // Compact and desktop differ here and only here. A finger needs the taller row a menu row gets
+  // on compact; a pointer does not, and the popover keeps its density.
+  const trackRow = {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    minHeight: { xs: MENU_ITEM_HEIGHT.xs, md: 32 },
+    marginHorizontal: theme.spacing[1],
+    paddingHorizontal: theme.spacing[2],
+    paddingVertical: { xs: theme.spacing[2], md: theme.spacing[1] },
+    borderRadius: theme.borderRadius.md,
+  } as const;
+
   return {
     bar: {
       position: "absolute",
@@ -344,29 +369,8 @@ const styles = StyleSheet.create((theme) => {
       alignItems: "center",
       gap: theme.spacing[1],
     },
-    // The rail every panel row sits on: inset from the panel edge so the fill is a rounded block
-    // inside it, and tall enough that revealing an action button cannot resize the row.
-    row: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing[2],
-      minHeight: 32,
-      marginHorizontal: theme.spacing[1],
-      paddingHorizontal: theme.spacing[2],
-      paddingVertical: theme.spacing[1],
-      borderRadius: theme.borderRadius.md,
-    },
-    rowActive: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: theme.spacing[2],
-      minHeight: 32,
-      marginHorizontal: theme.spacing[1],
-      paddingHorizontal: theme.spacing[2],
-      paddingVertical: theme.spacing[1],
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.surface2,
-    },
+    row: trackRow,
+    rowActive: { ...trackRow, backgroundColor: theme.colors.surface2 },
     // Segments sit twice as far apart as a mark sits from its own text, so a count reads as
     // belonging to the mark on its left rather than to the words on its right.
     segments: {

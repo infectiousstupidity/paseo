@@ -1,6 +1,6 @@
 # Upstream sync 08: integrate compact subagent rows and standard action feedback
 
-Status: **Pending.** Depends on [06](upstream-sync-06-markdown-dependency-and-patch-reconcile.md); preserves the completed [04](upstream-sync-04-subagents-track-opens-in-sheet.md). This task owns the next merge and its one textual conflict. Plan and pinned refs: [upstream sync](../plans/upstream-sync-2026-10.md).
+Status: **Implemented — local checks passed; native touch-feedback evidence remains for Task 07.** Depends on [06](upstream-sync-06-markdown-dependency-and-patch-reconcile.md); preserves the completed [04](upstream-sync-04-subagents-track-opens-in-sheet.md). This task owns the next merge and its one textual conflict. Plan and pinned refs: [upstream sync](../plans/upstream-sync-2026-10.md).
 
 ## Outcome
 
@@ -55,3 +55,24 @@ npm run test:e2e --workspace=@getpaseo/app -- e2e/browser/subagent-detach.spec.t
 ## Completion
 
 Commit the fork-remote reconciliation and real upstream merge with the resolutions documented. Record targeted verification and remaining baseline lint failures separately; leave publishing and final sign-off to Task 07.
+
+### Implementation and verification (2026-10-19)
+
+- Started clean from published fork `bde6be4a2`, including Task 06 (`8bad0df74`) and the real fork-remote reconciliation (`0f9b23dbc`, containing `7c35c4a8f`). Fetched both remotes. Upstream advanced to `c575464e8`; this merge intentionally pins `9a0b95aa1` as scoped. The additional workspace-layout commit is not included. The pinned merge still conflicted only in `subagents/track.tsx`.
+- Ran `git merge --no-commit --no-ff 9a0b95aa1`. Retained grouped inspection, activity, agent facts, inline details, Pi controls, and sheet/tab selection. Adopted upstream toolbar buttons and themed glyphs without raw Pressable imports or new exemptions. Both changed subagent components pass targeted lint; removed the forbidden theme hook.
+- Action overlays are siblings of the row pressable, anchored to the header rather than its expanded details. Disclosure clearance derives from shared 20px desktop / 32px compact toolbar frames and the action count. Space remains reserved while hidden. Web-only mouse boundary handlers track the containing View; native and compact actions remain visible without hover. Preserved the automatically merged ComposerTrackRow compact geometry, `widePanel`, and expansion accessibility.
+- Task disclosure uses ComposerTrackRow with `closeOnSelect={false}`, expanded state, original test IDs, and selectable task text. Existing browser helpers now respect retained expansion state when reopening the menu. Preserved detach's established explicit confirmation and workspace-tab focus behavior; action clicks never invoke the row's detail/session action.
+- Audited clean overlaps: composer blur and modifier-key additions, git action deduplication, Korean selection, release metadata/lockfile, lint CI wiring, and fork scripts remain. Agent-stream model is identical to pinned upstream; replica-cache is unchanged from the pre-merge fork, retaining Task 03.
+
+Windows / Git Bash / Node v24.20.0 verification:
+
+- `npm ci`: passed, all eight installed dependencies patched. Audit still reports 159 vulnerabilities (9 low, 44 moderate, 91 high, 15 critical); no unrelated upgrades attempted.
+- `npm run build:client`, `npm run typecheck`: passed.
+- Focused three-file Vitest command: **46 tests passed** (including Task disclosure coverage).
+- Changed subagent components, test, both browser specs, and the shared subagent helper: targeted lint passed. Full lint retains **35 pre-existing errors** after the seven existing subagent-track findings and ComposerTrackRow accessibility-state allocation were resolved and the temporary new test lint finding was fixed. No rule exemptions were added.
+- Browser evidence: compact-workspace-sheet and existing detach flows passed in the second run. Both new action/disclosure/archive tests passed in the final focused run at **1280px and 390px**. Initial new-test failures were fixture assumptions (animation sampling, compact menu test ID, retained disclosure state, archive confirmation and optimistic removal), corrected without weakening product behavior. Earlier runs also hit the existing Windows isolated-daemon teardown error; final focused run shut down normally. No already-green browser flows were rerun.
+- `npm run format` passed; unrelated formatter-only edits were restored. Changed-file format checks and commit hooks run before commit.
+- LSP probe used an inferred project without JSX/esModuleInterop and emitted configuration diagnostics; the actual workspace typecheck passed. Impeccable's changed-component detector returned no findings.
+- `adb devices -l` returned no attached device. **No actual native touch-feedback evidence is claimed.** Task 07 retains native/platform verification and final CI sign-off. Task 09's upstream Windows lint-rule launcher remains unchanged and is not reported green.
+
+No main daemon restart, full local suite, protocol change, cache replacement, or upstream push was performed. Published only to the fork's main at the operator's request.

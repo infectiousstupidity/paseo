@@ -1,8 +1,8 @@
 # Upstream sync: merge getpaseo/paseo main
 
-> Status: **Refresh reviewed on 2026-10-19; implementation pending.** The first sync is already merged through upstream `23e388b05`. A fresh fetch found seven more commits through `9a0b95aa1` (0.12.0). The current dry run has one conflicted file, not the original four. This refresh changes documentation only; no merge, install, commit, or push was performed.
+> Status: **Task 08 implemented on 2026-10-19; Tasks 09 and 07 remain.** The real merge includes pinned upstream `9a0b95aa1` (0.12.0), preserves the fork-remote reconciliation, and resolves compact subagent actions without replacing the fork inspector. [Task 08 completion evidence](../tasks/upstream-sync-08-subagents-compact-feedback.md#implementation-and-verification-2026-10-19) records install, typecheck, focused tests, and remaining native/CI evidence. The fetched upstream tip is now `c575464e8`; its extra workspace-layout commit is outside this pinned sync.
 
-## Reviewed refs
+## Reviewed refs (historical planning snapshot)
 
 | Ref                                             | Commit      | State at refresh                                                   |
 | ----------------------------------------------- | ----------- | ------------------------------------------------------------------ |

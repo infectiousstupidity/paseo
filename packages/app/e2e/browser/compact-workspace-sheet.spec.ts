@@ -73,7 +73,7 @@ test("compact opens files and subagents in a sheet, leaving the tabs for agents"
 
     await test.step("a subagent's row shows the facts its sheet shows", async () => {
       await page.getByTestId("subagents-track-header").click();
-      await expect(page.getByTestId(`subagents-track-row-facts-${child.id}`)).toHaveText(
+      await expect(page.getByTestId(`subagents-track-context-${child.id}`)).toContainText(
         "Ten second stream · Low · Load test",
       );
       await tapSheetBackdrop(page);
@@ -100,7 +100,7 @@ test("compact opens files and subagents in a sheet, leaving the tabs for agents"
     });
 
     await test.step("Open as tab promotes the subagent to a full tab and ends the list", async () => {
-      await page.getByTestId(`subagents-track-row-${child.id}`).click();
+      await page.getByTestId(`subagents-track-open-${child.id}`).click();
       await expectSheetAtSnap(page, child.title);
       await openSheetAsTab(page, child.title);
       await expect(page.getByTestId(`subagents-track-row-${child.id}`)).toHaveCount(0);

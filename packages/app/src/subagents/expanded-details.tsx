@@ -1,11 +1,12 @@
-import React, { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { useCallback, useRef, useState, type ReactElement } from "react";
+import { Text, View } from "react-native";
 import { ChevronDown } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { type Theme } from "@/styles/theme";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { EditingTextInput } from "@/components/ui/text-input";
+import { ComposerTrackRow } from "@/composer/tracks";
 import { Button } from "@/components/ui/button";
 import { providerSubagentKey, useProviderSubagentStore } from "./provider-store";
 import { canControlPiSubagent, subagentRuntimeLabel } from "./track-presentation";
@@ -278,16 +279,13 @@ function TaskDisclosure({ rowId, task }: { rowId: string; task: string | null })
   const { t } = useTranslation();
   const [showTask, setShowTask] = useState(false);
   const toggleTask = useCallback(() => setShowTask((value) => !value), []);
-  const expandedState = useMemo(() => ({ expanded: showTask }), [showTask]);
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <ComposerTrackRow
+        closeOnSelect={false}
         accessibilityLabel={t("subagents.panel.task")}
-        accessibilityState={expandedState}
-        aria-expanded={showTask}
+        expanded={showTask}
         onPress={toggleTask}
-        style={styles.taskDisclosure}
         testID={`subagents-track-original-task-toggle-${rowId}`}
       >
         <Text style={styles.label}>{t("subagents.panel.task")}</Text>
@@ -296,7 +294,7 @@ function TaskDisclosure({ rowId, task }: { rowId: string; task: string | null })
           uniProps={chevronMapping}
           style={showTask ? styles.taskChevronOpen : undefined}
         />
-      </Pressable>
+      </ComposerTrackRow>
       {showTask ? (
         <Text selectable style={styles.body} testID={`subagents-track-original-task-${rowId}`}>
           {task?.trim() || t("subagents.panel.resultUnavailable")}
@@ -465,13 +463,6 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface1,
     borderRadius: theme.borderRadius.md,
     minWidth: 0,
-  },
-  taskDisclosure: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: 36,
-    paddingVertical: theme.spacing[2],
   },
   taskChevronOpen: { transform: [{ rotate: "180deg" }] },
   label: {

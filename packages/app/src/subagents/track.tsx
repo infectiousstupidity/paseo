@@ -1,17 +1,29 @@
-import React, { useCallback, useEffect, useState, type ReactElement } from "react";
-import { Pressable, Text, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useState,
+  useMemo,
+  type ReactNode,
+  type ReactElement,
+} from "react";
+import { Text, View } from "react-native";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Archive, ChevronDown, Unlink } from "lucide-react-native";
-import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import equal from "fast-deep-equal";
 import { useProviderIcon } from "@/components/provider-icons";
 import { useSessionStore } from "@/stores/session-store";
 import { ComposerTrackActions, ComposerTrackPill, ComposerTrackRow } from "@/composer/tracks";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  smallIconButtonChromeFrameSize,
+  mutedIconColorMapping,
+} from "@/components/ui/icon-button-chrome";
+import { ToolbarButton, paneContentToolbarIconSize } from "@/components/ui/pane-content-toolbar";
 import { useIsCompactFormFactor } from "@/constants/layout";
-import { isNative } from "@/constants/platform";
+import { isNative, isWeb } from "@/constants/platform";
 import {
   WorkspaceTabIcon,
   type WorkspaceTabPresentation,
@@ -39,6 +51,7 @@ import {
   type SubagentStateWord,
 } from "./track-presentation";
 
+const ThemedChevron = withUnistyles(ChevronDown);
 const ThemedArchive = withUnistyles(Archive);
 const ThemedUnlink = withUnistyles(Unlink);
 
@@ -65,7 +78,6 @@ export interface SubagentsTrackProps {
 
 const IDLE_ARCHIVE_FINISHED_STATUS: ArchiveFinishedStatus = { kind: "idle" };
 
-/** Leading and action glyphs share one size so rows keep a single icon column. */
 const ROW_ICON_SIZE = 14;
 
 const NONE_ACTIVITY: SubagentActivity = { kind: "none" };
@@ -130,14 +142,11 @@ export function SubagentsTrack({
 
   useEffect(() => {
     // Stop remains pending after RPC acceptance until an observed terminal child update.
+    const runningKeys = new Set(
+      rows.filter((row) => resolveSubagentState(row) === "running").map(subagentTrackKey),
+    );
     setStoppingKeys((previous) => {
-      const next = new Set(
-        [...previous].filter((key) =>
-          rows.some(
-            (row) => subagentTrackKey(row) === key && resolveSubagentState(row) === "running",
-          ),
-        ),
-      );
+      const next = new Set([...previous].filter((key) => runningKeys.has(key)));
       return next.size === previous.size ? previous : next;
     });
   }, [rows]);
@@ -190,8 +199,8 @@ export function SubagentsTrack({
                   supportsControls={supportsControls}
                   expanded={expandedKey === key}
                   stopping={stoppingKeys.has(key)}
-                  onToggleDetails={() => toggleDetails(key)}
-                  onStopAccepted={() => markStopping(key)}
+                  onToggleDetails={toggleDetails}
+                  onStopAccepted={markStopping}
                   onOpenSubagent={onOpenSubagent}
                   onOpenProviderSubagent={onOpenProviderSubagent}
                   opensInSheet={opensInSheet(row)}
@@ -282,8 +291,8 @@ interface SubagentsTrackRowProps {
   supportsControls: boolean;
   expanded: boolean;
   stopping: boolean;
-  onToggleDetails: () => void;
-  onStopAccepted: () => void;
+  onToggleDetails: (key: string) => void;
+  onStopAccepted: (key: string) => void;
   onOpenSubagent: (id: string) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   opensInSheet: boolean;
@@ -314,7 +323,6 @@ function SubagentsTrackRow({
   onDetachSubagent,
 }: SubagentsTrackRowProps): ReactElement {
   const { t } = useTranslation();
-  const { theme } = useUnistyles();
   const { selectItem } = useMenuContext("SubagentsTrackRow");
   const isCompact = useIsCompactFormFactor();
   const presentation = useRowPresentation(row, serverId);
@@ -336,16 +344,10 @@ function SubagentsTrackRow({
   const context = [lead, runtime, age ? t("subagents.panel.startedAgo", { age }) : null]
     .filter(Boolean)
     .join(" · ");
-  const metadata =
-    shownActivity?.kind === "response"
-      ? shownActivity.text
-      : shownActivity?.kind === "tool"
-        ? shownActivity.label
-        : shownActivity?.kind === "none"
-          ? state === "running"
-            ? t("subagents.activityAwaiting")
-            : t("subagents.panel.resultUnavailable")
-          : null;
+  const metadata = subagentActivityText(shownActivity, state, t);
+  const key = subagentTrackKey(row);
+  const handleToggleDetails = useCallback(() => onToggleDetails(key), [key, onToggleDetails]);
+  const handleStopAccepted = useCallback(() => onStopAccepted(key), [key, onStopAccepted]);
   const [hovered, setHovered] = useState(false);
   const actionsAlwaysVisible = isNative || isCompact;
   const actionsVisible = actionsAlwaysVisible || hovered;
@@ -364,8 +366,8 @@ function SubagentsTrackRow({
   const handleDetachPress = useCallback(() => {
     onDetachSubagent?.(row.id);
   }, [onDetachSubagent, row.id]);
-  const handlePointerEnter = useCallback(() => setHovered(true), []);
-  const handlePointerLeave = useCallback(() => setHovered(false), []);
+  const handleMouseEnter = useCallback(() => setHovered(true), []);
+  const handleMouseLeave = useCallback(() => setHovered(false), []);
 
   const renderRow = useCallback(
     ({ active }: { active: boolean }) => (
@@ -409,10 +411,19 @@ function SubagentsTrackRow({
             </Text>
           ) : null}
         </View>
-        <View style={row.kind === "paseo" ? styles.disclosureManagedIcon : styles.disclosureIcon}>
-          <ChevronDown
+        <View
+          style={[
+            styles.disclosureIcon,
+            row.kind === "paseo" &&
+              styles.disclosureActionSpace(
+                smallIconButtonChromeFrameSize(isCompact) * (onDetachSubagent ? 2 : 1) +
+                  (onDetachSubagent ? 4 : 0),
+              ),
+          ]}
+        >
+          <ThemedChevron
             size={18}
-            color={expanded ? theme.colors.foreground : theme.colors.foregroundMuted}
+            uniProps={expanded ? foregroundColorMapping : foregroundMutedColorMapping}
             style={expanded ? styles.disclosureOpen : undefined}
           />
         </View>
@@ -430,42 +441,43 @@ function SubagentsTrackRow({
       stateWord,
       stopping,
       t,
-      theme.colors.foreground,
-      theme.colors.foregroundMuted,
+      isCompact,
+      onDetachSubagent,
     ],
   );
 
   return (
-    <View
-      style={styles.rowContainer}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-    >
-      <ComposerTrackRow
-        accessibilityLabel={[displayLabel, stateWord, metadata].filter(Boolean).join(", ")}
-        expanded={expanded}
-        testID={`subagents-track-row-${row.id}`}
-        closeOnSelect={false}
-        onPress={onToggleDetails}
+    <View>
+      <View
+        style={styles.rowContainer}
+        {...(isWeb ? { onMouseEnter: handleMouseEnter, onMouseLeave: handleMouseLeave } : {})}
       >
-        {renderRow}
-      </ComposerTrackRow>
-      {row.kind === "paseo" ? (
-        // Action controls sit beside the row's Pressable, never inside it: a press on a button
-        // must not be able to fall through to opening the session.
-        <View
-          style={actionsVisible ? styles.actionClusterVisible : styles.actionClusterHidden}
-          pointerEvents={actionsVisible ? "auto" : "none"}
+        <ComposerTrackRow
+          accessibilityLabel={[displayLabel, stateWord, metadata].filter(Boolean).join(", ")}
+          expanded={expanded}
+          testID={`subagents-track-row-${row.id}`}
+          closeOnSelect={false}
+          onPress={handleToggleDetails}
         >
-          <SubagentRowActions
-            rowId={row.id}
-            displayLabel={displayLabel}
-            visible={actionsVisible}
-            onDetachPress={onDetachSubagent ? handleDetachPress : undefined}
-            onArchivePress={handleArchivePress}
-          />
-        </View>
-      ) : null}
+          {renderRow}
+        </ComposerTrackRow>
+        {row.kind === "paseo" ? (
+          // Action controls sit beside the row's Pressable, never inside it: a press on a button
+          // must not be able to fall through to opening the session.
+          <View
+            style={actionsVisible ? styles.actionClusterVisible : styles.actionClusterHidden}
+            pointerEvents={actionsVisible ? "auto" : "none"}
+          >
+            <SubagentRowActions
+              rowId={row.id}
+              displayLabel={displayLabel}
+              compact={isCompact}
+              onDetachPress={onDetachSubagent ? handleDetachPress : undefined}
+              onArchivePress={handleArchivePress}
+            />
+          </View>
+        ) : null}
+      </View>
       {expanded ? (
         <SubagentExpandedDetails
           row={row}
@@ -475,12 +487,27 @@ function SubagentsTrackRow({
           activity={shownActivity}
           age={age}
           stopping={stopping}
-          onStopAccepted={onStopAccepted}
+          onStopAccepted={handleStopAccepted}
           onOpenSession={handleOpenSession}
         />
       ) : null}
     </View>
   );
+}
+
+function subagentActivityText(
+  activity: SubagentActivity | null,
+  state: SubagentStateWord | null,
+  t: TFunction,
+): string | null {
+  if (activity?.kind === "response") return activity.text;
+  if (activity?.kind === "tool") return activity.label;
+  if (activity?.kind === "none") {
+    return state === "running"
+      ? t("subagents.activityAwaiting")
+      : t("subagents.panel.resultUnavailable");
+  }
+  return null;
 }
 
 function stateWordStyle(state: SubagentStateWord | null) {
@@ -492,84 +519,75 @@ function stateWordStyle(state: SubagentStateWord | null) {
 function SubagentRowActions({
   rowId,
   displayLabel,
-  visible,
+  compact,
   onDetachPress,
   onArchivePress,
 }: {
   rowId: string;
   displayLabel: string;
-  visible: boolean;
+  compact: boolean;
   onDetachPress?: () => void;
   onArchivePress: () => void;
 }): ReactElement {
   const { t } = useTranslation();
+  const iconSize = paneContentToolbarIconSize(compact);
   return (
     <>
       {onDetachPress ? (
         <SubagentActionButton
-          accessibilityLabel={t("subagents.detachAction", { label: displayLabel })}
-          testID={`subagents-track-detach-${rowId}`}
+          label={t("subagents.detachAction", { label: displayLabel })}
           tooltipLabel={t("subagents.detachTooltip")}
-          icon="detach"
-          visible={visible}
+          compact={compact}
           onPress={onDetachPress}
-        />
+          testID={`subagents-track-detach-${rowId}`}
+        >
+          <ThemedUnlink size={iconSize} uniProps={mutedIconColorMapping} />
+        </SubagentActionButton>
       ) : null}
       <SubagentActionButton
-        accessibilityLabel={t("subagents.archiveAction", { label: displayLabel })}
-        testID={`subagents-track-archive-${rowId}`}
+        label={t("subagents.archiveAction", { label: displayLabel })}
         tooltipLabel={t("subagents.archiveTooltip")}
-        icon="archive"
-        visible={visible}
+        compact={compact}
         onPress={onArchivePress}
-      />
+        testID={`subagents-track-archive-${rowId}`}
+      >
+        <ThemedArchive size={iconSize} uniProps={mutedIconColorMapping} />
+      </SubagentActionButton>
     </>
   );
 }
 
-type SubagentActionIcon = "archive" | "detach";
-
-function renderSubagentActionIcon(icon: SubagentActionIcon, isActive: boolean): ReactElement {
-  const uniProps = isActive ? foregroundColorMapping : foregroundMutedColorMapping;
-  if (icon === "detach") {
-    return <ThemedUnlink size={ROW_ICON_SIZE} uniProps={uniProps} />;
-  }
-  return <ThemedArchive size={ROW_ICON_SIZE} uniProps={uniProps} />;
-}
-
+/** The standard icon action, with a tooltip that names the action without repeating the row. */
 function SubagentActionButton({
-  accessibilityLabel,
-  testID,
+  label,
   tooltipLabel,
-  icon,
-  visible,
+  compact,
   onPress,
+  testID,
+  children,
 }: {
-  accessibilityLabel: string;
-  testID: string;
+  label: string;
   tooltipLabel: string;
-  icon: SubagentActionIcon;
-  visible: boolean;
+  compact: boolean;
   onPress: () => void;
+  testID: string;
+  children: ReactNode;
 }): ReactElement {
+  const tooltip = useMemo(
+    () => <Text style={styles.tooltipText}>{tooltipLabel}</Text>,
+    [tooltipLabel],
+  );
   return (
-    <Tooltip delayDuration={0} enabledOnDesktop enabledOnMobile={false}>
-      <TooltipTrigger asChild disabled={!visible}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={accessibilityLabel}
-          testID={testID}
-          onPress={onPress}
-          style={styles.actionButton}
-          hitSlop={8}
-        >
-          {({ hovered, pressed }) => renderSubagentActionIcon(icon, hovered || pressed)}
-        </Pressable>
-      </TooltipTrigger>
-      <TooltipContent side="top" align="center" offset={8}>
-        <Text style={styles.tooltipText}>{tooltipLabel}</Text>
-      </TooltipContent>
-    </Tooltip>
+    <ToolbarButton
+      label={label}
+      tooltip={tooltip}
+      tooltipSide="top"
+      compact={compact}
+      onPress={onPress}
+      testID={testID}
+    >
+      {children}
+    </ToolbarButton>
   );
 }
 
@@ -601,7 +619,9 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
   },
   disclosureIcon: { alignItems: "center", justifyContent: "center" },
-  disclosureManagedIcon: { alignItems: "center", justifyContent: "center", marginRight: 64 },
+  // Reserve the actual shared toolbar frames even while hidden; the disclosure remains beside
+  // them, and expanding details cannot move the header-relative overlay.
+  disclosureActionSpace: (width: number) => ({ marginRight: width }),
   disclosureOpen: { transform: [{ rotate: "180deg" }] },
   rowBody: {
     paddingRight: theme.spacing[1],
@@ -675,11 +695,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing[1],
     opacity: 0,
-  },
-  actionButton: {
-    padding: theme.spacing[1],
-    alignItems: "center",
-    justifyContent: "center",
   },
   tooltipText: {
     fontSize: theme.fontSize.sm,

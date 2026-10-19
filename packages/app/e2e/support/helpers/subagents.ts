@@ -149,7 +149,9 @@ export async function openSubagentsTrack(page: Page): Promise<void> {
 
 /** Expand the worker first; session navigation is an explicit action inside its details. */
 export async function openSubagentSessionFromTrack(page: Page, childId: string): Promise<void> {
-  await page.getByTestId(`subagents-track-row-${childId}`).click();
+  const row = page.getByTestId(`subagents-track-row-${childId}`);
+  // Menu content is retained between openings, including its disclosure state.
+  if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
   await page.getByTestId(`subagents-track-open-${childId}`).click();
 }
 
