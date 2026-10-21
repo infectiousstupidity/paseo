@@ -1,5 +1,9 @@
 import type { WaitForFinishResult } from "@getpaseo/client/internal/daemon-client";
-import { prepareAgentMessage, type AgentPromptSource } from "./agent-messages/index.js";
+import {
+  prepareAgentMessage,
+  type AgentPromptSource,
+  type AgentMessageDelivery,
+} from "./agent-messages/index.js";
 import type { Logger } from "pino";
 
 import type {
@@ -317,6 +321,21 @@ async function resolvePromptSource(
 export async function sendPromptToAgent(
   params: SendPromptToAgentParams,
 ): Promise<{ disposition: PromptDispatchDisposition }> {
+  const source = await resolvePromptSource(params.source, params.agentManager, params.agentStorage);
+  const delivery = prepareAgentMessage(params.prompt, source, params.messageId);
+  return sendPreparedPromptToAgent({
+    ...params,
+    prompt: delivery.prompt,
+    runOptions: delivery.messageId
+      ? { ...params.runOptions, clientMessageId: delivery.messageId }
+      : params.runOptions,
+  });
+}
+
+/** Dispatch daemon-prepared context without reclassifying it as human input. */
+export async function sendPreparedPromptToAgent(
+  params: Omit<SendPromptToAgentParams, "source" | "messageId">,
+): Promise<{ disposition: PromptDispatchDisposition }> {
   const unarchive = params.unarchive ?? true;
 
   const record = await params.agentStorage.get(params.agentId);
@@ -350,20 +369,15 @@ export async function sendPromptToAgent(
     await params.agentManager.setAgentMode(params.agentId, params.sessionMode);
   }
 
-  const source = await resolvePromptSource(params.source, params.agentManager, params.agentStorage);
-  const delivery = prepareAgentMessage(params.prompt, source, params.messageId);
-  const runOptions = {
-    ...params.runOptions,
-    ...(delivery.messageId ? { clientMessageId: delivery.messageId } : {}),
-    ...(unarchive ? {} : { nonReactivating: true }),
-  };
-
-  return await startAgentRun(params.agentManager, params.agentId, delivery.prompt, params.logger, {
+  return await startAgentRun(params.agentManager, params.agentId, params.prompt, params.logger, {
     replaceRunning: true,
     onDispatch: params.onDispatch,
     activeTurnBehavior: params.activeTurnBehavior,
     clearPendingPermissions: params.clearPendingPermissions,
-    runOptions,
+    runOptions: {
+      ...params.runOptions,
+      ...(unarchive ? {} : { nonReactivating: true }),
+    },
   });
 }
 
@@ -404,6 +418,7 @@ export async function startCreatedAgentInitialPrompt(
 }
 
 export interface SetupFinishNotificationParams {
+  agentMessages: AgentMessageDelivery;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   childAgentId: string;
@@ -493,6 +508,7 @@ const armedFinishNotifications = new WeakMap<
 
 /** Creation waits and accepted follow-ups share notification ownership. */
 export function setupFinishWait(params: {
+  agentMessages: AgentMessageDelivery;
   agentManager: AgentManager;
   agentStorage: AgentStorage;
   originServerId?: string;
@@ -548,10 +564,8 @@ export function setupFinishWait(params: {
         result.status
       ] as FinishNotificationReason;
       const permissionRequest = result.final?.pendingPermissions[0];
-      await sendPromptToAgent({
-        agentManager: params.agentManager,
-        agentStorage: params.agentStorage,
-        agentId: params.callerAgentId,
+      params.agentMessages.enqueue({
+        recipientId: params.callerAgentId,
         prompt: formatFinishNotificationBody({
           childAgentId: params.childAgentId,
           serverId: params.childServerId,
@@ -563,12 +577,12 @@ export function setupFinishWait(params: {
         source: {
           kind: "agent-notification",
           agentId: params.childAgentId,
+          serverId: params.childServerId,
           title: result.final?.title ?? params.childAgentId,
           event: finishNotificationEvents[reason],
         },
         activeTurnBehavior: "steer",
         unarchive: false,
-        logger: params.logger,
       });
       if (result.status !== "permission" || !permissionRequest) return;
       await params.afterPermission(permissionRequest.id, controller.signal);
@@ -680,19 +694,17 @@ export function setupFinishNotification(params: SetupFinishNotificationParams): 
       permissionRequest,
     });
 
-    await sendPromptToAgent({
-      agentManager,
-      agentStorage,
-      agentId: callerAgentId,
+    params.agentMessages.enqueue({
+      recipientId: callerAgentId,
       prompt: body,
       source: {
         kind: "agent-notification",
         agentId: childAgentId,
+        title,
         event: finishNotificationEvents[reason],
       },
       activeTurnBehavior: "steer",
       unarchive: false,
-      logger,
     });
   }
 

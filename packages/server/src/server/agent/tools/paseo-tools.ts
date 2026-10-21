@@ -1,3 +1,4 @@
+import type { AgentMessageDelivery } from "../agent-messages/index.js";
 import {
   createHostResolver,
   waitForPermissionChange,
@@ -122,6 +123,7 @@ import type { ProviderPaseoToolsPolicy } from "@getpaseo/protocol/provider-confi
 import { isPaseoToolEnabled } from "../paseo-tool-policy.js";
 
 export interface PaseoToolHostDependencies {
+  agentMessages?: () => AgentMessageDelivery;
   serverId?: string;
   hosts?: () => ToolHosts;
   agentManager: AgentManager;
@@ -678,6 +680,10 @@ function createToolCatalog(
     return result.data;
   };
 
+  function agentMessages(): AgentMessageDelivery {
+    if (!options.agentMessages) throw new Error("Agent message delivery is not configured");
+    return options.agentMessages();
+  }
   const localHostOperations = new Map<string, HostOperation>();
   const tools = new Map<string, PaseoToolDefinition>();
   // Consolidated families keep their retired names callable here instead of in `tools`, so
@@ -785,6 +791,7 @@ function createToolCatalog(
           }
           if (childAgentId && callerAgentId && input.notifyOnFinish !== false) {
             setupFinishWait({
+              agentMessages: agentMessages(),
               agentManager,
               agentStorage,
               originServerId: options.serverId,
@@ -1272,7 +1279,7 @@ function createToolCatalog(
       .optional()
       .default(true)
       .describe(
-        "Get notified when the created agent finishes, errors, or needs permission. Set false only for truly fire-and-forget agents.",
+        "Get notified when the created agent finishes, errors, or needs permission. Set false for explicit reporting or no completion callback.",
       ),
   };
   const canonicalTopLevelInputSchema = {
@@ -1333,7 +1340,7 @@ function createToolCatalog(
       .optional()
       .default(true)
       .describe(
-        "Get notified when the prompted agent finishes, errors, or needs permission. Set false only for truly fire-and-forget prompts.",
+        "Get notified when the prompted agent finishes, errors, or needs permission. Set false for explicit reporting or no completion callback.",
       ),
   };
   const topLevelSendAgentPromptInputSchema = {
@@ -2000,11 +2007,13 @@ function createToolCatalog(
     {
       title: "Send agent prompt",
       description:
-        "Send a task and return after dispatch acknowledgement. Calling agents receive finish notifications by default.",
+        "Send a task. Agent callers receive an immediate queued receipt; delivery follows after two quiet seconds per recipient. Completion reports include the target’s last response by default. Paseo supplies caller identity.",
       inputSchema: sendAgentPromptInputSchema,
       outputSchema: {
         success: z.boolean(),
         disposition: z.enum(["turn_started", "out_of_band", "steered"]).optional(),
+        deliveryStatus: z.literal("queued").optional(),
+        messageId: z.string().optional(),
         status: AgentStatusEnum,
         guidance: z.string().optional(),
       },
@@ -2022,8 +2031,10 @@ function createToolCatalog(
         acceptDispatch = resolve;
       });
       const notifying = Boolean(callerAgentId && notifyOnFinish);
-      if (callerAgentId && notifyOnFinish) {
+      function prepareDispatch(): void {
+        if (!callerAgentId || !notifyOnFinish) return;
         stopNotification = setupFinishNotification({
+          agentMessages: agentMessages(),
           agentManager,
           agentStorage,
           childAgentId: agentId,
@@ -2045,6 +2056,7 @@ function createToolCatalog(
         if (!callerAgentId || !notifyOnFinish) return;
         stopNotification?.();
         stopNotification = setupFinishNotification({
+          agentMessages: agentMessages(),
           agentManager,
           agentStorage,
           childAgentId: agentId,
@@ -2053,6 +2065,41 @@ function createToolCatalog(
           waitForTurnStart: true,
           logger: childLogger,
         });
+      }
+
+      if (callerAgentId) {
+        if (!agentManager.getAgent(agentId) && !(await agentStorage.get(agentId))) {
+          throw new PaseoToolInputError(`Agent ${agentId} not found`);
+        }
+        const receipt = agentMessages().enqueue({
+          recipientId: agentId,
+          prompt,
+          source: {
+            kind: "agent-message",
+            agentId: callerAgentId,
+            title: resolveCallerAgent()?.config.title ?? undefined,
+          },
+          sessionMode,
+          activeTurnBehavior,
+          beforeDispatch: prepareDispatch,
+          onDispatch: confirmDispatch,
+        });
+        void receipt.dispatched.catch(() => {
+          acceptDispatch(false);
+          stopNotification?.();
+        });
+        return {
+          content: [],
+          structuredContent: {
+            success: true,
+            deliveryStatus: receipt.status,
+            messageId: receipt.messageId,
+            status: agentManager.getAgent(agentId)?.lifecycle ?? "idle",
+            guidance: notifying
+              ? `Queued for delivery after two quiet seconds. ${PROMPTED_AGENT_NOTIFICATION_GUIDANCE}`
+              : "Queued for delivery after two quiet seconds; provider dispatch has not occurred.",
+          },
+        };
       }
 
       const { disposition } = await sendPromptToAgent({
