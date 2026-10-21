@@ -32,6 +32,7 @@ export const AUTOMATION_PASEO_TOOLS: readonly string[] = [
   // Host terminals
   "capture_terminal",
   "create_terminal",
+  "inspect_terminal",
   "kill_terminal",
   "list_terminals",
   "send_terminal_keys",
@@ -39,6 +40,7 @@ export const AUTOMATION_PASEO_TOOLS: readonly string[] = [
   "list_workspace_scripts",
   "start_workspace_script",
   "stop_workspace_script",
+  "workspace_scripts",
 ];
 
 const CORE_OMITTED_PASEO_TOOLS = new Set<string>(AUTOMATION_PASEO_TOOLS);

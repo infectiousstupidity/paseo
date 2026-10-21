@@ -235,6 +235,11 @@ export const PASEO_TOOL_CATALOG = {
     },
   },
   list_workspace_scripts: { label: "List scripts", detail: { inputOrder: ["workspaceId"] } },
+  workspace_scripts: {
+    label: "Workspace scripts",
+    context: field("scriptName"),
+    detail: { inputOrder: ["workspaceId", "action", "scriptName"] },
+  },
   start_workspace_script: {
     label: "Start script",
     context: field("scriptName"),
@@ -253,6 +258,11 @@ export const PASEO_TOOL_CATALOG = {
     detail: { inputOrder: ["cwd", "workspaceId", "name", "command"] },
   },
   list_terminals: { label: "List terminals", detail: { inputOrder: ["cwd", "all"] } },
+  inspect_terminal: {
+    label: "Inspect terminal",
+    context: field("terminalId"),
+    detail: { inputOrder: ["terminalId", "cwd", "all", "start", "end", "scrollback"] },
+  },
   capture_terminal: {
     label: "Read terminal",
     context: field("terminalId"),
@@ -266,7 +276,7 @@ export const PASEO_TOOL_CATALOG = {
   kill_terminal: {
     label: "Kill terminal",
     context: field("terminalId"),
-    detail: { inputOrder: ["terminalId"] },
+    detail: { inputOrder: ["terminalId", "all", "cwd"] },
   },
 
   // Schedules and heartbeats

@@ -37,11 +37,7 @@ Choose `baseBranch` explicitly: `origin/main` selects the remote-tracking branch
 
 Configured `paseo.json` scripts use the same supervised lifecycle from tools and the CLI.
 
-**`list_workspace_scripts`** — `{ workspaceId }`. Lists configured scripts with lifecycle, service port, proxy URLs, health, exit code, and terminal ID.
-
-**`start_workspace_script`** — `{ workspaceId, scriptName }`. Starts one configured script through Paseo's managed workspace-script launcher and returns its status metadata.
-
-**`stop_workspace_script`** — `{ workspaceId, scriptName }`. Stops a running script through its supervised terminal and returns the stopped status metadata.
+**`workspace_scripts`** — `{ workspaceId, action?, scriptName? }`. `action` defaults to `list`, which reports lifecycle, service port, proxy URLs, health, exit code, and terminal ID for every configured script. `action: "start"` and `action: "stop"` run one configured script through Paseo's managed launcher and supervised terminal, and require `scriptName`. The retired names `list_workspace_scripts`, `start_workspace_script`, and `stop_workspace_script` keep working with their own argument shapes.
 
 The matching CLI surface accepts either an explicit workspace ID or resolves the current directory:
 

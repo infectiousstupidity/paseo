@@ -180,6 +180,8 @@ const AGENT_LIST_ACTIVITY_LIMIT = 5;
 const CONSOLIDATED_TOOL_NAMES: Readonly<Record<string, readonly string[]>> = {
   inspect_agent: ["get_agent_status", "get_agent_activity"],
   terminate_agent: ["cancel_agent", "kill_agent"],
+  inspect_terminal: ["list_terminals", "capture_terminal"],
+  workspace_scripts: ["list_workspace_scripts", "start_workspace_script", "stop_workspace_script"],
 };
 
 function parseTimestamp(value: string | null | undefined): number {
@@ -2592,129 +2594,191 @@ function createToolCatalog(
   );
 
   registerTool(
-    "list_workspace_scripts",
+    "workspace_scripts",
     {
-      title: "List workspace scripts",
+      title: "Workspace scripts",
       description:
-        "List configured workspace scripts and their lifecycle, service port, proxy URL, health, and terminal ID.",
-      inputSchema: {
-        workspaceId: z.string().describe("Workspace ID whose configured scripts to list."),
-      },
+        "List configured workspace scripts with lifecycle, service port, proxy URL, health, and terminal ID; action start or stop runs one configured paseo.json script through the supervised launcher.",
+      inputSchema: z
+        .object({
+          workspaceId: z.string().describe("Workspace ID containing the configured scripts."),
+          action: z
+            .enum(["list", "start", "stop"])
+            .optional()
+            .default("list")
+            .describe("List scripts, start one, or stop a running one."),
+          scriptName: z
+            .string()
+            .min(1)
+            .optional()
+            .describe("Configured paseo.json script name; required for start and stop."),
+        })
+        .refine((input) => input.action === "list" || Boolean(input.scriptName), {
+          message: "scriptName is required when action is start or stop",
+          path: ["scriptName"],
+        }),
       outputSchema: {
-        scripts: z.array(WorkspaceScriptPayloadSchema),
+        scripts: z.array(WorkspaceScriptPayloadSchema).optional(),
+        script: WorkspaceScriptPayloadSchema.optional(),
       },
     },
-    async ({ workspaceId }) => {
+    async ({ workspaceId, action, scriptName }) => {
       if (!workspaceScripts) {
         throw new Error("Workspace script management is not configured");
       }
+      if (action === "list") {
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ scripts: await workspaceScripts.list(workspaceId) }),
+        };
+      }
+      if (!scriptName) {
+        throw new PaseoToolInputError("scriptName is required when action is start or stop");
+      }
+      const script =
+        action === "start"
+          ? await workspaceScripts.launch({ workspaceId, scriptName })
+          : await workspaceScripts.stop({ workspaceId, scriptName });
       return {
         content: [],
-        structuredContent: ensureValidJson({ scripts: await workspaceScripts.list(workspaceId) }),
+        structuredContent: ensureValidJson({ script }),
       };
     },
   );
 
+  // COMPAT(listWorkspaceScriptsTool): added 2026-10-21, remove after 2027-04-22 once agents call workspace_scripts.
+  registerCompatAlias("list_workspace_scripts", {
+    inputSchema: {
+      workspaceId: z.string().describe("Workspace ID whose configured scripts to list."),
+    },
+    mapInput: (input) => ({ ...input, action: "list" }),
+  });
+
+  // COMPAT(startWorkspaceScriptTool): added 2026-10-21, remove after 2027-04-22 once agents call workspace_scripts.
+  registerCompatAlias("start_workspace_script", {
+    inputSchema: {
+      workspaceId: z.string().describe("Workspace ID containing the configured script."),
+      scriptName: z.string().min(1).describe("Configured paseo.json script name to start."),
+    },
+    mapInput: (input) => ({ ...input, action: "start" }),
+  });
+
+  // COMPAT(stopWorkspaceScriptTool): added 2026-10-21, remove after 2027-04-22 once agents call workspace_scripts.
+  registerCompatAlias("stop_workspace_script", {
+    inputSchema: {
+      workspaceId: z.string().describe("Workspace ID containing the running script."),
+      scriptName: z.string().min(1).describe("Configured paseo.json script name to stop."),
+    },
+    mapInput: (input) => ({ ...input, action: "stop" }),
+  });
+
   registerTool(
-    "start_workspace_script",
+    "inspect_terminal",
     {
-      title: "Start workspace script",
+      title: "Inspect terminal",
       description:
-        "Start one configured workspace script through Paseo's managed workspace-script launcher.",
-      inputSchema: {
-        workspaceId: z.string().describe("Workspace ID containing the configured script."),
-        scriptName: z.string().min(1).describe("Configured paseo.json script name to start."),
-      },
-      outputSchema: {
-        script: WorkspaceScriptPayloadSchema,
-      },
-    },
-    async ({ workspaceId, scriptName }) => {
-      if (!workspaceScripts) {
-        throw new Error("Workspace script management is not configured");
-      }
-      return {
-        content: [],
-        structuredContent: ensureValidJson({
-          script: await workspaceScripts.launch({ workspaceId, scriptName }),
-        }),
-      };
-    },
-  );
-
-  registerTool(
-    "stop_workspace_script",
-    {
-      title: "Stop workspace script",
-      description: "Stop a running workspace script through its supervised terminal lifecycle.",
-      inputSchema: {
-        workspaceId: z.string().describe("Workspace ID containing the running script."),
-        scriptName: z.string().min(1).describe("Configured paseo.json script name to stop."),
-      },
-      outputSchema: {
-        script: WorkspaceScriptPayloadSchema,
-      },
-    },
-    async ({ workspaceId, scriptName }) => {
-      if (!workspaceScripts) {
-        throw new Error("Workspace script management is not configured");
-      }
-      return {
-        content: [],
-        structuredContent: ensureValidJson({
-          script: await workspaceScripts.stop({ workspaceId, scriptName }),
-        }),
-      };
-    },
-  );
-
-  registerTool(
-    "list_terminals",
-    {
-      title: "List terminals",
-      description: "List terminals for a working directory or across all working directories.",
+        "List terminals for a working directory, or across all of them, when terminalId is omitted; pass terminalId to capture plain-text output lines from that terminal.",
       inputSchema: {
         cwd: z
           .string()
           .optional()
-          .describe("Optional working directory. Defaults to your current working directory."),
+          .describe(
+            "Working directory for the listing. Defaults to your current working directory.",
+          ),
         all: z.boolean().optional().describe("List terminals across all working directories."),
+        terminalId: z
+          .string()
+          .optional()
+          .describe("Terminal to read output from. Omit it to list terminals instead."),
+        start: z
+          .number()
+          .optional()
+          .describe("First captured line index, defaults to the earliest available."),
+        end: z.number().optional().describe("Last captured line index."),
+        scrollback: z.boolean().optional().describe("Capture the full scrollback buffer."),
+        stripAnsi: z.boolean().optional().default(true),
       },
       outputSchema: {
-        terminals: z.array(TerminalSummarySchema),
+        terminals: z.array(TerminalSummarySchema).optional(),
+        terminalId: z.string().optional(),
+        lines: z.array(z.string()).optional(),
+        totalLines: z.number().int().nonnegative().optional(),
       },
     },
-    async ({ cwd, all }) => {
+    async ({ cwd, all, terminalId, start, end, scrollback, stripAnsi = true }) => {
       if (!terminalManager) {
         throw new Error("Terminal manager is not configured");
       }
 
-      const terminals = all
-        ? (
-            await Promise.all(
-              terminalManager.listDirectories().map(async (directory) =>
-                (await terminalManager.getTerminals(directory)).map((terminal) => ({
-                  id: terminal.id,
-                  name: terminal.name,
-                  cwd: terminal.cwd,
-                })),
-              ),
-            )
-          ).flat()
-        : (await terminalManager.getTerminals(resolveScopedCwd(cwd, { required: true }))).map(
-            (terminal) => ({
-              id: terminal.id,
-              name: terminal.name,
-              cwd: terminal.cwd,
-            }),
-          );
+      if (!terminalId) {
+        const terminals = all
+          ? (
+              await Promise.all(
+                terminalManager.listDirectories().map(async (directory) =>
+                  (await terminalManager.getTerminals(directory)).map((terminal) => ({
+                    id: terminal.id,
+                    name: terminal.name,
+                    cwd: terminal.cwd,
+                  })),
+                ),
+              )
+            ).flat()
+          : (await terminalManager.getTerminals(resolveScopedCwd(cwd, { required: true }))).map(
+              (terminal) => ({
+                id: terminal.id,
+                name: terminal.name,
+                cwd: terminal.cwd,
+              }),
+            );
+
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ terminals }),
+        };
+      }
+
+      if (!terminalManager.getTerminal(terminalId)) {
+        throw new PaseoToolInputError(`Terminal ${terminalId} not found`);
+      }
+
+      const capture = await terminalManager.captureTerminal(terminalId, {
+        start: scrollback ? 0 : start,
+        end,
+        stripAnsi,
+      });
 
       return {
         content: [],
-        structuredContent: ensureValidJson({ terminals }),
+        structuredContent: ensureValidJson({
+          terminalId,
+          lines: capture.lines,
+          totalLines: capture.totalLines,
+        }),
       };
     },
   );
+
+  // COMPAT(listTerminalsTool): added 2026-10-21, remove after 2027-04-22 once agents call inspect_terminal.
+  registerCompatAlias("list_terminals", {
+    inputSchema: {
+      cwd: z
+        .string()
+        .optional()
+        .describe("Optional working directory. Defaults to your current working directory."),
+      all: z.boolean().optional().describe("List terminals across all working directories."),
+    },
+  });
+
+  // COMPAT(captureTerminalTool): added 2026-10-21, remove after 2027-04-22 once agents call inspect_terminal.
+  registerCompatAlias("capture_terminal", {
+    inputSchema: {
+      terminalId: z.string(),
+      start: z.number().optional(),
+      end: z.number().optional(),
+      scrollback: z.boolean().optional(),
+      stripAnsi: z.boolean().optional().default(true),
+    },
+  });
 
   registerTool(
     "create_terminal",
@@ -2759,20 +2823,49 @@ function createToolCatalog(
     "kill_terminal",
     {
       title: "Kill terminal",
-      description: "Kill an existing terminal session.",
-      inputSchema: {
-        terminalId: z.string(),
-      },
+      description:
+        "Kill an existing terminal session, or every terminal in a working directory with all=true.",
+      inputSchema: z
+        .object({
+          terminalId: z
+            .string()
+            .optional()
+            .describe("Terminal to kill. Omit it when all=true kills a whole directory."),
+          all: z
+            .boolean()
+            .optional()
+            .describe("Kill every terminal in the scoped working directory. Cannot be global."),
+          cwd: z
+            .string()
+            .optional()
+            .describe("Working directory whose terminals are killed with all=true."),
+        })
+        .refine((input) => Boolean(input.terminalId) !== Boolean(input.all), {
+          message: "pass terminalId, or all=true with a scoped working directory",
+        }),
       outputSchema: {
         success: z.boolean(),
+        killed: z.number().int().nonnegative().optional(),
       },
     },
-    async ({ terminalId }) => {
+    async ({ terminalId, all, cwd }) => {
       if (!terminalManager) {
         throw new Error("Terminal manager is not configured");
       }
 
-      const terminal = terminalManager.getTerminal(terminalId);
+      if (all) {
+        const scopedCwd = resolveScopedCwd(cwd, { required: true });
+        const terminals = await terminalManager.getTerminals(scopedCwd);
+        for (const terminal of terminals) {
+          terminal.kill();
+        }
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ success: true, killed: terminals.length }),
+        };
+      }
+
+      const terminal = terminalManager.getTerminal(terminalId ?? "");
       if (!terminal) {
         throw new PaseoToolInputError(`Terminal ${terminalId} not found`);
       }
@@ -2782,50 +2875,6 @@ function createToolCatalog(
       return {
         content: [],
         structuredContent: ensureValidJson({ success: true }),
-      };
-    },
-  );
-
-  registerTool(
-    "capture_terminal",
-    {
-      title: "Capture terminal",
-      description: "Capture plain-text terminal output lines from a terminal session.",
-      inputSchema: {
-        terminalId: z.string(),
-        start: z.number().optional(),
-        end: z.number().optional(),
-        scrollback: z.boolean().optional(),
-        stripAnsi: z.boolean().optional().default(true),
-      },
-      outputSchema: {
-        terminalId: z.string(),
-        lines: z.array(z.string()),
-        totalLines: z.number().int().nonnegative(),
-      },
-    },
-    async ({ terminalId, start, end, scrollback, stripAnsi = true }) => {
-      if (!terminalManager) {
-        throw new Error("Terminal manager is not configured");
-      }
-
-      if (!terminalManager.getTerminal(terminalId)) {
-        throw new PaseoToolInputError(`Terminal ${terminalId} not found`);
-      }
-
-      const capture = await terminalManager.captureTerminal(terminalId, {
-        start: scrollback ? 0 : start,
-        end,
-        stripAnsi,
-      });
-
-      return {
-        content: [],
-        structuredContent: ensureValidJson({
-          terminalId,
-          lines: capture.lines,
-          totalLines: capture.totalLines,
-        }),
       };
     },
   );

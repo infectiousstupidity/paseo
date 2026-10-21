@@ -1118,6 +1118,267 @@ describe("agents family consolidation", () => {
   });
 });
 
+describe("terminal and workspace-script family consolidation", () => {
+  const logger = createTestLogger();
+  const CONSOLIDATED_TERMINAL_TOOLS = [
+    "create_terminal",
+    "inspect_terminal",
+    "kill_terminal",
+    "send_terminal_keys",
+  ];
+  const RETIRED_TERMINAL_TOOLS = ["capture_terminal", "list_terminals"];
+  const CONSOLIDATED_SCRIPT_TOOLS = ["workspace_scripts"];
+  const RETIRED_SCRIPT_TOOLS = [
+    "list_workspace_scripts",
+    "start_workspace_script",
+    "stop_workspace_script",
+  ];
+
+  function createFamilyDeps() {
+    const { agentManager, agentStorage } = createTestDeps();
+    const kill = vi.fn();
+    const terminal = {
+      id: "term-1",
+      name: "daemon",
+      cwd: process.cwd(),
+      kill,
+      send: vi.fn(),
+      getReplayPreamble: () => "",
+    };
+    const captureTerminal = vi.fn().mockResolvedValue({ lines: ["build passed"], totalLines: 7 });
+    const terminalManager = createTerminalManagerStub({
+      getTerminal: vi
+        .fn()
+        .mockImplementation((terminalId: string) => (terminalId === "term-1" ? terminal : null)),
+      getTerminals: vi.fn().mockResolvedValue([terminal]),
+      listDirectories: vi.fn().mockReturnValue([process.cwd()]),
+      captureTerminal,
+    });
+    const workspaceScripts = {
+      list: vi.fn().mockResolvedValue([{ name: "dev", lifecycle: "running" }]),
+      launch: vi.fn().mockResolvedValue({ name: "dev", lifecycle: "running" }),
+      stop: vi.fn().mockResolvedValue({ name: "dev", lifecycle: "stopped" }),
+    };
+    return { agentManager, agentStorage, captureTerminal, kill, terminalManager, workspaceScripts };
+  }
+
+  async function createFamilyServer() {
+    const deps = createFamilyDeps();
+    const server = await createAgentMcpServer({
+      agentManager: deps.agentManager,
+      agentStorage: deps.agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      terminalManager: deps.terminalManager,
+      workspaceScripts: deps.workspaceScripts,
+      logger,
+    });
+    const client = await connectInMemoryMcpClient(server);
+    return { deps, server, client };
+  }
+
+  async function callExpectingToolError(
+    client: Awaited<ReturnType<typeof connectInMemoryMcpClient>>,
+    name: string,
+    args: Record<string, unknown>,
+    pattern: RegExp,
+  ) {
+    const result = (await client.callTool({ name, arguments: args })) as InMemoryCallResult;
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ text?: string }>)
+      .map((part) => part.text ?? "")
+      .join("\n");
+    expect(text).toMatch(pattern);
+  }
+
+  it("advertises the merged terminal and workspace-script tools only", async () => {
+    const { server, client } = await createFamilyServer();
+    try {
+      const { tools } = await client.listTools();
+      const family = tools
+        .map((tool) => tool.name)
+        .filter((name) =>
+          [
+            ...CONSOLIDATED_TERMINAL_TOOLS,
+            ...RETIRED_TERMINAL_TOOLS,
+            ...CONSOLIDATED_SCRIPT_TOOLS,
+            ...RETIRED_SCRIPT_TOOLS,
+          ].includes(name),
+        );
+      expect(family.sort()).toEqual(
+        [...CONSOLIDATED_TERMINAL_TOOLS, ...CONSOLIDATED_SCRIPT_TOOLS].sort(),
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("reads terminals through inspect_terminal by identifier or scope", async () => {
+    const { deps, server, client } = await createFamilyServer();
+    try {
+      const unscoped = await client.callTool({ name: "inspect_terminal", arguments: {} });
+      expect((unscoped as InMemoryCallResult).isError).toBe(true);
+
+      const listed = (await client.callTool({
+        name: "inspect_terminal",
+        arguments: { cwd: process.cwd() },
+      })) as InMemoryCallResult;
+      expect(listed.structuredContent).toEqual({
+        terminals: [{ id: "term-1", name: "daemon", cwd: process.cwd() }],
+      });
+
+      const captured = (await client.callTool({
+        name: "inspect_terminal",
+        arguments: { terminalId: "term-1", scrollback: true },
+      })) as InMemoryCallResult;
+      expect(captured.structuredContent).toEqual({
+        terminalId: "term-1",
+        lines: ["build passed"],
+        totalLines: 7,
+      });
+      expect(deps.captureTerminal).toHaveBeenCalledWith("term-1", {
+        start: 0,
+        end: undefined,
+        stripAnsi: true,
+      });
+
+      await callExpectingToolError(
+        client,
+        "inspect_terminal",
+        { terminalId: "missing" },
+        /Terminal missing not found/,
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("keeps list_terminals and capture_terminal callable through inspect_terminal", async () => {
+    const { server, client } = await createFamilyServer();
+    try {
+      const listed = (await client.callTool({
+        name: "list_terminals",
+        arguments: { all: true },
+      })) as InMemoryCallResult;
+      expect(listed.structuredContent).toEqual({
+        terminals: [{ id: "term-1", name: "daemon", cwd: process.cwd() }],
+      });
+
+      const captured = (await client.callTool({
+        name: "capture_terminal",
+        arguments: { terminalId: "term-1", start: -10, end: -1, stripAnsi: false },
+      })) as InMemoryCallResult;
+      expect(captured.structuredContent).toEqual({
+        terminalId: "term-1",
+        lines: ["build passed"],
+        totalLines: 7,
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("kills a scoped directory of terminals with kill_terminal all", async () => {
+    const { server, client } = await createFamilyServer();
+    try {
+      const scoped = (await client.callTool({
+        name: "kill_terminal",
+        arguments: { all: true, cwd: process.cwd() },
+      })) as InMemoryCallResult;
+      expect(scoped.structuredContent).toEqual({ success: true, killed: 1 });
+
+      const single = (await client.callTool({
+        name: "kill_terminal",
+        arguments: { terminalId: "term-1" },
+      })) as InMemoryCallResult;
+      expect(single.structuredContent).toEqual({ success: true });
+
+      await callExpectingToolError(
+        client,
+        "kill_terminal",
+        { all: true, terminalId: "term-1" },
+        /terminalId, or all=true/,
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("drives workspace scripts through one action-addressed tool", async () => {
+    const { server, client } = await createFamilyServer();
+    try {
+      const listed = (await client.callTool({
+        name: "workspace_scripts",
+        arguments: { workspaceId: "ws-1" },
+      })) as InMemoryCallResult;
+      expect(listed.structuredContent).toEqual({
+        scripts: [{ name: "dev", lifecycle: "running" }],
+      });
+
+      const started = (await client.callTool({
+        name: "workspace_scripts",
+        arguments: { workspaceId: "ws-1", action: "start", scriptName: "dev" },
+      })) as InMemoryCallResult;
+      expect(started.structuredContent).toEqual({ script: { name: "dev", lifecycle: "running" } });
+
+      const stopped = (await client.callTool({
+        name: "workspace_scripts",
+        arguments: { workspaceId: "ws-1", action: "stop", scriptName: "dev" },
+      })) as InMemoryCallResult;
+      expect(stopped.structuredContent).toEqual({ script: { name: "dev", lifecycle: "stopped" } });
+
+      await callExpectingToolError(
+        client,
+        "workspace_scripts",
+        { workspaceId: "ws-1", action: "start" },
+        /scriptName is required/,
+      );
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("keeps retired workspace-script names callable with their own input contract", async () => {
+    const { deps, server, client } = await createFamilyServer();
+    try {
+      const listed = (await client.callTool({
+        name: "list_workspace_scripts",
+        arguments: { workspaceId: "ws-1" },
+      })) as InMemoryCallResult;
+      expect(listed.structuredContent).toEqual({
+        scripts: [{ name: "dev", lifecycle: "running" }],
+      });
+
+      const started = (await client.callTool({
+        name: "start_workspace_script",
+        arguments: { workspaceId: "ws-1", scriptName: "dev" },
+      })) as InMemoryCallResult;
+      expect(started.structuredContent).toEqual({ script: { name: "dev", lifecycle: "running" } });
+
+      const stopped = (await client.callTool({
+        name: "stop_workspace_script",
+        arguments: { workspaceId: "ws-1", scriptName: "dev" },
+      })) as InMemoryCallResult;
+      expect(stopped.structuredContent).toEqual({ script: { name: "dev", lifecycle: "stopped" } });
+
+      await callExpectingToolError(
+        client,
+        "start_workspace_script",
+        { workspaceId: "ws-1" },
+        /scriptName/,
+      );
+      expect(deps.workspaceScripts.launch).toHaveBeenCalledTimes(1);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
 describe("browser MCP tools", () => {
   const logger = createTestLogger();
 

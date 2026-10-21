@@ -119,23 +119,26 @@ For worktree isolation, `create_workspace` accepts the same useful choices as th
 
 These tools manage scripts configured in a workspace's `paseo.json`. Each requires an explicit `workspaceId`; start and stop also require the configured `scriptName`.
 
-| Tool                     | Function                                                                                |
-| ------------------------ | --------------------------------------------------------------------------------------- |
-| `list_workspace_scripts` | List configured scripts with lifecycle, terminal, port, proxy URL, and health metadata. |
-| `start_workspace_script` | Start a configured script through Paseo's managed launcher.                             |
-| `stop_workspace_script`  | Stop a running script through its supervised terminal.                                  |
+Scripts run through one action-addressed tool.
+
+| Tool                | Function                                                                                                                                                                                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspace_scripts` | `action: "list"` lists configured scripts with lifecycle, terminal, port, proxy URL, and health metadata. `action: "start"` and `action: "stop"` run one configured script through Paseo's managed launcher and supervised terminal, and require `scriptName`. |
+
+The consolidated tool replaces `list_workspace_scripts`, `start_workspace_script`, and `stop_workspace_script`. Those names keep working with their own argument shapes, and naming them in `disabledTools` keeps disabling `workspace_scripts`.
 
 See [Git worktrees](/docs/worktrees#scripts-and-services) for `paseo.json` configuration.
 
 ### Terminals
 
-| Tool                 | Function                                                                     |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `list_terminals`     | List terminal sessions for one working directory or all working directories. |
-| `create_terminal`    | Create a terminal session for a working directory.                           |
-| `kill_terminal`      | Kill a terminal session.                                                     |
-| `capture_terminal`   | Capture plain-text output from a terminal session.                           |
-| `send_terminal_keys` | Send text or special key tokens to a terminal session.                       |
+| Tool                 | Function                                                                                                                                                             |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inspect_terminal`   | List terminal sessions for a working directory (`cwd`, or `all: true` for every directory); pass `terminalId` to capture plain-text output lines from that terminal. |
+| `create_terminal`    | Create a terminal session for a working directory.                                                                                                                   |
+| `kill_terminal`      | Kill a terminal session by `terminalId`, or every terminal in a scoped directory with `all: true`.                                                                   |
+| `send_terminal_keys` | Send text or special key tokens to a terminal session.                                                                                                               |
+
+The consolidated read tool replaces `list_terminals` and `capture_terminal`. Those names keep working with their own argument shapes, and naming them in `disabledTools` keeps disabling `inspect_terminal`.
 
 ### Schedules and heartbeats
 
