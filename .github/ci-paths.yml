@@ -52,7 +52,6 @@ app:
 
 sdk:
   - "packages/plugin/**"
-  - "plugin-examples/**"
   - "packages/client/**"
   - "packages/highlight/**"
   - "packages/protocol/**"

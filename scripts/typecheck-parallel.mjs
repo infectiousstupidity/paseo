@@ -29,16 +29,8 @@ const workspaces = manifest.workspaces.map((workspace) => {
   if (argv.shift() !== "tsgo" || !argv.includes("--noEmit")) {
     throw new Error("Unsupported typecheck script in " + workspace + ": " + typecheck);
   }
-  const isPlugin = workspace === "packages/plugin";
-  if (rest.length && (!isPlugin || rest.join(" && ") !== "npm run typecheck:examples")) {
+  if (rest.length) {
     throw new Error("Unrecognized typecheck follow-up in " + workspace + ": " + typecheck);
-  }
-  if (
-    isPlugin &&
-    pkg.scripts["typecheck:examples"] !==
-      "node ../../scripts/ensure-plugin-example-deps.mjs && tsgo -p tsconfig.examples.json --noEmit"
-  ) {
-    throw new Error("Plugin example typecheck script changed; update the runner");
   }
   if (
     pkg.scripts.pretypecheck &&
@@ -48,7 +40,7 @@ const workspaces = manifest.workspaces.map((workspace) => {
   ) {
     throw new Error("Unrecognized pretypecheck hook in " + workspace);
   }
-  return { workspace, cwd, args: argv, isPlugin };
+  return { workspace, cwd, args: argv };
 }).filter(Boolean);
 
 function run(label, command, args, cwd) {
@@ -100,23 +92,6 @@ async function main() {
       if (!ok) {
         failed.push(task.workspace);
         continue;
-      }
-      if (task.isPlugin) {
-        const ready = await run(
-          "plugin example dependencies",
-          process.execPath,
-          [path.join(root, "scripts/ensure-plugin-example-deps.mjs")],
-          root,
-        );
-        const examples =
-          ready &&
-          (await run(
-            "plugin examples",
-            process.execPath,
-            [tsgo, "-p", "tsconfig.examples.json", "--noEmit"],
-            task.cwd,
-          ));
-        if (!examples) failed.push("plugin examples");
       }
     }
   }

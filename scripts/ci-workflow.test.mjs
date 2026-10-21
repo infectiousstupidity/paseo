@@ -194,7 +194,6 @@ test("PR routing declares stable behavior ownership", () => {
     app: ["packages/app/**", "packages/expo-two-way-audio/**"],
     sdk: [
       "packages/plugin/**",
-      "plugin-examples/**",
       "packages/client/**",
       "packages/highlight/**",
       "packages/protocol/**",
