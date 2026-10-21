@@ -38,5 +38,5 @@
     ".github/workflows/release-notes-sync.yml",
     ".github/workflows/desktop-packages.yml"
   ],
-  "preserve": ["docs/mockups/", "docs/tasks/"]
+  "preserve": ["CLAUDE.md", "docs/mockups/", "docs/tasks/"]
 }

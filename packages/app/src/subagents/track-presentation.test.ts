@@ -20,6 +20,7 @@ function row(
 ): PaseoSubagentRow {
   return {
     kind: "paseo",
+    address: overrides.address ?? { serverId: "server-1", agentId: overrides.id },
     id: overrides.id,
     provider: overrides.provider ?? "codex",
     title: overrides.title ?? `Agent ${overrides.id}`,
@@ -158,18 +159,23 @@ describe("countFinishedSubagents", () => {
 
 describe("compactSubagentTask", () => {
   it("skips standalone repo/HEAD metadata without rewriting the actual task", () => {
-    expect(compactSubagentTask("Repo: /tmp/private/path\nHEAD: aabbcc\nReview the actual auth changes"))
-      .toBe("Review the actual auth changes");
-    expect(compactSubagentTask("Fix /src/auth.ts without breaking login"))
-      .toBe("Fix /src/auth.ts without breaking login");
+    expect(
+      compactSubagentTask("Repo: /tmp/private/path\nHEAD: aabbcc\nReview the actual auth changes"),
+    ).toBe("Review the actual auth changes");
+    expect(compactSubagentTask("Fix /src/auth.ts without breaking login")).toBe(
+      "Fix /src/auth.ts without breaking login",
+    );
   });
 
   it("extracts only documented worker IDs and review rounds from long prompts", () => {
-    expect(compactSubagentTask(
-      "You are fix-round worker W15 for the Paseo workspace mock. Review round 4 (confirmed).",
-    )).toBe("W15 · fix-round · Review round 4");
-    expect(compactSubagentTask("You are implementation worker W1a for a bounded task."))
-      .toBe("W1a · implementation");
+    expect(
+      compactSubagentTask(
+        "You are fix-round worker W15 for the Paseo workspace mock. Review round 4 (confirmed).",
+      ),
+    ).toBe("W15 · fix-round · Review round 4");
+    expect(compactSubagentTask("You are implementation worker W1a for a bounded task.")).toBe(
+      "W1a · implementation",
+    );
   });
 
   it("bounds the row line but leaves full source available for inspection", () => {
@@ -183,18 +189,31 @@ describe("compactSubagentTask", () => {
 
 describe("child model identity projection", () => {
   const child: ProviderSubagentRow = {
-    kind: "provider", id: "child", parentAgentId: "parent", provider: "pi",
-    title: "worker", description: "Review", subtitle: null, activity: null,
-    status: "running", requiresAttention: false, createdAt: new Date(),
+    kind: "provider",
+    id: "child",
+    parentAgentId: "parent",
+    provider: "pi",
+    title: "worker",
+    description: "Review",
+    subtitle: null,
+    activity: null,
+    status: "running",
+    requiresAttention: false,
+    createdAt: new Date(),
   };
 
   it("omits unavailable values and never borrows the parent model", () => {
     expect(subagentRuntimeLabel(child)).toBeNull();
-    expect(subagentRuntimeLabel({ ...child, model: "openrouter/qwen3.8-27b" }))
-      .toBe("openrouter/qwen3.8-27b");
-    expect(subagentRuntimeLabel({
-      ...child, model: "openrouter/qwen3.8-27b", thinkingOptionId: "xhigh",
-    })).toBe("openrouter/qwen3.8-27b · xhigh");
+    expect(subagentRuntimeLabel({ ...child, model: "openrouter/qwen3.8-27b" })).toBe(
+      "openrouter/qwen3.8-27b",
+    );
+    expect(
+      subagentRuntimeLabel({
+        ...child,
+        model: "openrouter/qwen3.8-27b",
+        thinkingOptionId: "xhigh",
+      }),
+    ).toBe("openrouter/qwen3.8-27b · xhigh");
   });
 });
 

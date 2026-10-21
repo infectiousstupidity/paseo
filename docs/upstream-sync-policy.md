@@ -9,7 +9,7 @@ node scripts/upstream-sync.mjs --verify
 
 The script fetches `getpaseo/paseo`, merges its `main`, discards all paths in
 [`upstream-sync-policy.json`](../scripts/upstream-sync-policy.json) and restores
-the fork-owned `docs/mockups/` and `docs/tasks/` paths from the current `HEAD`.
+the fork-owned `CLAUDE.md`, `docs/mockups/`, and `docs/tasks/` paths from the current `HEAD`.
 It commits only when other merge conflicts are fully resolved; otherwise it
 leaves the merge open for manual review.
 

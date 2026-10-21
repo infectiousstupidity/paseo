@@ -1,4 +1,6 @@
 import { AgentDirectory } from "./agent/directory.js";
+import { ConnectedHostSession } from "./connected-hosts/index.js";
+import type { ConnectedHosts } from "./connected-hosts/index.js";
 import { searchTimeline } from "./agent/chat-search/index.js";
 import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import { BrowserAutomationHostCapabilitySchema } from "@getpaseo/protocol/browser-automation/capabilities";
@@ -102,7 +104,11 @@ import {
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
 import { PiRpcAgentSession } from "./agent/providers/pi/agent.js";
-import { feedbackDispatcher, assertSeichoParent, type FeedbackParent } from "./agent-feedback/dispatcher.js";
+import {
+  feedbackDispatcher,
+  assertSeichoParent,
+  type FeedbackParent,
+} from "./agent-feedback/dispatcher.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -436,16 +442,20 @@ const nodeSessionFileSystem: SessionFileSystem = {
 type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
+  connectedHosts?: ConnectedHosts;
+  sourceId?: string;
+  routed?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
   clientId: string;
   permissions: readonly DaemonPermission[];
   appVersion?: string | null;
   clientCapabilities?: Record<string, unknown> | null;
   onMessage: (msg: SessionOutboundMessage) => void;
-  onMessageToSource?: (source: object, msg: SessionOutboundMessage) => void;
+  onMessageToSource?: (source: object, msg: SessionOutboundMessage) => void | Promise<void>;
   onBinaryMessage?: (frame: Uint8Array) => void;
   onBinaryMessageToSource?: (source: object, frame: Uint8Array) => Promise<void>;
   getTransportBufferedAmount?: (source?: object) => number | null;
+  getConnectedHostBufferedAmount?: () => number | null;
   onLifecycleIntent?: (intent: SessionLifecycleIntent) => void;
   onWorkspaceRecovered?: (workspace: PersistedWorkspaceRecord) => Promise<void>;
   publishScriptStatusUpdate?: (message: ScriptStatusUpdateMessage) => void;
@@ -668,17 +678,31 @@ interface ClientActivity {
 }
 
 export class Session {
+  private readonly connectedHostSession: ConnectedHostSession | null;
+  private routed = false;
+  isRouted(): boolean {
+    return this.routed;
+  }
+  getHostSourceId(): string {
+    return this.hostSourceId;
+  }
+  private hostSourceId: string;
+  setHostSource(sourceId: string): void {
+    this.hostSourceId = sourceId;
+    this.connectedHostSession?.setSource(sourceId);
+  }
+  setRouted(routed: boolean): void {
+    this.routed = routed;
+  }
   readonly delivery = new SessionDelivery(
     (source, message) => {
       if (!this.authorization.allowsOutbound(message)) return;
-      if (this.onMessageToSource) this.onMessageToSource(source, message);
-      else this.onMessage(message);
+      if (this.onMessageToSource) return this.onMessageToSource(source, message);
+      this.onMessage(message);
     },
     (source, frame) => {
       if (this.onBinaryMessageToSource) {
-        void this.onBinaryMessageToSource(source, frame).catch((error) =>
-          this.sessionLogger.warn({ err: error }, "Failed to emit binary frame"),
-        );
+        return this.onBinaryMessageToSource(source, frame);
       } else this.emitBinary(frame);
     },
     (source, message) => this.workspaceSetupMessageForClient(message, source),
@@ -700,7 +724,7 @@ export class Session {
   private readonly sessionId: string;
   private readonly onMessage: (msg: SessionOutboundMessage) => void;
   private readonly onMessageToSource:
-    | ((source: object, msg: SessionOutboundMessage) => void)
+    | ((source: object, msg: SessionOutboundMessage) => void | Promise<void>)
     | null;
   private readonly onBinaryMessage: ((frame: Uint8Array) => void) | null;
   private readonly onBinaryMessageToSource:
@@ -858,13 +882,20 @@ export class Session {
     this.browserToolsBroker = options.browserToolsBroker;
     this.clientId = clientId;
     this.authorization = new SessionAuthorization(permissions);
+
     this.appVersion = appVersion ?? null;
     this.clientCapabilities = parseClientCapabilities(clientCapabilities);
     this.sessionId = uuidv4();
+    this.hostSourceId = hostSource(options);
+    this.connectedHostSession = createHostSession(options, this);
     this.onMessage = onMessage;
-    this.onMessageToSource = onMessageToSource ?? null;
+    this.onMessageToSource = onMessageToSource
+      ? (source, message) => this.observeSourceSend(() => onMessageToSource(source, message))
+      : null;
     this.onBinaryMessage = onBinaryMessage ?? null;
-    this.onBinaryMessageToSource = onBinaryMessageToSource ?? null;
+    this.onBinaryMessageToSource = onBinaryMessageToSource
+      ? (source, frame) => this.observeSourceSend(() => onBinaryMessageToSource(source, frame))
+      : null;
     this.getTransportBufferedAmount = getTransportBufferedAmount ?? (() => 0);
     this.onLifecycleIntent = onLifecycleIntent ?? null;
     this.onWorkspaceRecovered = onWorkspaceRecovered ?? null;
@@ -2167,7 +2198,7 @@ export class Session {
               requestId,
               requestType: msg.type,
               error: `Session is not authorized for ${msg.type}`,
-              code: "access_denied",
+              code: msg.type.startsWith("hosts.") ? "permission_denied" : "access_denied",
             },
           });
         }
@@ -2214,6 +2245,7 @@ export class Session {
 
   public setPermissions(permissions: readonly DaemonPermission[]): void {
     this.authorization.replacePermissions(permissions);
+    this.connectedHostSession?.revoke();
     if (!this.authorization.allowsPermission("workspace.write")) {
       void this.delivery
         .releaseFamily("browser-host")
@@ -2368,11 +2400,10 @@ export class Session {
 
   private async dispatchInboundMessage(msg: SessionInboundMessage, source?: object): Promise<void> {
     const promise =
+      this.connectedHostSession?.dispatch(msg) ??
       this.dispatchSubscriptionMessage(msg, source) ??
       this.dispatchVoiceAndControlMessage(msg) ??
-      this.dispatchAgentRewindMessage(msg, source) ??
-      this.dispatchAgentRelationshipMessage(msg) ??
-      this.dispatchAgentTimelineMessage(msg, source) ??
+      this.dispatchAgentObservationMessage(msg, source) ??
       this.dispatchHubExecutionMessage(msg) ??
       this.dispatchCreationMessage(msg, source) ??
       this.dispatchAgentLifecycleMessage(msg) ??
@@ -2388,6 +2419,17 @@ export class Session {
       this.dispatchScheduleMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
+  }
+
+  private dispatchAgentObservationMessage(
+    msg: SessionInboundMessage,
+    source?: object,
+  ): Promise<void> | undefined {
+    return (
+      this.dispatchAgentRewindMessage(msg, source) ??
+      this.dispatchAgentRelationshipMessage(msg) ??
+      this.dispatchAgentTimelineMessage(msg, source)
+    );
   }
 
   private dispatchWorkspaceLifecycleMessage(msg: SessionInboundMessage): Promise<void> | undefined {
@@ -3175,6 +3217,10 @@ export class Session {
   }
 
   public async handleBinaryFrame(binaryFrame: BinaryFrame, source: object): Promise<void> {
+    if (binaryFrame.kind === "host_route") {
+      this.connectedHostSession?.binary(binaryFrame.frame, source);
+      return;
+    }
     if (!this.authorization.allowsPermission("workspace.write")) {
       return;
     }
@@ -7993,8 +8039,13 @@ export class Session {
   ): Promise<void> {
     try {
       const parent = this.agentManager.getAgent(msg.parentAgentId);
-      if (!parent || parent.internal || parent.provider !== "pi" ||
-          !(parent.session instanceof PiRpcAgentSession) || !parent.config.cwd) {
+      if (
+        !parent ||
+        parent.internal ||
+        parent.provider !== "pi" ||
+        !(parent.session instanceof PiRpcAgentSession) ||
+        !parent.config.cwd
+      ) {
         throw new Error("An active SEICHO Pi parent is required");
       }
       const sessionId = parent.session.getFeedbackSessionId();
@@ -8018,15 +8069,17 @@ export class Session {
       if (msg.action === "submit") {
         if (!msg.sourceNamespace || !msg.screen || !msg.annotations)
           throw new Error("Source namespace, screen and notes required");
-        records = await feedbackDispatcher.submit(target, msg.sourceNamespace, msg.annotations.map(
-          note => ({
+        records = await feedbackDispatcher.submit(
+          target,
+          msg.sourceNamespace,
+          msg.annotations.map((note) => ({
             sourceApp: "seicho-dev" as const,
             sourceNamespace: msg.sourceNamespace!,
             annotationId: note.id,
             screen: msg.screen!,
             comment: note.comment,
-          }),
-        ));
+          })),
+        );
       } else if (msg.action === "record_proposal") {
         if (!msg.recordId || !msg.revision || !msg.proposal)
           throw new Error("Record, revision and proposal required");
@@ -8037,31 +8090,56 @@ export class Session {
       } else if (msg.action === "record_outcome") {
         if (!msg.recordId || !msg.revision || !msg.outcome || !msg.evidence)
           throw new Error("Record, revision, outcome and verification evidence required");
-        records = [feedbackDispatcher.recordOutcome(
-          msg.recordId, msg.revision, msg.outcome, msg.evidence,
-        )];
+        records = [
+          feedbackDispatcher.recordOutcome(msg.recordId, msg.revision, msg.outcome, msg.evidence),
+        ];
       } else if (msg.action === "get") {
         if (!msg.recordId) throw new Error("Record ID required");
         const record = feedbackDispatcher.get(msg.recordId);
         const revision = record.revisions.at(-1)!.digest;
-        const activity = record.events.filter(e => e.revision === revision);
+        const activity = record.events.filter((e) => e.revision === revision);
         const latest = activity.at(-1);
-        const runId = activity.findLast(e => e.kind === "spawn_accepted")?.runId;
-        records = [{ recordId: record.recordId, revision,
-          state: latest?.kind ?? "submitted", ...(runId ? { runId } : {}) }];
-        proposal = activity.findLast(e => e.kind === "proposal_ready")?.proposal;
+        const runId = activity.findLast((e) => e.kind === "spawn_accepted")?.runId;
+        records = [
+          {
+            recordId: record.recordId,
+            revision,
+            state: latest?.kind ?? "submitted",
+            ...(runId ? { runId } : {}),
+          },
+        ];
+        proposal = activity.findLast((e) => e.kind === "proposal_ready")?.proposal;
       } else {
         throw new Error("Unsupported feedback action");
       }
-      this.emitForSource({ type: "agent.feedback.response", payload: {
-        requestId: msg.requestId, success: true, error: null, records,
-        ...(proposal ? { proposal } : {}),
-      } }, source);
+      this.emitForSource(
+        {
+          type: "agent.feedback.response",
+          payload: {
+            requestId: msg.requestId,
+            success: true,
+            error: null,
+            records,
+            ...(proposal ? { proposal } : {}),
+          },
+        },
+        source,
+      );
     } catch (error) {
-      this.emitForSource({ type: "agent.feedback.response", payload: {
-        requestId: msg.requestId, success: false,
-        error: (error instanceof Error ? error.message : "Feedback request failed").slice(0, 240),
-      } }, source);
+      this.emitForSource(
+        {
+          type: "agent.feedback.response",
+          payload: {
+            requestId: msg.requestId,
+            success: false,
+            error: (error instanceof Error ? error.message : "Feedback request failed").slice(
+              0,
+              240,
+            ),
+          },
+        },
+        source,
+      );
     }
   }
 
@@ -8080,49 +8158,79 @@ export class Session {
       // The daemon's authenticated session supplies server identity; row keys are scoped
       // to this exact parent. Native IDs remain private to the daemon.
       const parent = this.agentManager.getAgent(msg.parentAgentId);
-      if (!parent || parent.internal || parent.provider !== "pi" ||
-          !(parent.session instanceof PiRpcAgentSession)) {
+      if (
+        !parent ||
+        parent.internal ||
+        parent.provider !== "pi" ||
+        !(parent.session instanceof PiRpcAgentSession)
+      ) {
         throw new Error("An active native Pi parent is required.");
       }
       const child = this.agentManager.getProviderSubagent(msg.parentAgentId, msg.subagentId);
       const target = this.agentManager.getProviderSubagentControlTarget(
-        msg.parentAgentId, msg.subagentId,
+        msg.parentAgentId,
+        msg.subagentId,
       );
-      if (!child || child.provider !== "pi" || child.status !== "running" ||
-          child.parentAgentId !== parent.id || !target) {
-        throw new Error("Subagent control target is absent, finished or no longer owned by this parent.");
+      if (
+        !child ||
+        child.provider !== "pi" ||
+        child.status !== "running" ||
+        child.parentAgentId !== parent.id ||
+        !target
+      ) {
+        throw new Error(
+          "Subagent control target is absent, finished or no longer owned by this parent.",
+        );
       }
       if (msg.action !== "steer" && msg.message !== undefined) {
         throw new Error("Only steer may carry a message.");
       }
-      if (msg.action === "steer" && (!msg.message?.trim() ||
-          Buffer.byteLength(msg.message.trim(), "utf8") > 360)) {
+      if (
+        msg.action === "steer" &&
+        (!msg.message?.trim() || Buffer.byteLength(msg.message.trim(), "utf8") > 360)
+      ) {
         throw new Error("Steer requires a nonempty instruction of at most 360 UTF-8 bytes.");
       }
       const result = await parent.session.controlSubagent({
-        action: msg.action, ...target, ...(msg.action === "steer" ? { message: msg.message!.trim() } : {}),
+        action: msg.action,
+        ...target,
+        ...(msg.action === "steer" ? { message: msg.message!.trim() } : {}),
       });
       if (!result.ok) throw new Error(result.message);
       // A stop receipt is only 'stopping'. No speculative terminal descriptor upsert:
       // the adapter follows authoritative status.json and child events.
-      this.emitForSource({
-        type: "agent.provider_subagents.control.response",
-        payload: {
-          ...response, success: true, error: null,
-          ...(typeof result.data.state === "string" ? { state: result.data.state } : {}),
-          ...(typeof result.data.runState === "string" ? { runState: result.data.runState } : {}),
-          ...(result.data.deliveryStatus === "queued" || result.data.deliveryStatus === "delivered"
-            ? { deliveryStatus: result.data.deliveryStatus } : {}),
+      this.emitForSource(
+        {
+          type: "agent.provider_subagents.control.response",
+          payload: {
+            ...response,
+            success: true,
+            error: null,
+            ...(typeof result.data.state === "string" ? { state: result.data.state } : {}),
+            ...(typeof result.data.runState === "string" ? { runState: result.data.runState } : {}),
+            ...(result.data.deliveryStatus === "queued" ||
+            result.data.deliveryStatus === "delivered"
+              ? { deliveryStatus: result.data.deliveryStatus }
+              : {}),
+          },
         },
-      }, source);
+        source,
+      );
     } catch (error) {
-      this.emitForSource({
-        type: "agent.provider_subagents.control.response",
-        payload: {
-          ...response, success: false,
-          error: (error instanceof Error ? error.message : "Subagent control failed.").slice(0, 240),
+      this.emitForSource(
+        {
+          type: "agent.provider_subagents.control.response",
+          payload: {
+            ...response,
+            success: false,
+            error: (error instanceof Error ? error.message : "Subagent control failed.").slice(
+              0,
+              240,
+            ),
+          },
         },
-      }, source);
+        source,
+      );
     }
   }
 
@@ -8691,6 +8799,20 @@ export class Session {
     this.emitBinary(frame);
   }
 
+  private observeSourceSend(send: () => void | Promise<void>): Promise<void> {
+    let pending: Promise<void>;
+    try {
+      pending = Promise.resolve(send());
+    } catch (error) {
+      pending = Promise.reject(error);
+    }
+    // Legacy producers fire and forget; owned streams await the same failure.
+    void pending.catch((error) =>
+      this.sessionLogger.warn({ err: error }, "Failed to emit source frame"),
+    );
+    return pending;
+  }
+
   private emitForSource(msg: SessionOutboundMessage, source?: object): void {
     if (source && this.onMessageToSource) {
       msg = this.delivery.authorizeReply(msg, source);
@@ -8838,4 +8960,22 @@ function legacyWantsEvent(
     default:
       return true;
   }
+}
+
+function createHostSession(options: SessionOptions, session: Session): ConnectedHostSession | null {
+  if (!options.connectedHosts) return null;
+  return new ConnectedHostSession(
+    options.connectedHosts,
+    session.delivery,
+    { sourceId: options.sourceId ?? "owner", manageSources: false },
+    () => session.getPermissions(),
+    (message) => session.publish(message),
+    () => session.isRouted(),
+    session.getSessionId(),
+    () => options.getConnectedHostBufferedAmount?.() ?? 0,
+  );
+}
+
+function hostSource(options: SessionOptions): string {
+  return options.sourceId ?? "owner";
 }

@@ -1,3 +1,5 @@
+import type { AgentAddress } from "@getpaseo/protocol/addresses";
+import { useHosts } from "@/runtime/host-runtime";
 import React, {
   useCallback,
   useEffect,
@@ -63,17 +65,17 @@ const foregroundMutedColorMapping = (theme: Theme) => ({
 export interface SubagentsTrackProps {
   serverId: string;
   rows: SubagentRow[];
-  onOpenSubagent: (id: string) => void;
+  onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   /**
    * Whether opening this row shows it in a sheet. A sheet stacks over the list and uncovers it on
    * close, so the list stays open; a tab replaces the list's pane, so choosing it ends the list.
    */
   opensInSheet: (row: SubagentRow) => boolean;
-  onArchiveSubagent: (id: string) => void;
+  onArchiveSubagent: (address: AgentAddress) => void;
   onArchiveFinished?: () => void;
   archiveFinishedStatus?: ArchiveFinishedStatus;
-  onDetachSubagent?: (id: string) => void;
+  onDetachSubagent?: (address: AgentAddress) => void;
 }
 
 const IDLE_ARCHIVE_FINISHED_STATUS: ArchiveFinishedStatus = { kind: "idle" };
@@ -281,7 +283,9 @@ function ArchiveFinishedRow({
 }
 
 function subagentTrackKey(row: SubagentRow): string {
-  return row.kind === "provider" ? `provider:${row.parentAgentId}:${row.id}` : `paseo:${row.id}`;
+  return row.kind === "provider"
+    ? `provider:${row.parentAgentId}:${row.id}`
+    : `paseo:${row.address.serverId}:${row.id}`;
 }
 
 interface SubagentsTrackRowProps {
@@ -293,11 +297,11 @@ interface SubagentsTrackRowProps {
   stopping: boolean;
   onToggleDetails: (key: string) => void;
   onStopAccepted: (key: string) => void;
-  onOpenSubagent: (id: string) => void;
+  onOpenSubagent: (address: AgentAddress) => void;
   onOpenProviderSubagent: (parentAgentId: string, subagentId: string) => void;
   opensInSheet: boolean;
-  onArchiveSubagent: (id: string) => void;
-  onDetachSubagent?: (id: string) => void;
+  onArchiveSubagent: (address: AgentAddress) => void;
+  onDetachSubagent?: (address: AgentAddress) => void;
 }
 
 const STATE_WORD_KEYS: Record<SubagentStateWord, string> = {
@@ -325,7 +329,9 @@ function SubagentsTrackRow({
   const { t } = useTranslation();
   const { selectItem } = useMenuContext("SubagentsTrackRow");
   const isCompact = useIsCompactFormFactor();
-  const presentation = useRowPresentation(row, serverId);
+  const rowServerId = row.kind === "paseo" ? row.address.serverId : serverId;
+  const hostLabel = useHosts().find((host) => host.serverId === rowServerId)?.label ?? rowServerId;
+  const presentation = useRowPresentation(row, rowServerId);
   const displayLabel =
     presentation.titleState === "loading" ? t("common.states.loading") : presentation.label;
   const state = resolveSubagentState(row);
@@ -339,9 +345,14 @@ function SubagentsTrackRow({
   const runtime = subagentRuntimeLabel(row);
   // A Paseo agent has no provider subtitle, so its row leads with the same facts line the agent's
   // sheet shows under its title: model, thinking, mode, context usage.
-  const factsLine = useAgentFactsLine(serverId, row.id);
+  const factsLine = useAgentFactsLine(rowServerId, row.id);
   const lead = row.kind === "paseo" ? (factsLine ?? presentation.subtitle) : presentation.subtitle;
-  const context = [lead, runtime, age ? t("subagents.panel.startedAgo", { age }) : null]
+  const context = [
+    rowServerId !== serverId ? hostLabel : null,
+    lead,
+    runtime,
+    age ? t("subagents.panel.startedAgo", { age }) : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   const metadata = subagentActivityText(shownActivity, state, t);
@@ -356,16 +367,16 @@ function SubagentsTrackRow({
       if (row.kind === "provider") {
         onOpenProviderSubagent(row.parentAgentId, row.id);
       } else {
-        onOpenSubagent(row.id);
+        onOpenSubagent(row.address);
       }
     }, !opensInSheet);
   }, [onOpenProviderSubagent, onOpenSubagent, row, selectItem, opensInSheet]);
   const handleArchivePress = useCallback(() => {
-    onArchiveSubagent(row.id);
-  }, [onArchiveSubagent, row.id]);
+    if (row.kind === "paseo") onArchiveSubagent(row.address);
+  }, [onArchiveSubagent, row]);
   const handleDetachPress = useCallback(() => {
-    onDetachSubagent?.(row.id);
-  }, [onDetachSubagent, row.id]);
+    if (row.kind === "paseo") onDetachSubagent?.(row.address);
+  }, [onDetachSubagent, row]);
   const handleMouseEnter = useCallback(() => setHovered(true), []);
   const handleMouseLeave = useCallback(() => setHovered(false), []);
 
