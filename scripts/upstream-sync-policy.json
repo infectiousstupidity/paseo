@@ -19,6 +19,7 @@
     "packages/app/src/fdroid/",
     "packages/app/plugins/with-fdroid-autolinking.js",
     "packages/app/.eas/workflows/",
+    "plugin-examples/",
     "scripts/sync-fdroid-changelogs.mjs",
     "scripts/sync-fdroid-changelogs.test.mjs",
     "packages/expo-two-way-audio/examples/",
