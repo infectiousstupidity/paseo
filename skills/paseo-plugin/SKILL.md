@@ -1,6 +1,6 @@
 ---
 name: paseo-plugin
-description: Build and manage trusted local Paseo plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Paseo plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a screen, sidebar header or footer item, or workspace panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Paseo from plugin code; or add plugin RPCs.
+description: Build and manage trusted local Paseo plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Paseo plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a screen, sidebar header or footer item, workspace panel, or file panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Paseo from plugin code; or add plugin RPCs.
 ---
 
 # Paseo plugins
@@ -33,6 +33,7 @@ renderer draws.
 | --------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Screen + sidebar item | `addScreen`, `addSidebarHeaderItem`, `addSidebarFooterItem` | Full plugin UI, opened from a sidebar row or popover                                   | [Screens](references/ui-surfaces.md)                                            |
 | Workspace panel       | `addWorkspacePanel`                                         | A tab beside agents, terminals, files, diffs; `locations: ["explorer"]` for Explorer   | [Panels](references/ui-surfaces.md)                                             |
+| File panel            | `addFilePanel`                                              | View or edit a matching file inside the file tab through its file handle               | [File panels](references/ui-surfaces.md#file-panels)                            |
 | Command Center item   | `addCommandCenterItem`                                      | A global, workspace, or agent action under ⌘K                                          | [reference.md](https://paseo.sh/docs/plugins/reference.md#command-center-items) |
 | Slash command         | `addSlashCommand`                                           | `/command args` runs plugin code instead of prompting the agent                        | [Composer](references/composer.md)                                              |
 | Composer pill         | `addComposerPill`                                           | A per-agent button beside Tasks and Subagents                                          | [Composer](references/composer.md)                                              |
@@ -71,8 +72,7 @@ function and returns cleanup, which may be async. Details: [project mechanics](r
 - Classify every module before writing imports. A client import of `server/`, a server import of
   `client/`, any `node:` import reachable from client code, and any relative import of a code file
   in the plugin root are compile errors. Hooks and client contexts come from
-  `@getpaseo/plugin/client`, server contexts from `/server`, host UI from `/client/react-native` or
-  `/client/ui`. Never import `/client/host`.
+  `@getpaseo/plugin/client`, server contexts from `/server`, host UI from `/client/ui`. Never import `/client/host`.
 - React Native primitives only: `View`, `Text`, `Pressable`, `ScrollView`, `TextInput`. No HTML
   elements, `className`, CSS strings, or `onClick`.
 - Take every text color from `theme.colors` (primary `foreground`, labels `foregroundMuted`, root

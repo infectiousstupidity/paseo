@@ -1903,33 +1903,56 @@ export const ProviderSubagentListRequestMessageSchema = z.object({
 });
 
 /** Only opaque Paseo row identity crosses the wire, never native Pi run or child IDs. */
-export const ProviderSubagentControlRequestMessageSchema = z.object({
-  type: z.literal("agent.provider_subagents.control.request"),
-  parentAgentId: z.string().min(1),
-  subagentId: z.string().min(1),
-  action: z.enum(["status", "stop", "steer"]),
-  message: z.string().max(360).optional(),
-  requestId: z.string(),
-}).strict();
+export const ProviderSubagentControlRequestMessageSchema = z
+  .object({
+    type: z.literal("agent.provider_subagents.control.request"),
+    parentAgentId: z.string().min(1),
+    subagentId: z.string().min(1),
+    action: z.enum(["status", "stop", "steer"]),
+    message: z.string().max(360).optional(),
+    requestId: z.string(),
+  })
+  .strict();
 
 /** Explicit owner action only. Agentation creation events never trigger this RPC. */
-export const AgentFeedbackRequestSchema = z.object({
-  type: z.literal("agent.feedback.request"),
-  action: z.enum(["submit", "record_proposal", "approve", "record_outcome", "get"]),
-  requestId: z.string().min(1),
-  parentAgentId: z.string().min(1),
-  sourceNamespace: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/).optional(),
-  screen: z.string().max(32).optional(),
-  annotations: z.array(z.object({
-    id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
-    comment: z.string().min(1).max(1200),
-  }).strict()).min(1).max(12).optional(),
-  recordId: z.string().regex(/^[0-9a-f]{40}$/).optional(),
-  revision: z.string().regex(/^sha256:[0-9a-f]{64}$/).optional(),
-  proposal: z.string().min(1).max(3000).optional(),
-  outcome: z.enum(["verification_passed", "verification_failed", "failed", "blocked", "cancelled"]).optional(),
-  evidence: z.string().min(1).max(1000).optional(),
-}).strict();
+export const AgentFeedbackRequestSchema = z
+  .object({
+    type: z.literal("agent.feedback.request"),
+    action: z.enum(["submit", "record_proposal", "approve", "record_outcome", "get"]),
+    requestId: z.string().min(1),
+    parentAgentId: z.string().min(1),
+    sourceNamespace: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,100}$/)
+      .optional(),
+    screen: z.string().max(32).optional(),
+    annotations: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
+            comment: z.string().min(1).max(1200),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(12)
+      .optional(),
+    recordId: z
+      .string()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
+    revision: z
+      .string()
+      .regex(/^sha256:[0-9a-f]{64}$/)
+      .optional(),
+    proposal: z.string().min(1).max(3000).optional(),
+    outcome: z
+      .enum(["verification_passed", "verification_failed", "failed", "blocked", "cancelled"])
+      .optional(),
+    evidence: z.string().min(1).max(1000).optional(),
+  })
+  .strict();
 
 export const ProviderSubagentTimelineRequestMessageSchema = z.object({
   type: z.literal("agent.provider_subagents.timeline.get.request"),
@@ -2805,6 +2828,10 @@ export const FileVersionSchema = z.discriminatedUnion("status", [
     size: z.number().int().nonnegative(),
     modifiedAt: z.string(),
     revision: z.string().optional(),
+    // Classified from the extension and the first bytes, so a client can choose how to open the
+    // file before reading it.
+    kind: z.enum(["text", "image", "binary"]).optional(),
+    mimeType: z.string().optional(),
   }),
   z.object({
     status: z.literal("missing"),
@@ -2838,6 +2865,8 @@ export const FileWriteRequestSchema = z.object({
   cwd: z.string(),
   path: z.string(),
   content: z.string(),
+  // COMPAT(fileByteWrites): added in v0.13.0. Daemons without the feature write `content` as text.
+  contentEncoding: z.enum(["utf-8", "base64"]).optional(),
   expectedModifiedAt: z.string(),
   expectedRevision: z.string().optional(),
   requestId: z.string(),
@@ -3709,6 +3738,8 @@ export const ServerInfoStatusPayloadSchema = z
         workspaceRecovery: z.boolean().optional(),
         // COMPAT(workspaceFileEditing): added in v0.2.0, remove after 2027-01-18 once daemon floor >= v0.2.0.
         workspaceFileEditing: z.boolean().optional(),
+        // COMPAT(fileByteWrites): added in v0.13.0, remove gate after 2027-04-20.
+        fileByteWrites: z.boolean().optional(),
         // COMPAT(providerUsageList): added in v0.1.98, drop the gate when daemon floor >= v0.1.98.
         providerUsageList: z.boolean().optional(),
         // COMPAT(agentDetach): added in v0.1.98, remove gate after 2026-12-19 once daemon floor >= v0.1.98.
@@ -4814,10 +4845,16 @@ export const AgentFeedbackResponseSchema = z.object({
     requestId: z.string(),
     success: z.boolean(),
     error: z.string().nullable(),
-    records: z.array(z.object({
-      recordId: z.string(), revision: z.string(), state: z.string(),
-      runId: z.string().optional(),
-    })).optional(),
+    records: z
+      .array(
+        z.object({
+          recordId: z.string(),
+          revision: z.string(),
+          state: z.string(),
+          runId: z.string().optional(),
+        }),
+      )
+      .optional(),
     proposal: z.string().optional(),
   }),
 });

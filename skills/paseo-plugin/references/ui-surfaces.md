@@ -65,6 +65,15 @@ the active workspace or agent. Command callbacks receive the selected host's `pa
 `rpc(contract, input)`, `openScreen({ screenId, params? })`, and contextual `openPanel(id)`
 capabilities.
 
+## File panels
+
+Register `addFilePanel` to view or edit matching files inside the existing file tab. Read the
+checkout's `public-docs/plugins/reference.md` → File panels for the file handle, tab lifecycle,
+selectors, and conflict contracts. Use `plugin-examples/pdf-panel` for a document viewer or
+`plugin-examples/markdown-panel` for an editor. File hooks come from `@getpaseo/plugin/client`;
+host presentation components, including `DocumentFrame` and `Loading`, come from
+`@getpaseo/plugin/client/ui`.
+
 ## Add a screen and a sidebar item
 
 Plugin screens use React Native primitives and work across desktop, browser, iOS, and Android. A sidebar item, in the header or the footer, is a component: render one or more `SidebarRow`s from `@getpaseo/plugin/client/ui`, with `SidebarSeparator` between groups, and call `openScreen` or `openPopover` from them. A screen's `title` is a string or a function of its `params`; its component receives the `params` it was opened with. Color text from `theme.colors` and pad from `layout.compact`.
@@ -132,7 +141,7 @@ Icons are Lucide icon names, inline SVG (`{ svg }`), or components; see [Icons](
 Before writing imports, classify each module as shared, client, or server. Follow the
 [SDK import boundaries](https://paseo.sh/docs/plugins/reference.md#runtime-modules), including
 transitive and type dependencies. The root is shared-only; hooks and client contexts belong to
-`@getpaseo/plugin/client`, server contexts to `/server`, and host UI to `/client/react-native` or `/client/ui`.
+`@getpaseo/plugin/client`, server contexts to `/server`, and host UI to `/client/ui`.
 Install dependencies locally for typechecking; Paseo supplies host runtime modules. JSX uses the
 automatic runtime. Do not import `/client/host` from plugin code.
 

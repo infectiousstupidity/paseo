@@ -21,53 +21,54 @@ This is an npm workspace monorepo:
 
 At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
 
-| Doc                                                          | What's in it                                          |
-| ------------------------------------------------------------ | ----------------------------------------------------- |
-| [product](docs/product.md)                                   | What Paseo is, who it's for, where it's going         |
-| [architecture](docs/architecture.md)                         | System design, package layering, protocol, data flow  |
-| [agent-lifecycle](docs/agent-lifecycle.md)                   | Agent states, parent/child, archive semantics         |
-| [data-model](docs/data-model.md)                             | File-based JSON persistence, Zod, atomic writes       |
-| [glossary](docs/glossary.md)                                 | Authoritative terminology — UI label wins             |
-| [coding-standards](docs/coding-standards.md)                 | Type hygiene, error handling, React patterns          |
-| [design](docs/design.md)                                     | Design system — tokens, hierarchy, what's forbidden   |
-| [platform-gating](docs/platform-gating.md)                   | Platform gates, decision matrix, Metro extensions     |
-| [hover](docs/hover.md)                                       | Canonical hover pattern; the ways agents break it     |
-| [unistyles](docs/unistyles.md)                               | Unistyles gotchas — `useUnistyles()` is forbidden     |
-| [floating-panels](docs/floating-panels.md)                   | Anchored popovers, Android escape, status-bar offsets |
-| [menus](docs/menus.md)                                       | Menu engine — popover vs sheet, when to use a submenu |
-| [mobile-panels](docs/mobile-panels.md)                       | Compact panel ownership, worklet motion, Fabric       |
-| [explorer-sidebar](docs/explorer-sidebar.md)                 | Sidebar, side-pane, compact sheet host contracts      |
-| [expo-router](docs/expo-router.md)                           | Route ownership, startup restore, blank screens       |
-| [forms](docs/forms.md)                                       | Non-React form model, form kit, load-state gating     |
-| [file-icons](docs/file-icons.md)                             | Material icon theme in the file explorer              |
-| [markdown-renderer](docs/markdown-renderer.md)               | Shared Markdown engine, native selection              |
-| [native-text-selection](docs/native-text-selection.md)       | Diagram grouping, selection boundaries                |
-| [providers](docs/providers.md)                               | Adding a new agent provider end-to-end                |
-| [forge-providers](docs/forge-providers.md)                   | Adding a git forge — registry, tiers, self-host       |
-| [custom-providers](docs/custom-providers.md)                 | Z.AI, Qwen, ACP, profiles, custom binaries            |
-| [plugins](docs/plugins.md)                                   | Plugin manifest, RPCs, native surfaces, attachments   |
-| [service-proxy](docs/service-proxy.md)                       | Workspace scripts at public URLs, reverse proxy       |
-| [rpc-namespacing](docs/rpc-namespacing.md)                   | Dotted RPC names, `.request`/`.response` pairs        |
-| [protocol-compatibility](docs/protocol-compatibility.md)     | Version drift, capability gating, COMPAT tags         |
-| [protocol-validation](docs/protocol-validation.md)           | zod-aot inbound validation, schema-purity rules       |
-| [permissions](docs/permissions.md)                           | Principals, credentials, pairing, Hub authority       |
-| [terminal-performance](docs/terminal-performance.md)         | Latency pipeline, coalescing/backpressure invariants  |
-| [agent-stream-performance](docs/agent-stream-performance.md) | Assistant text pipeline, paced reveal                 |
-| [terminal-activity](docs/terminal-activity.md)               | Activity indicators, agent hook reporting             |
-| [file-observation](docs/file-observation.md)                 | Watcher ownership, Linux limits, teardown             |
-| [development](docs/development.md)                           | Dev server, build sync gotchas, CLI reference         |
-| [testing](docs/testing.md)                                   | TDD, determinism, real dependencies, organization     |
-| [qa](docs/qa.md)                                             | QA evidence bar for pull requests                     |
-| [mobile-testing](docs/mobile-testing.md)                     | Maestro and mobile test workflows                     |
-| [ad-hoc-daemon-testing](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness               |
-| [browser-capture-harness](docs/browser-capture-harness.md)   | Real-Electron screenshot harness, compositor gotcha   |
-| [android](docs/android.md)                                   | Variants, EAS builds, version codes, F-Droid          |
-| [docker](docs/docker.md)                                     | Daemon and web UI in Docker, volumes, security        |
-| [release](docs/release.md)                                   | Release playbook, draft releases, checklist           |
-| [visual-mock-workflow](docs/visual-mock-workflow.md)         | Planned Git-backed live mock iteration                |
-| [writing-docs](docs/writing-docs.md)                         | Doc contract, layers, voice rules                     |
-| [SECURITY.md](SECURITY.md)                                   | Relay threat model, E2E encryption, agent auth        |
-| [hub security](public-docs/hub/security.md)                  | Public Hub guide — trust boundaries, output authority |
+| Doc                                                          | What's in it                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [product](docs/product.md)                                   | What Paseo is, who it's for, where it's going                |
+| [architecture](docs/architecture.md)                         | System design, package layering, protocol, data flow         |
+| [agent-lifecycle](docs/agent-lifecycle.md)                   | Agent states, parent/child, archive semantics                |
+| [data-model](docs/data-model.md)                             | File-based JSON persistence, Zod, atomic writes              |
+| [glossary](docs/glossary.md)                                 | Authoritative terminology — UI label wins                    |
+| [coding-standards](docs/coding-standards.md)                 | Type hygiene, error handling, React patterns                 |
+| [design](docs/design.md)                                     | Design system — tokens, hierarchy, what's forbidden          |
+| [platform-gating](docs/platform-gating.md)                   | Platform gates, decision matrix, Metro extensions            |
+| [hover](docs/hover.md)                                       | Canonical hover pattern; the ways agents break it            |
+| [unistyles](docs/unistyles.md)                               | Unistyles gotchas — `useUnistyles()` is forbidden            |
+| [floating-panels](docs/floating-panels.md)                   | Anchored popovers, Android escape, status-bar offsets        |
+| [menus](docs/menus.md)                                       | Menu engine — popover vs sheet, when to use a submenu        |
+| [mobile-panels](docs/mobile-panels.md)                       | Compact panel ownership, worklet motion, Fabric              |
+| [explorer-sidebar](docs/explorer-sidebar.md)                 | Sidebar, side-pane, compact sheet host contracts             |
+| [expo-router](docs/expo-router.md)                           | Route ownership, startup restore, blank screens              |
+| [forms](docs/forms.md)                                       | Non-React form model, form kit, load-state gating            |
+| [file-icons](docs/file-icons.md)                             | Material icon theme in the file explorer                     |
+| [markdown-renderer](docs/markdown-renderer.md)               | Shared Markdown engine, native selection                     |
+| [native-text-selection](docs/native-text-selection.md)       | Diagram grouping, selection boundaries                       |
+| [providers](docs/providers.md)                               | Adding a new agent provider end-to-end                       |
+| [forge-providers](docs/forge-providers.md)                   | Adding a git forge — registry, tiers, self-host              |
+| [custom-providers](docs/custom-providers.md)                 | Z.AI, Qwen, ACP, profiles, custom binaries                   |
+| [plugins](docs/plugins.md)                                   | Plugin manifest, RPCs, native surfaces, attachments          |
+| [website-i18n](docs/website-i18n.md)                         | Website languages, locale URLs, translated Markdown, anchors |
+| [service-proxy](docs/service-proxy.md)                       | Workspace scripts at public URLs, reverse proxy              |
+| [rpc-namespacing](docs/rpc-namespacing.md)                   | Dotted RPC names, `.request`/`.response` pairs               |
+| [protocol-compatibility](docs/protocol-compatibility.md)     | Version drift, capability gating, COMPAT tags                |
+| [protocol-validation](docs/protocol-validation.md)           | zod-aot inbound validation, schema-purity rules              |
+| [permissions](docs/permissions.md)                           | Principals, credentials, pairing, Hub authority              |
+| [terminal-performance](docs/terminal-performance.md)         | Latency pipeline, coalescing/backpressure invariants         |
+| [agent-stream-performance](docs/agent-stream-performance.md) | Assistant text pipeline, paced reveal                        |
+| [terminal-activity](docs/terminal-activity.md)               | Activity indicators, agent hook reporting                    |
+| [file-observation](docs/file-observation.md)                 | Watcher ownership, Linux limits, teardown                    |
+| [development](docs/development.md)                           | Dev server, build sync gotchas, CLI reference                |
+| [testing](docs/testing.md)                                   | TDD, determinism, real dependencies, organization            |
+| [qa](docs/qa.md)                                             | QA evidence bar for pull requests                            |
+| [mobile-testing](docs/mobile-testing.md)                     | Maestro and mobile test workflows                            |
+| [ad-hoc-daemon-testing](docs/ad-hoc-daemon-testing.md)       | Isolated in-process daemon test harness                      |
+| [browser-capture-harness](docs/browser-capture-harness.md)   | Real-Electron screenshot harness, compositor gotcha          |
+| [android](docs/android.md)                                   | Variants, EAS builds, version codes, F-Droid                 |
+| [docker](docs/docker.md)                                     | Daemon and web UI in Docker, volumes, security               |
+| [release](docs/release.md)                                   | Release playbook, draft releases, checklist                  |
+| [visual-mock-workflow](docs/visual-mock-workflow.md)         | Planned Git-backed live mock iteration                       |
+| [writing-docs](docs/writing-docs.md)                         | Doc contract, layers, voice rules                            |
+| [SECURITY.md](SECURITY.md)                                   | Relay threat model, E2E encryption, agent auth               |
+| [hub security](public-docs/hub/security.md)                  | Public Hub guide — trust boundaries, output authority        |
 
 Deep archives, linked from the docs that own them: `docs/plans/`, `docs/tasks/`, `docs/specs/`, `docs/references/`, `docs/evaluations/`, `docs/qa-evidence/`, `docs/refactors/`, `docs/design/`, `docs/mockups/`, [Update Paseo on Apple Silicon](docs/update-macos.md), [OpenCode global event baseline](docs/opencode-global-event-baseline.md).
 
@@ -90,6 +91,8 @@ npm run format:check                 # Check formatting without writing
 ```
 
 Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
+
+When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: writes `artifacts/paseo-dogfood-arm64.apk` with diagnostics without starting a device; `npm run build:apk` builds all four Android architectures.
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
