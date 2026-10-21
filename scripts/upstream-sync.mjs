@@ -106,8 +106,11 @@ if (conflicts) {
 }
 git(["diff", "--cached", "--check"]);
 if (args.has("--verify")) {
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  const check = spawnSync(npm, ["run", "typecheck"], { cwd: root, stdio: "inherit" });
+  const check = spawnSync("npm", ["run", "typecheck"], {
+    cwd: root,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
   if (check.error) throw check.error;
   if (check.status !== 0) throw new Error("Typecheck failed; merge remains open.");
 }
