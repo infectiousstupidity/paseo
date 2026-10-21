@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-const {
-  getNativeReleaseVersion,
-} = require("./native-release-version");
+const { getNativeReleaseVersion } = require("./native-release-version");
 
 describe("native release version", () => {
   it("reserves the final iOS build slot for a stable release", () => {
@@ -26,5 +24,4 @@ describe("native release version", () => {
       "iOS beta number must be between 1 and 998",
     );
   });
-
 });

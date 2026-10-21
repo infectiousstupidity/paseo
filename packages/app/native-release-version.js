@@ -21,11 +21,7 @@ function getNativeReleaseVersion(version) {
   }
 
   const versionCode = major * 1_000_000 + minor * 1_000 + patch;
-  if (
-    !Number.isSafeInteger(versionCode) ||
-    versionCode <= 0 ||
-    versionCode > 2_100_000_000
-  ) {
+  if (!Number.isSafeInteger(versionCode) || versionCode <= 0 || versionCode > 2_100_000_000) {
     throw new Error(`Derived Android versionCode is out of range: ${versionCode}`);
   }
 

@@ -314,13 +314,19 @@ test("packaging runs on main without allocating pull-request runners", () => {
 });
 
 test("fork Windows builds remain enabled on main", () => {
-  const workflow = readFileSync(new URL(".github/workflows/fork-desktop-builds.yml", repoRoot), "utf8");
+  const workflow = readFileSync(
+    new URL(".github/workflows/fork-desktop-builds.yml", repoRoot),
+    "utf8",
+  );
   assert.match(workflow, /push:\s*\n\s+branches: \[main\]/);
   assert.match(workflow, /--win --x64/);
 });
 
 test("Android APK publishing remains available", () => {
-  const workflow = readFileSync(new URL(".github/workflows/android-apk-release.yml", repoRoot), "utf8");
+  const workflow = readFileSync(
+    new URL(".github/workflows/android-apk-release.yml", repoRoot),
+    "utf8",
+  );
   assert.match(workflow, /android-v\*/);
   assert.match(workflow, /eas build --platform android --profile production-apk/);
 });

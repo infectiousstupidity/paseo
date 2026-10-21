@@ -6,7 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const policy = JSON.parse(readFileSync(path.join(root, "scripts/upstream-sync-policy.json"), "utf8"));
+const policy = JSON.parse(
+  readFileSync(path.join(root, "scripts/upstream-sync-policy.json"), "utf8"),
+);
 const args = new Set(process.argv.slice(2));
 if ([...args].some((arg) => !["--dry-run", "--verify", "--no-commit"].includes(arg))) {
   throw new Error("Usage: node scripts/upstream-sync.mjs [--dry-run] [--verify] [--no-commit]");
@@ -16,19 +18,28 @@ function git(command, options = {}) {
   const result = spawnSync("git", command, { cwd: root, encoding: "utf8" });
   if (result.error) throw result.error;
   if (result.status !== 0 && !options.allowFailure) {
-    throw new Error("git " + command.join(" ") + " failed:\n" + (result.stderr || result.stdout));
+    throw new Error(
+      "git " + command.join(" ") + " failed:\n" + (result.stderr || result.stdout),
+    );
   }
   return result;
 }
 
 function existsInHead(candidate) {
-  return git(["ls-tree", "-r", "--name-only", "HEAD", "--", candidate]).stdout.trim().length > 0;
+  return (
+    git(["ls-tree", "-r", "--name-only", "HEAD", "--", candidate]).stdout.trim().length > 0
+  );
 }
 
 function ensurePaths(paths) {
   for (const candidate of paths) {
-    if (!candidate || path.isAbsolute(candidate) || candidate.includes("..") ||
-        candidate.includes("\\") || candidate.startsWith(".git/")) {
+    if (
+      !candidate ||
+      path.isAbsolute(candidate) ||
+      candidate.includes("..") ||
+      candidate.includes("\\") ||
+      candidate.startsWith(".git/")
+    ) {
       throw new Error("Unsafe upstream path policy: " + candidate);
     }
   }
@@ -56,17 +67,26 @@ if (remote.status !== 0) {
 }
 
 git(["fetch", "upstream", "main"]);
-if (git(["merge-base", "--is-ancestor", "upstream/main", "HEAD"], { allowFailure: true }).status === 0) {
+if (
+  git(["merge-base", "--is-ancestor", "upstream/main", "HEAD"], { allowFailure: true }).status === 0
+) {
   console.log("Already up to date with upstream/main.");
   process.exit(0);
 }
 if (args.has("--dry-run")) {
-  console.log("Incoming commits: " + git(["rev-list", "--count", "HEAD..upstream/main"]).stdout.trim());
+  console.log(
+    "Incoming commits: " + git(["rev-list", "--count", "HEAD..upstream/main"]).stdout.trim(),
+  );
   process.exit(0);
 }
 
-const merge = git(["merge", "--no-commit", "--no-ff", "upstream/main"], { allowFailure: true });
-if (merge.status !== 0 && git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFailure: true }).status !== 0) {
+const merge = git(["merge", "--no-commit", "--no-ff", "upstream/main"], {
+  allowFailure: true,
+});
+if (
+  merge.status !== 0 &&
+  git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], { allowFailure: true }).status !== 0
+) {
   throw new Error("Upstream merge failed before it could start: " + merge.stderr);
 }
 for (const candidate of policy.exclude) {
