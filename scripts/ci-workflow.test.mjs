@@ -7,7 +7,6 @@ import { runInNewContext } from "node:vm";
 const repoRoot = new URL("../", import.meta.url);
 const ciWorkflowPath = new URL(".github/workflows/ci.yml", repoRoot);
 const dockerWorkflowPath = new URL(".github/workflows/docker.yml", repoRoot);
-const nixWorkflowPath = new URL(".github/workflows/nix.yml", repoRoot);
 const filtersPath = new URL(".github/ci-paths.yml", repoRoot);
 const serverTsconfigPath = new URL("packages/server/tsconfig.server.json", repoRoot);
 const desktopPackagePath = new URL("packages/desktop/package.json", repoRoot);
@@ -108,7 +107,6 @@ test("gated checks are statically named jobs with real job-level gating", () => 
 test("pull-request checks run for every base branch, including stacked PRs", () => {
   for (const workflowPath of [
     ciWorkflowPath,
-    new URL(".github/workflows/desktop-packages.yml", repoRoot),
   ]) {
     const trigger = readFileSync(workflowPath, "utf8").split("jobs:", 1)[0];
     const pullRequest = trigger.match(/^  pull_request:\n((?:    .*\n)*)/m);
@@ -124,7 +122,7 @@ test("change gating allows superseded workflow runs to cancel", () => {
     /^concurrency:\n  group: ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref \}\}\n  cancel-in-progress: true$/m,
     "a newer push to any ref, main included, cancels the superseded run",
   );
-  for (const workflowPath of [ciWorkflowPath, dockerWorkflowPath, nixWorkflowPath]) {
+  for (const workflowPath of [ciWorkflowPath, dockerWorkflowPath]) {
     const source = readFileSync(workflowPath, "utf8");
     assert.doesNotMatch(
       source,
@@ -197,7 +195,6 @@ test("PR routing declares stable behavior ownership", () => {
     sdk: [
       "packages/plugin/**",
       "plugin-examples/**",
-      "public-docs/plugins/**",
       "packages/client/**",
       "packages/highlight/**",
       "packages/protocol/**",
@@ -307,7 +304,7 @@ test("browser and desktop tests have exclusive, directory-owned suites", () => {
 });
 
 test("packaging runs on main without allocating pull-request runners", () => {
-  for (const workflowPath of [dockerWorkflowPath, nixWorkflowPath]) {
+  for (const workflowPath of [dockerWorkflowPath]) {
     const source = readFileSync(workflowPath, "utf8");
     const trigger = source.split("jobs:", 1)[0];
     assert.match(trigger, /push:\s*\n\s+branches: \[main\]/);
@@ -316,44 +313,16 @@ test("packaging runs on main without allocating pull-request runners", () => {
   }
 });
 
-test("desktop packaging smokes main pushes and only the pull requests that touch packaging", () => {
-  const source = readFileSync(new URL(".github/workflows/desktop-packages.yml", repoRoot), "utf8");
-  const trigger = source.split("jobs:", 1)[0];
-  assert.match(trigger, /push:\s*\n\s+branches: \[main\]/);
-  assert.match(trigger, /pull_request:\s*\n\s+paths:/);
-  assert.match(trigger, /- "packages\/desktop\/\*\*"/);
-  assert.doesNotMatch(source, /dorny\/paths-filter/);
-  for (const action of ["actions/checkout", "actions/setup-node", "actions/upload-artifact"]) {
-    assert.match(source, new RegExp(`${action}@[0-9a-f]{40} # v\\d+\\.\\d+\\.\\d+`));
-  }
+test("fork Windows builds remain enabled on main", () => {
+  const workflow = readFileSync(new URL(".github/workflows/fork-desktop-builds.yml", repoRoot), "utf8");
+  assert.match(workflow, /push:\s*\n\s+branches: \[main\]/);
+  assert.match(workflow, /--win --x64/);
 });
 
-test("stable iOS releases upload once and distribute to external testers before App Store review", () => {
-  const source = readFileSync(
-    new URL("packages/app/.eas/workflows/release-mobile.yml", repoRoot),
-    "utf8",
-  );
-  const jobs = jobBlocks(source);
-  const uploads = [...jobs.entries()].filter(
-    ([, lines]) =>
-      lines.some((line) => /^    type: (submit|testflight)$/.test(line)) &&
-      lines.some((line) => line.includes("needs.build_ios.outputs.build_id")),
-  );
-  assert.equal(uploads.length, 1, "the iOS binary must be uploaded exactly once");
-  const [distributionId, distributionLines] = uploads[0];
-  const distribution = distributionLines.join("\n");
-  assert.match(distribution, /^    type: testflight$/m);
-  assert.match(distribution, /external_groups:\s*\n\s+- Paseo Beta/);
-  assert.match(distribution, /^      submit_beta_review: true$/m);
-
-  const review = jobs.get("submit_ios_for_review").join("\n");
-  assert.match(review, new RegExp(`needs: \\[build_ios, ${distributionId}\\]`));
-  assert.match(review, /APP_VERSION="\$\{\{ needs\.build_ios\.outputs\.app_version \}\}"/);
-  assert.match(
-    review,
-    /APP_BUILD_VERSION="\$\{\{ needs\.build_ios\.outputs\.app_build_version \}\}"/,
-  );
-  assert.match(review, /bundle exec fastlane ios submit_review/);
+test("Android APK publishing remains available", () => {
+  const workflow = readFileSync(new URL(".github/workflows/android-apk-release.yml", repoRoot), "utf8");
+  assert.match(workflow, /android-v\*/);
+  assert.match(workflow, /eas build --platform android --profile production-apk/);
 });
 
 test("eight Playwright shards share two-worker coverage", () => {

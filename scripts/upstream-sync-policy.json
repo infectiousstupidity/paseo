@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "description": "Fork-only paths omitted from future getpaseo/paseo merges; preserve own design work.",
+  "exclude": [
+    "nix/",
+    "flake.nix",
+    "flake.lock",
+    "scripts/update-nix.sh",
+    "scripts/trace-daemon.mjs",
+    "scripts/trace-daemon-dist.test.mjs",
+    ".github/workflows/nix.yml",
+    ".github/workflows/nix-update-hash.yml",
+    "packages/website/",
+    "public-docs/",
+    ".github/workflows/deploy-website.yml",
+    "fastlane/",
+    "packages/app/fastlane/",
+    "packages/app/src/fdroid/",
+    "packages/app/plugins/with-fdroid-autolinking.js",
+    "packages/app/.eas/workflows/",
+    "scripts/sync-fdroid-changelogs.mjs",
+    "scripts/sync-fdroid-changelogs.test.mjs",
+    "packages/expo-two-way-audio/examples/",
+    "packages/expo-two-way-audio/.github/",
+    "packages/expo-two-way-audio/package-lock.json",
+    "README.ja.md",
+    "README.ko.md",
+    "README.zh-CN.md",
+    "CHANGELOG.zh-CN.md",
+    ".github/FUNDING.yml",
+    ".github/ISSUE_TEMPLATE/",
+    ".github/workflows/deploy-app.yml",
+    ".github/workflows/deploy-relay.yml",
+    ".github/workflows/desktop-rollout.yml",
+    ".github/workflows/desktop-release.yml",
+    ".github/workflows/release-notes-sync.yml",
+    ".github/workflows/desktop-packages.yml"
+  ],
+  "preserve": [
+    "docs/mockups/",
+    "docs/tasks/"
+  ]
+}

@@ -2,12 +2,21 @@
   "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
     "plugins": {
-      "entry": ["**/index.{server,client}.{ts,tsx}", "**/*.test.ts"],
-      "project": ["**/*.{ts,tsx}"]
+      "entry": [
+        "**/index.{server,client}.{ts,tsx}",
+        "**/*.test.ts"
+      ],
+      "project": [
+        "**/*.{ts,tsx}"
+      ]
     },
     ".": {
-      "entry": ["scripts/**/*.{js,mjs,cjs,ts}"],
-      "project": ["scripts/**/*.{js,mjs,cjs,ts}"]
+      "entry": [
+        "scripts/**/*.{js,mjs,cjs,ts}"
+      ],
+      "project": [
+        "scripts/**/*.{js,mjs,cjs,ts}"
+      ]
     },
     "packages/server": {
       "entry": [
@@ -15,7 +24,10 @@
         "scripts/**/*.{ts,mts,mjs,cjs,js}",
         "src/**/*.test.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{ts,mts,mjs,cjs,js}"]
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,mts,mjs,cjs,js}"
+      ]
     },
     "packages/app": {
       "entry": [
@@ -28,40 +40,69 @@
         "vitest.config.{ts,js}",
         "test-stubs/**/*.ts"
       ],
-      "project": ["**/*.{ts,tsx,js,jsx}"],
+      "project": [
+        "**/*.{ts,tsx,js,jsx}"
+      ],
       "paths": {
-        "@server/*": ["../server/src/*"]
+        "@server/*": [
+          "../server/src/*"
+        ]
       },
       "expo": false
     },
     "packages/cli": {
-      "entry": ["src/index.ts", "bin/paseo", "src/**/*.test.{ts,tsx}", "tests/**/*.{ts,tsx}"],
-      "project": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"]
+      "entry": [
+        "src/index.ts",
+        "bin/paseo",
+        "src/**/*.test.{ts,tsx}",
+        "tests/**/*.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}"
+      ]
     },
     "packages/relay": {
-      "project": ["src/**/*.ts"]
-    },
-    "packages/website": {
-      "entry": ["src/router.tsx", "src/routes/**/*.tsx"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/desktop": {
-      "entry": ["src/preload.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts"]
+      "entry": [
+        "src/preload.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/highlight": {
-      "project": ["src/**/*.ts"]
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/expo-two-way-audio": {
-      "project": ["src/**/*.ts"]
+      "project": [
+        "src/**/*.ts"
+      ]
     },
     "packages/client": {
-      "entry": ["examples/**/*.ts", "src/**/*.test.ts"],
-      "project": ["src/**/*.ts", "examples/**/*.ts"]
+      "entry": [
+        "examples/**/*.ts",
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "examples/**/*.ts"
+      ]
     },
     "packages/protocol": {
-      "entry": ["src/**/*.ts"],
-      "project": ["src/**/*.ts"]
+      "entry": [
+        "src/**/*.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
     }
   },
   "ignoreDependencies": [
@@ -74,5 +115,12 @@
     "patch-package",
     "buffer"
   ],
-  "ignoreBinaries": ["xed", "eas", "wrangler", "powershell", "vitest", "open"]
+  "ignoreBinaries": [
+    "xed",
+    "eas",
+    "wrangler",
+    "powershell",
+    "vitest",
+    "open"
+  ]
 }
