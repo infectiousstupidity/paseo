@@ -98,6 +98,8 @@ A shim that exists for old-app or old-daemon support carries a comment naming it
 
 When a tag's condition is met, delete the shim and the tag in the same change.
 
+`npm run check:compat` audits the backlog: it counts the markers, lists the shims past their removal date, and fails CI when undated shims grow past the budget in `package.json#check:compat`. Plain `node scripts/compat-triage.mjs` prints the report, including what is due in the next six weeks, and `--archaeology` proposes a removal date for a marker that has neither date nor condition by dating its introducing commit.
+
 ## QA
 
 Tests don't fully cover compatibility. If you touched `packages/protocol`, say in the pull request why an older app still parses your message and why an older daemon still satisfies your app. See [qa.md](qa.md).

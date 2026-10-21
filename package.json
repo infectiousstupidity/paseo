@@ -77,6 +77,7 @@
     "lint:fix": "oxlint --fix",
     "knip": "knip",
     "knip:ci": "knip --production --include files,duplicates,unlisted --max-issues 6 --treat-config-hints-as-errors",
+    "check:compat": "node scripts/compat-triage.mjs --check --max-undated=47 --max-overdue=1",
     "acp:version-drift": "node scripts/check-acp-catalog-version-drift.mjs",
     "acp:version-drift:check": "node scripts/check-acp-catalog-version-drift.mjs --fail-on-drift",
     "acp:version-drift:update": "node scripts/check-acp-catalog-version-drift.mjs --update",

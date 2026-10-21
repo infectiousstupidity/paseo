@@ -166,6 +166,13 @@ jobs:
       - name: Find unused code
         run: npm run knip:ci
 
+      # COMPAT shim budget: 47 undated shims and the overdue
+      # providersSnapshot shim are grandfathered. Lower --max-undated and
+      # --max-overdue in package.json#check:compat as they go away;
+      # `npm run check:compat` lists them.
+      - name: Audit COMPAT markers
+        run: npm run check:compat
+
       - name: Run website tests
         run: npx vitest run packages/website/src --bail=1
 
