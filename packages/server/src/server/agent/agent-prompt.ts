@@ -459,7 +459,7 @@ function formatFinishNotificationBody(params: FinishNotificationBodyInput): stri
   if (lastAssistantMessage) {
     if (lastAssistantMessage.length > FINISH_NOTIFICATION_MESSAGE_LIMIT) {
       const omitted = lastAssistantMessage.length - FINISH_NOTIFICATION_MESSAGE_LIMIT;
-      lastAssistantMessage = `${lastAssistantMessage.slice(0, FINISH_NOTIFICATION_MESSAGE_LIMIT)}\n[truncated ${omitted} chars; use get_agent_activity for the full response]`;
+      lastAssistantMessage = `${lastAssistantMessage.slice(0, FINISH_NOTIFICATION_MESSAGE_LIMIT)}\n[truncated ${omitted} chars; use inspect_agent for the full response]`;
     }
     sections.push(`<agent-response>\n${lastAssistantMessage}\n</agent-response>`);
   }

@@ -9,6 +9,10 @@
   ],
   "type": "module",
   "exports": {
+    "./agent-tools": {
+      "types": "./dist/agent-tools.d.ts",
+      "default": "./dist/agent-tools.js"
+    },
     "./*": {
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"

@@ -11,7 +11,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { generateStructuredAgentResponse } from "./agent-response-loop.js";
 import { AgentManager } from "./agent-manager.js";
 import { AgentStorage } from "./agent-storage.js";
-import { createAgentMcpServer } from "./mcp-server.js";
+import { connectAgentMcpServer, createAgentMcpServer } from "./mcp-server.js";
 import { shutdownProviders } from "./provider-registry.js";
 import {
   canRunRealProvider,
@@ -77,7 +77,7 @@ async function startAgentMcpServer(logger: pino.Logger): Promise<AgentMcpServerH
       },
     });
 
-    await mcpServer.connect(transport);
+    await connectAgentMcpServer(mcpServer, transport);
     return transport;
   };
 

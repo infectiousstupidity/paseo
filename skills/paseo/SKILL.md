@@ -112,7 +112,7 @@ Agents take time — 10–30+ minutes is routine. Favor asynchronous workflows.
 
 For agent-scoped `create_agent` and `send_agent_prompt`, leave `notifyOnFinish` omitted or set it to `true` unless the work is truly fire-and-forget. You will get notified when the target agent finishes, errors, or needs permission. Move on to other work. The notification arrives on its own.
 
-With finish notifications enabled, don't poll `list_agents` or `get_agent_status` to "check on" a running agent. The notification will tell you.
+With finish notifications enabled, don't poll `list_agents` or `inspect_agent` to "check on" a running agent. The notification will tell you.
 
 ## CLI semantics
 

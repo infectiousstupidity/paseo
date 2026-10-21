@@ -45,7 +45,7 @@ tool injection globally, then add `paseoTools` to the exact provider IDs you lau
         "label": "Codex Worker",
         "paseoTools": {
           "toolset": "core",
-          "disabledTools": ["create_agent", "send_agent_prompt", "kill_agent"]
+          "disabledTools": ["create_agent", "send_agent_prompt", "terminate_agent"]
         }
       },
       "codex-isolated": {
@@ -90,20 +90,19 @@ MCP does not expose an agent-detach tool. Detaching is a manual user action in t
 
 ### Agents
 
-| Tool                 | Function                                                                                                                                                       |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `create_agent`       | Create an agent, optionally placing it in an existing workspace with `workspaceId`. Use `initialPrompt` to start work; returns without waiting for completion. |
-| `send_agent_prompt`  | Send a prompt using `agentId` and `prompt`; returns without waiting for completion.                                                                            |
-| `get_agent_status`   | Return the latest snapshot for an agent.                                                                                                                       |
-| `list_agents`        | List recent agents as compact metadata; `includeBackground: true` includes background work.                                                                    |
-| `cancel_agent`       | Abort an agent's current run but keep the agent alive.                                                                                                         |
-| `archive_agent`      | Soft-delete an agent and remove it from the active list.                                                                                                       |
-| `kill_agent`         | Terminate an agent session permanently.                                                                                                                        |
-| `update_agent`       | Update an agent name, labels, or runtime settings such as mode/model/thinking/features.                                                                        |
-| `get_agent_activity` | Return recent agent timeline entries as a curated summary.                                                                                                     |
-| `set_agent_mode`     | Switch an agent's session mode.                                                                                                                                |
+| Tool                | Function                                                                                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_agent`      | Create an agent, optionally placing it in an existing workspace with `workspaceId`. Use `initialPrompt` to start work; returns without waiting for completion.                  |
+| `send_agent_prompt` | Send a prompt using `agentId` and `prompt`; returns without waiting for completion.                                                                                             |
+| `inspect_agent`     | Return one agent's status snapshot and its recent activity in a single call.                                                                                                    |
+| `list_agents`       | List recent agents as compact metadata; `includeBackground: true` includes background work, `includeActivity: true` adds a recent activity summary, `ids` pins specific agents. |
+| `terminate_agent`   | Stop an agent: `mode: "cancel"` aborts its current run and keeps it alive, `mode: "kill"` ends the session permanently. `reason` says why.                                      |
+| `archive_agent`     | Soft-delete an agent and remove it from the active list.                                                                                                                        |
+| `update_agent`      | Update an agent name, labels, session mode (`modeId`), and runtime settings such as model/thinking/features.                                                                    |
 
-Paseo agents receive finish, error, and permission notifications by default; set `notifyOnFinish: false` to disable them. External MCP clients use `get_agent_status` and `get_agent_activity` to check results.
+Paseo agents receive finish, error, and permission notifications by default; set `notifyOnFinish: false` to disable them. External MCP clients use `inspect_agent` and `list_agents` to check results.
+
+The consolidated agents tools replace `get_agent_status`, `get_agent_activity`, `set_agent_mode`, `cancel_agent`, and `kill_agent`. Those names keep working, and naming them in `disabledTools` keeps disabling the tool that absorbed them.
 
 ### Workspaces
 

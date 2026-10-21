@@ -328,7 +328,7 @@ test("finish notifications truncate oversized child responses", async () => {
 
   expect(parentPrompt).toContain(included);
   expect(parentPrompt).toContain(
-    `[truncated ${omitted.length} chars; use get_agent_activity for the full response]`,
+    `[truncated ${omitted.length} chars; use inspect_agent for the full response]`,
   );
   expect(parentPrompt).not.toContain("TAIL-MARKER");
 });

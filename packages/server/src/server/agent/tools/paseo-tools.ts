@@ -6,7 +6,13 @@ import type { Logger } from "pino";
 
 import type { AgentMode, AgentProvider, AgentSessionConfig } from "../agent-sdk-types.js";
 import type { AgentManager } from "../agent-manager.js";
+import {
+  PASEO_AGENT_TOOL_COMPAT_ALIASES,
+  type PaseoAgentToolCompatAlias,
+} from "@getpaseo/protocol/agent-tools";
 import { ActiveTurnBehaviorSchema, AgentProfileSchema } from "@getpaseo/protocol/messages";
+import type { AgentListItemPayload, AgentSnapshotPayload } from "@getpaseo/protocol/messages";
+import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import type { DaemonConfigStore } from "../../daemon-config-store.js";
 import {
   AgentFeatureSchema,
@@ -16,7 +22,6 @@ import {
   AgentSnapshotPayloadSchema,
   WorkspaceScriptPayloadSchema,
 } from "../../messages.js";
-import type { AgentListItemPayload } from "../../messages.js";
 import {
   buildStoredAgentPayload,
   toAgentListItemPayload,
@@ -79,7 +84,6 @@ import {
   archiveAgentCommand,
   cancelAgentRunCommand,
   closeAgentCommand,
-  setAgentModeCommand,
   updateAgentCommand,
 } from "../lifecycle-command.js";
 import type { ForgeService } from "../../../services/forge-service.js";
@@ -164,6 +168,19 @@ export interface PaseoToolHostDependencies {
   voiceOnly?: boolean;
   logger: Logger;
 }
+
+// Projected timeline entries per agent behind list_agents' includeActivity summaries.
+const AGENT_LIST_ACTIVITY_LIMIT = 5;
+
+/**
+ * Provider config disables tools by name, and `disabledTools` is documented in public docs.
+ * A merged tool stays disabled when a config disables any name whose capability it absorbed.
+ */
+// COMPAT(disabledToolNames): added 2026-10-21, remove after 2027-04-22 once configs name merged tools.
+const CONSOLIDATED_TOOL_NAMES: Readonly<Record<string, readonly string[]>> = {
+  inspect_agent: ["get_agent_status", "get_agent_activity"],
+  terminate_agent: ["cancel_agent", "kill_agent"],
+};
 
 function parseTimestamp(value: string | null | undefined): number {
   if (!value) {
@@ -686,13 +703,21 @@ function createToolCatalog(
   };
 
   const tools = new Map<string, PaseoToolDefinition>();
+  // Consolidated families keep their retired names callable here instead of in `tools`, so
+  // advertised catalogs shrink while old call shapes from stored sessions still work.
+  const compatAliases = new Map<string, PaseoToolDefinition>();
+  const isDisabledToolName = (name: string): boolean =>
+    options.paseoToolPolicy?.disabledTools?.includes(name) === true;
   const registerTool = (
     name: string,
     config: PaseoToolConfig,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tool handlers are schema-validated at registration boundaries.
     handler: (input: any, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>,
   ) => {
-    if (!isPaseoToolEnabled(options.paseoToolPolicy, name)) {
+    if (
+      !isPaseoToolEnabled(options.paseoToolPolicy, name) ||
+      CONSOLIDATED_TOOL_NAMES[name]?.some(isDisabledToolName)
+    ) {
       return;
     }
     tools.set(name, {
@@ -704,17 +729,49 @@ function createToolCatalog(
       handler: handler as PaseoToolDefinition["handler"],
     });
   };
+  const registerCompatAlias = (
+    name: PaseoAgentToolCompatAlias,
+    config: {
+      inputSchema: z.ZodRawShape;
+      mapInput?: (input: Record<string, unknown>) => Record<string, unknown>;
+    },
+  ) => {
+    const targetTool = tools.get(PASEO_AGENT_TOOL_COMPAT_ALIASES[name]);
+    if (!targetTool || !isPaseoToolEnabled(options.paseoToolPolicy, name)) {
+      return;
+    }
+    compatAliases.set(name, {
+      name,
+      title: targetTool.title,
+      description: targetTool.description,
+      inputSchema: config.inputSchema,
+      outputSchema: targetTool.outputSchema,
+      handler: async (input: unknown, context: PaseoToolExecutionContext) => {
+        // executeTool validates input against this alias's schema before calling here.
+        const toolInput = (input ?? {}) as Record<string, unknown>;
+        return targetTool.handler(
+          config.mapInput ? config.mapInput(toolInput) : toolInput,
+          context,
+        );
+      },
+    });
+  };
+
+  const resolveTool = (name: string): PaseoToolDefinition | undefined =>
+    tools.get(name) ?? compatAliases.get(name);
+
   const toCatalog = (): PaseoToolCatalog => ({
     tools,
+    compatAliases,
     getTool(name: string): PaseoToolDefinition | undefined {
-      return tools.get(name);
+      return resolveTool(name);
     },
     async executeTool(
       name: string,
       input: unknown,
       context: PaseoToolExecutionContext = {},
     ): Promise<PaseoToolResult> {
-      const tool = tools.get(name);
+      const tool = resolveTool(name);
       if (!tool) {
         throw new PaseoToolInputError(`Paseo tool not found: ${name}`);
       }
@@ -1609,7 +1666,7 @@ function createToolCatalog(
       const guidance =
         callerAgentId && notifyOnFinish && initialPromptStarted
           ? "You will get notified when the created agent finishes, errors, or needs permission. Do not poll for status; continue with other work until the notification arrives."
-          : "Creation acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.";
+          : "Creation acknowledged. Observe completion using inspect_agent/list_agents or SDK/RPC subscriptions and wait APIs.";
       const response = {
         content: [],
         structuredContent: ensureValidJson({
@@ -2063,7 +2120,7 @@ function createToolCatalog(
         status: currentSnapshot?.lifecycle ?? "idle",
         guidance: notifying
           ? PROMPTED_AGENT_NOTIFICATION_GUIDANCE
-          : "Dispatch acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.",
+          : "Dispatch acknowledged. Observe completion using inspect_agent/list_agents or SDK/RPC subscriptions and wait APIs.",
       };
       const validJson = ensureValidJson(responseData);
 
@@ -2076,50 +2133,102 @@ function createToolCatalog(
   );
 
   registerTool(
-    "get_agent_status",
+    "inspect_agent",
     {
-      title: "Get agent status",
+      title: "Inspect agent",
       description:
-        "Return the latest snapshot for an agent, including lifecycle state, capabilities, and pending permissions.",
+        "Return one agent's latest status snapshot (lifecycle state, capabilities, pending permissions); set includeActivity to add a curated timeline.",
       inputSchema: {
         agentId: z.string(),
+        includeActivity: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Add a curated activity timeline to the status snapshot."),
+        limit: z
+          .number()
+          .optional()
+          .describe("Optional limit for number of activities to include (most recent first)."),
       },
       outputSchema: {
         status: AgentStatusEnum,
         snapshot: AgentSnapshotPayloadSchema,
+        agentId: z.string().optional(),
+        updateCount: z.number().optional(),
+        currentModeId: z.string().nullable().optional(),
+        content: z.string().optional(),
       },
     },
-    async ({ agentId }) => {
-      const snapshot = agentManager.getAgent(agentId);
-      if (snapshot) {
-        const structuredSnapshot = await serializeSnapshotWithMetadata(
+    async ({ agentId, includeActivity = false, limit }) => {
+      let status: z.infer<typeof AgentStatusEnum>;
+      let structuredSnapshot: AgentSnapshotPayload;
+      const liveSnapshot = agentManager.getAgent(agentId);
+      if (liveSnapshot) {
+        status = liveSnapshot.lifecycle;
+        structuredSnapshot = await serializeSnapshotWithMetadata(
           agentStorage,
-          snapshot,
+          liveSnapshot,
           childLogger,
         );
-        return {
-          content: [],
-          structuredContent: ensureValidJson({
-            status: snapshot.lifecycle,
-            snapshot: structuredSnapshot,
-          }),
-        };
+      } else {
+        const record = await agentStorage.get(agentId);
+        if (!record || record.internal) {
+          throw new PaseoToolInputError(`Agent ${agentId} not found`);
+        }
+        structuredSnapshot = buildStoredAgentPayload(
+          record,
+          new Set(providerSnapshotManager.listRegisteredProviderIds()),
+        );
+        status = structuredSnapshot.status;
       }
 
-      const record = await agentStorage.get(agentId);
-      if (!record || record.internal) {
-        throw new PaseoToolInputError(`Agent ${agentId} not found`);
+      const activityFields: Record<string, unknown> = {};
+      if (includeActivity) {
+        // Timeline reads hydrate a stored agent from its provider. Keep this opt-in so
+        // status-only inspection never resumes a closed agent just to retrieve a snapshot.
+        let timeline: AgentTimelineItem[] = [];
+        let activityNote: string | undefined;
+        try {
+          await ensureAgentLoaded(agentId, {
+            agentManager,
+            agentStorage,
+            logger: childLogger,
+          });
+          timeline = agentManager.getTimeline(agentId);
+        } catch (error) {
+          activityNote = `Activity unavailable: ${error instanceof Error ? error.message : String(error)}`;
+        }
+        const selection = selectItemsByProjectedLimit({
+          items: timeline,
+          direction: "tail",
+          limit: limit ?? 0,
+        });
+        const curatedContent = curateAgentActivity(selection.items);
+        const { totalProjected, shownProjected } = selection;
+
+        const noun = totalProjected === 1 ? "activity" : "activities";
+        const countHeader =
+          limit && shownProjected < totalProjected
+            ? `Showing ${shownProjected} of ${totalProjected} ${noun} (limited to ${limit})`
+            : `Showing all ${totalProjected} ${noun}`;
+        const contentLines = [countHeader, curatedContent];
+        if (activityNote) {
+          contentLines.push(activityNote);
+        }
+        Object.assign(activityFields, {
+          agentId,
+          updateCount: timeline.length,
+          currentModeId: agentManager.getAgent(agentId)?.currentModeId ?? null,
+          content: contentLines.join("\n\n"),
+        });
       }
 
-      const structuredSnapshot = buildStoredAgentPayload(
-        record,
-        new Set(providerSnapshotManager.listRegisteredProviderIds()),
-      );
       return {
         content: [],
         structuredContent: ensureValidJson({
-          status: structuredSnapshot.status,
+          status,
           snapshot: structuredSnapshot,
+          ...activityFields,
         }),
       };
     },
@@ -2129,11 +2238,23 @@ function createToolCatalog(
     "list_agents",
     {
       title: "List agents",
-      description: "List recent agents as compact metadata.",
+      description:
+        "List recent agents as compact metadata. Use ids to pin specific agents and includeActivity to read what is happening across them in one call.",
       inputSchema: {
         includeBackground: z.boolean().optional().default(false),
         includeArchived: z.boolean().optional().default(false),
         cwd: z.string().optional(),
+        ids: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Restrict the result to these agent IDs. Named IDs ignore the sinceHours window and include archived agents.",
+          ),
+        includeActivity: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Add a recent activity summary per agent, for a one-call status check."),
         sinceHours: z
           .number()
           .int()
@@ -2146,12 +2267,18 @@ function createToolCatalog(
       },
       outputSchema: {
         agents: z.array(AgentListItemPayloadSchema),
+        activity: z
+          .array(z.object({ agentId: z.string(), content: z.string() }))
+          .optional()
+          .describe("Present only when includeActivity is set."),
       },
     },
     async ({
       includeBackground = false,
       includeArchived = false,
       cwd,
+      ids,
+      includeActivity = false,
       sinceHours = 48,
       statuses,
       limit = 50,
@@ -2159,6 +2286,7 @@ function createToolCatalog(
       const callerCwd = callerAgentId ? resolveCallerAgent()?.cwd : undefined;
       const requestedCwd = cwd?.trim() ? expandUserPath(cwd) : callerCwd;
       const statusFilter = statuses && statuses.length > 0 ? new Set(statuses) : null;
+      const idFilter = ids && ids.length > 0 ? new Set(ids) : null;
       const sinceMs = Date.now() - sinceHours * 60 * 60 * 1000;
       if (!options.workspaceRegistry) throw new Error("Workspace registry is not configured");
       const directory = new AgentDirectory({
@@ -2179,41 +2307,96 @@ function createToolCatalog(
             new Set(providerSnapshotManager.listRegisteredProviderIds()),
           ),
       });
-      const agents = (await directory.list({ includeBackground, includeArchived }))
+      const agents = (
+        await directory.list({
+          includeBackground,
+          includeArchived: includeArchived || idFilter !== null,
+        })
+      )
         .map(toAgentListItemPayload)
+        .filter((agent) => !idFilter || idFilter.has(agent.id))
         .filter((agent) => !requestedCwd || isSameOrDescendantPath(requestedCwd, agent.cwd))
         .filter((agent) => !statusFilter || statusFilter.has(agent.status))
-        .filter((agent) => !agent.archivedAt || resolveAgentListActivityTime(agent) >= sinceMs)
+        .filter(
+          (agent) =>
+            !agent.archivedAt ||
+            idFilter !== null ||
+            resolveAgentListActivityTime(agent) >= sinceMs,
+        )
         .sort(compareAgentListItems)
         .slice(0, limit);
 
+      // Activity is read from live timelines only; a stored agent is hydrated by inspect_agent.
+      const activity = includeActivity
+        ? agents.map((agent) => ({
+            agentId: agent.id,
+            content: curateAgentActivity(
+              selectItemsByProjectedLimit({
+                items: agentManager.getTimeline(agent.id),
+                direction: "tail",
+                limit: AGENT_LIST_ACTIVITY_LIMIT,
+              }).items,
+            ),
+          }))
+        : undefined;
+
       return {
         content: [],
-        structuredContent: ensureValidJson({ agents }),
+        structuredContent: ensureValidJson({
+          agents,
+          ...(activity ? { activity } : {}),
+        }),
       };
     },
   );
 
   registerTool(
-    "cancel_agent",
+    "terminate_agent",
     {
-      title: "Cancel agent run",
-      description: "Abort the agent's current run but keep the agent alive for future tasks.",
+      title: "Terminate agent",
+      description:
+        "Stop an agent, your way: mode cancel aborts its current run and keeps the agent alive for future tasks; mode kill ends the session permanently.",
       inputSchema: {
         agentId: z.string(),
+        mode: z
+          .enum(["cancel", "kill"])
+          .describe(
+            '"cancel" aborts the current run only; "kill" terminates the agent session for good.',
+          ),
+        reason: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            "Why you are stopping this agent; recorded with the termination for the caller to report.",
+          ),
       },
       outputSchema: {
         success: z.boolean(),
+        mode: z.enum(["cancel", "kill"]),
+        reason: z.string(),
       },
     },
-    async ({ agentId }) => {
-      const { cancelled } = await cancelAgentRunCommand(
-        { agentManager, logger: childLogger },
-        agentId,
+    async ({ agentId, mode, reason }) => {
+      childLogger.info(
+        { agentId, mode, reason },
+        "Terminating agent (terminate_agent): cancel aborts the run, kill closes the session",
       );
+      if (mode === "cancel") {
+        const { cancelled } = await cancelAgentRunCommand(
+          { agentManager, logger: childLogger },
+          agentId,
+        );
+        return {
+          content: [],
+          structuredContent: ensureValidJson({ success: cancelled, mode, reason }),
+        };
+      }
+
+      await closeAgentCommand({ agentManager }, agentId);
       return {
         content: [],
-        structuredContent: ensureValidJson({ success: cancelled }),
+        structuredContent: ensureValidJson({ success: true, mode, reason }),
       };
     },
   );
@@ -2248,27 +2431,6 @@ function createToolCatalog(
   );
 
   registerTool(
-    "kill_agent",
-    {
-      title: "Kill agent",
-      description: "Terminate an agent session permanently.",
-      inputSchema: {
-        agentId: z.string(),
-      },
-      outputSchema: {
-        success: z.boolean(),
-      },
-    },
-    async ({ agentId }) => {
-      await closeAgentCommand({ agentManager }, agentId);
-      return {
-        content: [],
-        structuredContent: ensureValidJson({ success: true }),
-      };
-    },
-  );
-
-  registerTool(
     "update_agent",
     {
       title: "Update agent",
@@ -2277,17 +2439,32 @@ function createToolCatalog(
         agentId: z.string(),
         name: z.string().optional(),
         labels: z.record(z.string(), z.string()).optional().describe("Labels to set on the agent"),
+        // COMPAT(setAgentModeParam): added 2026-10-21, remove after 2027-04-22 once callers
+        // pass the mode through settings.
+        modeId: z
+          .string()
+          .optional()
+          .describe("Session mode ID to switch to. Same as settings.modeId."),
         settings: UpdateAgentSettingsInputSchema.optional().describe(
           "Runtime settings to apply to the agent.",
         ),
       },
       outputSchema: {
         success: z.boolean(),
+        newMode: z.string().optional().describe("Set when a session mode was switched."),
       },
     },
-    async ({ agentId, name, labels, settings }) => {
-      if (settings?.modeId !== undefined) {
-        await agentManager.setAgentMode(agentId, settings.modeId);
+    async ({ agentId, name, labels, modeId, settings }) => {
+      const nextModeId = settings?.modeId ?? modeId;
+      let newMode: string | undefined;
+      if (nextModeId !== undefined) {
+        if (isDisabledToolName("set_agent_mode")) {
+          throw new PaseoToolInputError(
+            "Setting an agent's session mode is disabled for this provider.",
+          );
+        }
+        await agentManager.setAgentMode(agentId, nextModeId);
+        newMode = nextModeId;
       }
       if (settings?.model !== undefined) {
         await agentManager.setAgentModel(agentId, settings.model);
@@ -2305,10 +2482,54 @@ function createToolCatalog(
 
       return {
         content: [],
-        structuredContent: ensureValidJson({ success: true }),
+        structuredContent: ensureValidJson({
+          success: true,
+          ...(newMode !== undefined ? { newMode } : {}),
+        }),
       };
     },
   );
+
+  // Agents family consolidation: the retired names stay callable and route to the tools
+  // above, so sessions that stored the old call shapes keep working while advertised
+  // catalogs shrink. Each alias keeps its own input contract and maps to the target's shape.
+
+  // COMPAT(getAgentStatusTool): added 2026-10-21, remove after 2027-04-22 once agents call inspect_agent.
+  registerCompatAlias("get_agent_status", {
+    inputSchema: { agentId: z.string() },
+  });
+
+  // COMPAT(getAgentActivityTool): added 2026-10-21, remove after 2027-04-22 once agents call inspect_agent.
+  registerCompatAlias("get_agent_activity", {
+    inputSchema: { agentId: z.string(), limit: z.number().optional() },
+    mapInput: ({ agentId, limit }) => ({ agentId, includeActivity: true, limit }),
+  });
+
+  // COMPAT(setAgentModeTool): added 2026-10-21, remove after 2027-04-22 once agents set modes through update_agent.
+  registerCompatAlias("set_agent_mode", {
+    inputSchema: { agentId: z.string(), modeId: z.string() },
+    mapInput: ({ agentId, modeId }) => ({ agentId, modeId }),
+  });
+
+  // COMPAT(cancelAgentTool): added 2026-10-21, remove after 2027-04-22 once agents call terminate_agent with mode "cancel".
+  registerCompatAlias("cancel_agent", {
+    inputSchema: { agentId: z.string() },
+    mapInput: ({ agentId }) => ({
+      agentId,
+      mode: "cancel",
+      reason: "Requested through the retired cancel_agent name.",
+    }),
+  });
+
+  // COMPAT(killAgentTool): added 2026-10-21, remove after 2027-04-22 once agents call terminate_agent with mode "kill".
+  registerCompatAlias("kill_agent", {
+    inputSchema: { agentId: z.string() },
+    mapInput: ({ agentId }) => ({
+      agentId,
+      mode: "kill",
+      reason: "Requested through the retired kill_agent name.",
+    }),
+  });
 
   registerTool(
     "rename_workspace",
@@ -3150,86 +3371,6 @@ function createToolCatalog(
           selectedModel: selectedModel ?? null,
           features,
         }),
-      };
-    },
-  );
-
-  registerTool(
-    "get_agent_activity",
-    {
-      title: "Get agent activity",
-      description: "Return recent agent timeline entries as a curated summary.",
-      inputSchema: {
-        agentId: z.string(),
-        limit: z
-          .number()
-          .optional()
-          .describe("Optional limit for number of activities to include (most recent first)."),
-      },
-      outputSchema: {
-        agentId: z.string(),
-        updateCount: z.number(),
-        currentModeId: z.string().nullable(),
-        content: z.string(),
-      },
-    },
-    async ({ agentId, limit }) => {
-      await ensureAgentLoaded(agentId, {
-        agentManager,
-        agentStorage,
-        logger: childLogger,
-      });
-      const timeline = agentManager.getTimeline(agentId);
-      const snapshot = agentManager.getAgent(agentId);
-
-      const selection = selectItemsByProjectedLimit({
-        items: timeline,
-        direction: "tail",
-        limit: limit ?? 0,
-      });
-      const curatedContent = curateAgentActivity(selection.items);
-      const { totalProjected, shownProjected } = selection;
-
-      const noun = totalProjected === 1 ? "activity" : "activities";
-      const countHeader =
-        limit && shownProjected < totalProjected
-          ? `Showing ${shownProjected} of ${totalProjected} ${noun} (limited to ${limit})`
-          : `Showing all ${totalProjected} ${noun}`;
-
-      const contentWithCount = `${countHeader}\n\n${curatedContent}`;
-
-      return {
-        content: [],
-        structuredContent: ensureValidJson({
-          agentId,
-          updateCount: timeline.length,
-          currentModeId: snapshot?.currentModeId ?? null,
-          content: contentWithCount,
-        }),
-      };
-    },
-  );
-
-  registerTool(
-    "set_agent_mode",
-    {
-      title: "Set agent session mode",
-      description:
-        "Switch the agent's session mode (plan, bypassPermissions, read-only, auto, etc.).",
-      inputSchema: {
-        agentId: z.string(),
-        modeId: z.string(),
-      },
-      outputSchema: {
-        success: z.boolean(),
-        newMode: z.string(),
-      },
-    },
-    async ({ agentId, modeId }) => {
-      const result = await setAgentModeCommand({ agentManager }, { agentId, modeId });
-      return {
-        content: [],
-        structuredContent: ensureValidJson({ success: true, newMode: result.modeId }),
       };
     },
   );

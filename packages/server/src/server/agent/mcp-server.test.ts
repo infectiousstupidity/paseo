@@ -12,7 +12,12 @@ import { tmpdir } from "node:os";
 import { z } from "zod";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import { createAgentMcpServer as createAgentMcpServerWithDependencies } from "./mcp-server.js";
+import {
+  connectAgentMcpServer,
+  createAgentMcpServer as createAgentMcpServerWithDependencies,
+} from "./mcp-server.js";
+import { createPaseoToolCatalog } from "./tools/paseo-tools.js";
+import type { ProviderPaseoToolsPolicy } from "./tools/types.js";
 import { AgentManager, type ManagedAgent } from "./agent-manager.js";
 import { AgentStorage, type StoredAgentRecord } from "./agent-storage.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
@@ -645,7 +650,7 @@ class BoundaryProviderSnapshotManagerFake {
 async function connectInMemoryMcpClient(server: Awaited<ReturnType<typeof createAgentMcpServer>>) {
   const client = new Client({ name: "paseo-test-client", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverTransport);
+  await connectAgentMcpServer(server, serverTransport);
   await client.connect(clientTransport);
   return client;
 }
@@ -921,6 +926,195 @@ describe("Paseo tool timeline presentation", () => {
       await client.close();
       await server.close();
     }
+  });
+});
+
+describe("agents family consolidation", () => {
+  const logger = createTestLogger();
+  const CONSOLIDATED_AGENT_TOOLS = [
+    "archive_agent",
+    "create_agent",
+    "inspect_agent",
+    "list_agents",
+    "send_agent_prompt",
+    "terminate_agent",
+    "update_agent",
+  ];
+  const RETIRED_AGENT_TOOLS = [
+    "cancel_agent",
+    "get_agent_activity",
+    "get_agent_status",
+    "kill_agent",
+    "set_agent_mode",
+  ];
+
+  async function createConsolidatedServer(paseoToolPolicy?: ProviderPaseoToolsPolicy) {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockImplementation((id: string) =>
+      id === "live-agent" ? createManagedAgent({ id: "live-agent" }) : null,
+    );
+    spies.agentManager.hasInFlightRun.mockReturnValue(true);
+    spies.agentManager.cancelAgentRun.mockResolvedValue({ status: "settled" });
+    const closeAgent = vi.fn().mockResolvedValue(undefined);
+    Object.assign(spies.agentManager, { closeAgent });
+
+    const server = await createAgentMcpServer({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      ...(paseoToolPolicy ? { paseoToolPolicy } : {}),
+      logger,
+    });
+    const client = await connectInMemoryMcpClient(server);
+    return { spies, closeAgent, server, client };
+  }
+
+  it("advertises one detail tool and one termination tool for agents", async () => {
+    const { server, client } = await createConsolidatedServer();
+    try {
+      const { tools } = await client.listTools();
+      const advertisedAgents = tools
+        .map((tool) => tool.name)
+        .filter((name) => [...CONSOLIDATED_AGENT_TOOLS, ...RETIRED_AGENT_TOOLS].includes(name));
+      expect(advertisedAgents.sort()).toEqual([...CONSOLIDATED_AGENT_TOOLS].sort());
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("keeps every retired agent tool name callable through the merged tools", async () => {
+    const { spies, closeAgent, server, client } = await createConsolidatedServer();
+    try {
+      const status = (await client.callTool({
+        name: "get_agent_status",
+        arguments: {
+          agentId: "live-agent",
+        },
+      })) as InMemoryCallResult;
+      expect(status.isError).toBeFalsy();
+      expect(status.structuredContent).toEqual({
+        status: "idle",
+        snapshot: expect.objectContaining({ id: "live-agent" }),
+      });
+      expect(spies.agentManager.hydrateTimelineFromProvider).not.toHaveBeenCalled();
+
+      const activity = (await client.callTool({
+        name: "get_agent_activity",
+        arguments: {
+          agentId: "live-agent",
+        },
+      })) as InMemoryCallResult;
+      expect(activity.structuredContent).toMatchObject({
+        agentId: "live-agent",
+        updateCount: 0,
+        content: expect.stringContaining("Showing all 0 activities"),
+      });
+
+      const mode = (await client.callTool({
+        name: "set_agent_mode",
+        arguments: {
+          agentId: "live-agent",
+          modeId: "plan",
+        },
+      })) as InMemoryCallResult;
+      expect(spies.agentManager.setAgentMode).toHaveBeenCalledWith("live-agent", "plan");
+      expect(mode.structuredContent).toEqual({ success: true, newMode: "plan" });
+
+      const cancelled = (await client.callTool({
+        name: "cancel_agent",
+        arguments: {
+          agentId: "live-agent",
+        },
+      })) as InMemoryCallResult;
+      expect(spies.agentManager.cancelAgentRun).toHaveBeenCalledWith("live-agent");
+      expect(cancelled.structuredContent).toMatchObject({
+        success: true,
+        mode: "cancel",
+        reason: expect.any(String),
+      });
+
+      const killed = (await client.callTool({
+        name: "kill_agent",
+        arguments: { agentId: "live-agent" },
+      })) as InMemoryCallResult;
+      expect(closeAgent).toHaveBeenCalledWith("live-agent");
+      expect(killed.structuredContent).toMatchObject({ success: true, mode: "kill" });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("answers a status and activity check across agents in one list_agents call", async () => {
+    const { spies, server, client } = await createConsolidatedServer();
+    spies.agentManager.listAgents.mockReturnValue([createManagedAgent({ id: "live-agent" })]);
+    spies.agentManager.getTimeline.mockReturnValue([
+      { type: "assistant_message", text: "recent work" },
+    ]);
+    try {
+      const listed = (await client.callTool({
+        name: "list_agents",
+        arguments: {
+          includeActivity: true,
+        },
+      })) as InMemoryCallResult;
+      expect(listed.structuredContent).toMatchObject({
+        agents: [expect.objectContaining({ id: "live-agent", status: "idle" })],
+        activity: [{ agentId: "live-agent", content: expect.stringContaining("recent work") }],
+      });
+
+      const withoutActivity = (await client.callTool({
+        name: "list_agents",
+        arguments: {},
+      })) as InMemoryCallResult;
+      expect(withoutActivity.structuredContent).toEqual({
+        agents: [expect.objectContaining({ id: "live-agent", status: "idle" })],
+      });
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("keeps a retired name in disabledTools suppressing the merged tool", async () => {
+    const { server, client } = await createConsolidatedServer({
+      disabledTools: ["cancel_agent"],
+    });
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).not.toContain("terminate_agent");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("resolves retired names in the direct catalog without advertising them", async () => {
+    const { agentManager, agentStorage, spies } = createTestDeps();
+    spies.agentManager.getAgent.mockReturnValue(createManagedAgent({ id: "catalog-agent" }));
+    const catalog = await createPaseoToolCatalog({
+      agentManager,
+      agentStorage,
+      providerSnapshotManager: createOpenCodeManager().manager,
+      logger,
+    });
+
+    for (const name of RETIRED_AGENT_TOOLS) {
+      expect(catalog.tools.has(name)).toBe(false);
+      expect(catalog.compatAliases.has(name)).toBe(true);
+      expect(catalog.getTool(name)?.name).toBe(name);
+    }
+    expect(catalog.getTool("inspect_agent")?.name).toBe("inspect_agent");
+    expect(catalog.getTool("terminate_agent")?.name).toBe("terminate_agent");
+    await expect(
+      catalog.executeTool("get_agent_status", { agentId: "catalog-agent" }),
+    ).resolves.toMatchObject({
+      structuredContent: {
+        status: "idle",
+        snapshot: expect.objectContaining({ id: "catalog-agent" }),
+      },
+    });
   });
 });
 
@@ -5326,7 +5520,7 @@ describe("update_agent MCP tool", () => {
       title: "Updated agent",
       labels: { role: "worker" },
     });
-    expect(response.structuredContent).toEqual({ success: true });
+    expect(response.structuredContent).toEqual({ success: true, newMode: "full-access" });
   });
 
   it("reports success for a no-op update with neither metadata nor settings", async () => {
@@ -6761,7 +6955,7 @@ describe("agent snapshot MCP serialization", () => {
     expect(structured.agents[0]).not.toHaveProperty("pendingPermissions");
   });
 
-  it("returns archived agent snapshots from storage for get_agent_status", async () => {
+  it("returns archived agent snapshots from storage for inspect_agent", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const record = createStoredRecord({
       id: "archived-agent",
@@ -6776,7 +6970,7 @@ describe("agent snapshot MCP serialization", () => {
       logger,
       providerSnapshotManager: createClaudeOnlyManager(),
     });
-    const tool = registeredTool(server, "get_agent_status");
+    const tool = registeredTool(server, "inspect_agent");
     const response = await tool.handler({ agentId: "archived-agent" });
 
     expect(response.structuredContent).toEqual({
@@ -6789,9 +6983,11 @@ describe("agent snapshot MCP serialization", () => {
       }),
     });
     expect(spies.agentStorage.get).toHaveBeenCalledWith("archived-agent");
+    expect(spies.agentManager.resumeAgentFromPersistence).not.toHaveBeenCalled();
+    expect(spies.agentManager.hydrateTimelineFromProvider).not.toHaveBeenCalled();
   });
 
-  it("returns full-detail snapshots from get_agent_status", async () => {
+  it("returns full-detail snapshots from inspect_agent", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentStorage.get.mockResolvedValue({ title: "Full detail agent" });
     spies.agentManager.getAgent.mockReturnValue(
@@ -6847,14 +7043,14 @@ describe("agent snapshot MCP serialization", () => {
       providerSnapshotManager: createOpenCodeManager().manager,
       logger,
     });
-    const tool = registeredTool(server, "get_agent_status");
+    const tool = registeredTool(server, "inspect_agent");
     const response = await tool.handler({ agentId: "full-detail-agent" });
     const snapshot = z.record(z.string(), z.unknown()).parse(response.structuredContent.snapshot);
 
     const parsed = AgentSnapshotPayloadSchema.safeParse(snapshot);
     if (!parsed.success) {
       throw new Error(
-        `get_agent_status response failed AgentSnapshotPayloadSchema: ${JSON.stringify(parsed.error.issues, null, 2)}`,
+        `inspect_agent response failed AgentSnapshotPayloadSchema: ${JSON.stringify(parsed.error.issues, null, 2)}`,
       );
     }
     expect(response.structuredContent.status).toBe("idle");
@@ -6904,7 +7100,7 @@ describe("agent snapshot MCP serialization", () => {
     expect(snapshot.pendingPermissions).toEqual([]);
   });
 
-  it("does not expose internal stored agents from get_agent_status", async () => {
+  it("does not expose internal stored agents from inspect_agent", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue(null);
     spies.agentStorage.get.mockResolvedValue(
@@ -6920,7 +7116,7 @@ describe("agent snapshot MCP serialization", () => {
       logger,
       providerSnapshotManager: createClaudeOnlyManager(),
     });
-    const tool = registeredTool(server, "get_agent_status");
+    const tool = registeredTool(server, "inspect_agent");
 
     await expect(tool.handler({ agentId: "internal-agent" })).rejects.toThrow(
       "Agent internal-agent not found",
@@ -7274,16 +7470,18 @@ describe("agent snapshot MCP serialization", () => {
     ]);
   });
 
-  it("loads archived agents before reading get_agent_activity", async () => {
+  it("loads archived agents before reading agent activity", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const record = createStoredRecord({ id: "archived-activity-agent" });
     const snapshot = {
       id: "archived-activity-agent",
       currentModeId: "default",
     } as ManagedAgent;
+    // inspect_agent reads the live snapshot first, so the archived lookup sees null twice:
+    // once in the tool, once inside ensureAgentLoaded, before resume resolves it.
     spies.agentManager.getAgent
       .mockReturnValueOnce(null)
-      .mockReturnValue(snapshot)
+      .mockReturnValueOnce(null)
       .mockReturnValue(snapshot);
     spies.agentStorage.get.mockResolvedValue(record);
     spies.agentManager.resumeAgentFromPersistence.mockResolvedValue(snapshot);
@@ -7301,8 +7499,11 @@ describe("agent snapshot MCP serialization", () => {
       logger,
       providerSnapshotManager: createClaudeOnlyManager(),
     });
-    const tool = registeredTool(server, "get_agent_activity");
-    const response = await tool.handler({ agentId: "archived-activity-agent" });
+    const tool = registeredTool(server, "inspect_agent");
+    const response = await tool.handler({
+      agentId: "archived-activity-agent",
+      includeActivity: true,
+    });
 
     expect(response.structuredContent).toEqual(
       expect.objectContaining({
@@ -7318,7 +7519,7 @@ describe("agent snapshot MCP serialization", () => {
     );
   });
 
-  it("get_agent_activity limit counts projected messages, not raw deltas", async () => {
+  it("inspect_agent limit counts projected messages, not raw deltas", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const snapshot = createManagedAgent({ id: "live-activity-agent", currentModeId: "default" });
     spies.agentManager.getAgent.mockReturnValue(snapshot);
@@ -7338,14 +7539,18 @@ describe("agent snapshot MCP serialization", () => {
       logger: createTestLogger(),
       providerSnapshotManager: createClaudeOnlyManager(),
     });
-    const tool = registeredTool(server, "get_agent_activity");
-    const response = await tool.handler({ agentId: "live-activity-agent", limit: 1 });
+    const tool = registeredTool(server, "inspect_agent");
+    const response = await tool.handler({
+      agentId: "live-activity-agent",
+      includeActivity: true,
+      limit: 1,
+    });
 
     const content = String(response.structuredContent.content);
     expect(content).toContain("Hello world. How are you?");
   });
 
-  it("get_agent_activity limit=2 returns the last two projected entries whole", async () => {
+  it("inspect_agent limit=2 returns the last two projected entries whole", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     const snapshot = createManagedAgent({ id: "live-activity-agent-2", currentModeId: "default" });
     spies.agentManager.getAgent.mockReturnValue(snapshot);
@@ -7367,8 +7572,12 @@ describe("agent snapshot MCP serialization", () => {
       logger: createTestLogger(),
       providerSnapshotManager: createClaudeOnlyManager(),
     });
-    const tool = registeredTool(server, "get_agent_activity");
-    const response = await tool.handler({ agentId: "live-activity-agent-2", limit: 2 });
+    const tool = registeredTool(server, "inspect_agent");
+    const response = await tool.handler({
+      agentId: "live-activity-agent-2",
+      includeActivity: true,
+      limit: 2,
+    });
 
     const content = String(response.structuredContent.content);
     expect(content).toContain("[User] u3");
