@@ -2,6 +2,7 @@
   "version": 1,
   "description": "Fork-only paths omitted from future getpaseo/paseo merges; preserve own design work.",
   "exclude": [
+    "./claude/",
     "nix/",
     "flake.nix",
     "flake.lock",
@@ -36,8 +37,5 @@
     ".github/workflows/release-notes-sync.yml",
     ".github/workflows/desktop-packages.yml"
   ],
-  "preserve": [
-    "docs/mockups/",
-    "docs/tasks/"
-  ]
+  "preserve": ["docs/mockups/", "docs/tasks/"]
 }
