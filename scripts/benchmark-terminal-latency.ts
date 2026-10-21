@@ -180,21 +180,25 @@ async function bootDaemon(): Promise<BootedDaemon> {
     throw new Error("Refusing to use port 6767 (the developer daemon)");
   }
   const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-bench-home-"));
-  const tsxBin = execSync("which tsx").toString().trim();
-
-  const child = spawn(tsxBin, ["scripts/supervisor-entrypoint.ts", "--dev"], {
-    cwd: SERVER_DIR,
-    env: {
-      ...process.env,
-      PASEO_HOME: paseoHome,
-      PASEO_SERVER_ID: "srv_terminal_bench",
-      PASEO_LISTEN: `127.0.0.1:${port}`,
-      PASEO_NODE_ENV: "development",
-      NODE_ENV: "development",
+  // Match the server's dev command. Node resolves tsx from the server
+  // workspace, and process.execPath works on Windows without a POSIX 'which'.
+  const child = spawn(
+    process.execPath,
+    ["--import", "tsx", "scripts/supervisor-entrypoint.ts", "--dev"],
+    {
+      cwd: SERVER_DIR,
+      env: {
+        ...process.env,
+        PASEO_HOME: paseoHome,
+        PASEO_SERVER_ID: "srv_terminal_bench",
+        PASEO_LISTEN: `127.0.0.1:${port}`,
+        PASEO_NODE_ENV: "development",
+        NODE_ENV: "development",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
     },
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: false,
-  });
+  );
 
   child.stdout?.on("data", (data: Buffer) => {
     for (const line of data.toString().split("\n")) {
@@ -209,7 +213,13 @@ async function bootDaemon(): Promise<BootedDaemon> {
     }
   });
 
-  await waitForPort(port, child, 30_000);
+  try {
+    await waitForPort(port, child, 30_000);
+  } catch (error) {
+    child.kill();
+    await rm(paseoHome, { recursive: true, force: true });
+    throw error;
+  }
   return { child, port, paseoHome, pid: child.pid ?? -1 };
 }
 
@@ -711,7 +721,7 @@ async function main(): Promise<void> {
 
     printTable(results);
 
-    const outDir = "/tmp/paseo-terminal-bench";
+    const outDir = path.join(os.tmpdir(), "paseo-terminal-bench");
     await mkdir(outDir, { recursive: true });
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outPath = path.join(outDir, `${timestamp}.json`);
