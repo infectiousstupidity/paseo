@@ -60,6 +60,50 @@ describe("ProviderSubagentStore", () => {
     expect(subagents.list("parent-b")).toHaveLength(1);
   });
 
+  test("keeps native Pi targets private, parent-scoped, and revokes them on terminal state", () => {
+    const store = new ProviderSubagentStore();
+    const target = { runId: "run-1", childId: "native-second", snapshotId: "step:1", index: 1, sessionId: "pi-session" };
+    const update = store.apply("parent-a", "pi", {
+      type: "upsert", id: "call-1:1", status: "running", controlTarget: target,
+    });
+    expect(store.getControlTarget("parent-a", "call-1:1")).toEqual(target);
+    expect(store.getControlTarget("parent-b", "call-1:1")).toBeNull();
+    expect(store.get("parent-a", "call-1:1")).not.toHaveProperty("controlTarget");
+    expect(update).not.toHaveProperty("controlTarget");
+    if (update.type === "upsert") expect(update.subagent).not.toHaveProperty("controlTarget");
+
+    // Unknown native run IDs must never ride on a public descriptor or update.
+    store.apply("parent-a", "pi", { type: "upsert", id: "call-1:1", status: "canceled" });
+    expect(store.getControlTarget("parent-a", "call-1:1")).toBeNull();
+    expect(store.get("parent-a", "call-1:1")?.controlEligible).toBe(false);
+    // Canceled/stopped children must never retain a native target for a guessed Resume.
+    store.apply("parent-a", "claude", {
+      type: "upsert", id: "call-1:2", status: "running", controlTarget: target,
+    });
+    expect(store.getControlTarget("parent-a", "call-1:2")).toBeNull();
+    store.apply("parent-a", "pi", {
+      type: "upsert", id: "call-1:3", status: "running", controlTarget: target,
+    });
+    store.apply("parent-a", "pi", { type: "remove", id: "call-1:3" });
+    expect(store.getControlTarget("parent-a", "call-1:3")).toBeNull();
+  });
+
+  test("keeps observed child settings on activity-only updates and clears prior effort on model change", () => {
+    const store = new ProviderSubagentStore();
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      model: "openrouter/model-a", thinkingOptionId: "xhigh" });
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      activity: { kind: "tool", label: "read file.ts", at: "2026-10-14T00:00:00Z" } });
+    expect(store.get("parent", "child")).toMatchObject({
+      model: "openrouter/model-a", thinkingOptionId: "xhigh",
+    });
+    store.apply("parent", "pi", { type: "upsert", id: "child",
+      model: "openrouter/model-b", thinkingOptionId: null });
+    expect(store.get("parent", "child")).toMatchObject({
+      model: "openrouter/model-b", thinkingOptionId: null,
+    });
+  });
+
   test("limits oversized provider child tool output before storage", () => {
     const subagents = new ProviderSubagentStore();
     const output = "x".repeat(70 * 1024);

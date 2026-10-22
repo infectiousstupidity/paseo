@@ -1,4 +1,5 @@
 import { statSync, watch as watchPath } from "node:fs";
+import { join } from "node:path";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
 import type pino from "pino";
 import type {
@@ -26,6 +27,12 @@ export type ProjectUpdate =
 
 interface ProjectRootWatcher {
   close(): void;
+}
+
+interface ProjectRootWatchTarget {
+  rootPath: string;
+  watcher: ProjectRootWatcher;
+  gitMarkerPresent: boolean | null;
 }
 
 export interface ProjectRootWatch {
@@ -126,7 +133,7 @@ export class WorkspaceReconciliationService {
   private readonly clock: ReconciliationClock;
   private readonly rescanIntervalMs: number;
   private readonly debounceMs: number;
-  private readonly watchers: Array<{ rootPath: string; watcher: ProjectRootWatcher }> = [];
+  private readonly watchers: ProjectRootWatchTarget[] = [];
   private unsubscribeRegistry: (() => void) | null = null;
   private rescanTimer: ReconciliationTimer | null = null;
   private debounceTimer: ReconciliationTimer | null = null;
@@ -416,6 +423,15 @@ export class WorkspaceReconciliationService {
     );
   }
 
+  private hasGitMarker(rootPath: string): boolean {
+    try {
+      statSync(join(rootPath, ".git"));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async syncProjectRootWatches(): Promise<void> {
     if (this.disposed) return;
     const projects = await this.projectRegistry.list();
@@ -438,14 +454,31 @@ export class WorkspaceReconciliationService {
       );
       if (alreadyWatching) continue;
       try {
+        const initialGitMarkerPresent = this.hasGitMarker(project.rootPath);
+        let watchTarget: ProjectRootWatchTarget | null = null;
         let watcher: ProjectRootWatcher;
         watcher = this.watchProjectRoot(
           project.rootPath,
           { recursive: false },
           (_event, filename) => {
-            if (filename === null || filename.toString() === ".git") {
-              this.scheduleObservedReconciliation();
+            if (filename !== null && filename.toString() !== ".git") {
+              return;
             }
+
+            // On Windows, a root fs.watch frequently reports ".git" for ordinary
+            // metadata churn inside an existing repository. Re-reading every project
+            // on those events creates a Git -> watcher -> reconciliation -> Git loop.
+            // This root watcher only owns repository appearance/disappearance; normal
+            // Git metadata is observed by WorkspaceGitService, and the periodic full
+            // reconciliation remains the convergence fallback.
+            const nextGitMarkerPresent = this.hasGitMarker(project.rootPath);
+            if (watchTarget?.gitMarkerPresent === nextGitMarkerPresent) {
+              return;
+            }
+            if (watchTarget) {
+              watchTarget.gitMarkerPresent = nextGitMarkerPresent;
+            }
+            this.scheduleObservedReconciliation();
           },
           (error) => {
             watcher.close();
@@ -457,7 +490,21 @@ export class WorkspaceReconciliationService {
             );
           },
         );
-        this.watchers.push({ rootPath: project.rootPath, watcher });
+        const installedGitMarkerPresent = this.hasGitMarker(project.rootPath);
+        watchTarget = {
+          rootPath: project.rootPath,
+          watcher,
+          gitMarkerPresent: installedGitMarkerPresent,
+        };
+        this.watchers.push(watchTarget);
+
+        // Close the stat -> watch installation race: if the .git marker changed
+        // after the initial read but before the watcher became active, no fs.watch
+        // event is guaranteed. Reconcile once now rather than waiting for the
+        // periodic full pass.
+        if (installedGitMarkerPresent !== initialGitMarkerPresent) {
+          this.scheduleObservedReconciliation();
+        }
       } catch (error) {
         // The periodic reconciliation is the convergence path for roots that
         // are temporarily missing or unwatchable.
@@ -509,6 +556,12 @@ export class WorkspaceReconciliationService {
         await this.onWorkspacesChanged?.(Array.from(workspaceIds));
       }
     } catch (error) {
+      // A failed pass did not successfully observe the transition that triggered
+      // it. Let the next root event retry instead of suppressing it as duplicate
+      // marker state; the periodic full pass remains the final fallback.
+      for (const target of this.watchers) {
+        target.gitMarkerPresent = null;
+      }
       if (!this.disposed) {
         this.logger.warn({ err: error }, "Workspace reconciliation failed");
       }

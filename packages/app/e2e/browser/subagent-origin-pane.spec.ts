@@ -9,6 +9,7 @@ import { seedWorkspace } from "../support/helpers/seed-client";
 import {
   delegateFleetThroughMcp,
   expectManagedSubagentArchived,
+  openSubagentSessionFromTrack,
   openSubagentsTrack,
   seedParentWithSubagent,
 } from "../support/helpers/subagents";
@@ -59,7 +60,7 @@ test("a subagent opened from a right-pane parent stays with its parent when left
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toHaveCount(0);
@@ -82,7 +83,7 @@ test("the side preference opens a right-pane parent's subagent in the side pane"
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     const childPane = page
       .locator('[data-testid^="workspace-pane-"]')
@@ -109,13 +110,13 @@ test("opening an already-tabbed subagent reveals its left tab without a duplicat
     });
     const { left, right } = await openParentInRightPane(page, pair.parent.id, pair.workspaceId);
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await page.keyboard.press("Meta+Alt+Shift+ArrowLeft");
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await right.getByTestId(`workspace-tab-agent_${pair.parent.id}`).click();
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${pair.child.id}`).click();
+    await openSubagentSessionFromTrack(page, pair.child.id);
 
     await expect(left.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toBeVisible();
     await expect(right.getByTestId(`workspace-tab-agent_${pair.child.id}`)).toHaveCount(0);
@@ -200,14 +201,14 @@ test("MCP delegates to self and B and opens both qualified children in ordinary 
     await expect(page.getByTestId(`subagents-track-row-${fleet.remote.agentId}`)).toContainText(
       "Fleet B",
     );
-    await page.getByTestId(`subagents-track-row-${fleet.local.agentId}`).click();
+    await openSubagentSessionFromTrack(page, fleet.local.agentId);
     await expect(page.getByTestId(`workspace-tab-agent_${fleet.local.agentId}`)).toBeVisible();
     await submitMessage(page, "LOCAL_UI_TARGET");
     await expect(page.getByText("LOCAL_UI_TARGET", { exact: true })).toBeVisible();
     expect((await fleet.b.fetchAgent(fleet.local.agentId))?.agent.lastUserMessageAt).toBeNull();
     await page.getByTestId(`workspace-tab-agent_${fleet.parent.id}`).click();
     await openSubagentsTrack(page);
-    await page.getByTestId(`subagents-track-row-${fleet.remote.agentId}`).click();
+    await openSubagentSessionFromTrack(page, fleet.remote.agentId);
     await expect(page).toHaveURL((url) =>
       url.pathname.includes(`/h/${fleet.remote.serverId}/workspace/`),
     );
@@ -282,7 +283,7 @@ async function openFleetChild(
   page: Page,
   fleet: Awaited<ReturnType<typeof delegateFleetThroughMcp>>,
 ) {
-  await page.getByTestId(`subagents-track-row-${fleet.remote.agentId}`).click();
+  await openSubagentSessionFromTrack(page, fleet.remote.agentId);
   await expect(page).toHaveURL(
     (url) => url.pathname === `/h/${fleet.remote.serverId}/workspace/${fleet.remote.workspaceId}`,
   );

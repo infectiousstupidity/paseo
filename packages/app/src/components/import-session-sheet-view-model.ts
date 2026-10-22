@@ -243,6 +243,58 @@ export function getPromptPreview(entry: FetchRecentProviderSessionEntry): string
   );
 }
 
+const PI_SUBAGENT_SESSION_TITLE =
+  /^subagent-([a-z][a-z0-9]*(?:-[a-z0-9]+)*)-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}(?:-(?:0|[1-9][0-9]*))?$/u;
+
+export interface SessionRowPresentation {
+  title: string;
+  isPiSubagent: boolean;
+  promptPreview: string | null;
+  firstPromptPreview: string | null;
+}
+
+function normalizeSessionText(text: string | null | undefined): string {
+  return text?.trim().replace(/\s+/gu, " ") ?? "";
+}
+
+function formatSubagentRole(role: string): string {
+  return role
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function getSessionRowPresentation(
+  entry: FetchRecentProviderSessionEntry,
+): SessionRowPresentation {
+  const rawTitle = entry.title?.trim() ?? "";
+  const machineTitle = entry.providerId === "pi" ? rawTitle.match(PI_SUBAGENT_SESSION_TITLE) : null;
+  const subagentRole = machineTitle?.[1];
+  const title = subagentRole ? formatSubagentRole(subagentRole) : getSessionTitle(entry);
+  const comparableTitle = normalizeSessionText(title);
+  const firstPrompt = normalizeSessionText(entry.firstPromptPreview);
+  const lastPrompt = normalizeSessionText(entry.lastPromptPreview);
+  const mainPrompt = lastPrompt || firstPrompt;
+  let promptPreview: string | null;
+  if (!mainPrompt) {
+    promptPreview = i18n.t("importSession.preview.noPrompt");
+  } else if (mainPrompt === comparableTitle) {
+    promptPreview = null;
+  } else {
+    promptPreview = mainPrompt;
+  }
+
+  return {
+    title,
+    isPiSubagent: subagentRole !== undefined,
+    promptPreview,
+    firstPromptPreview:
+      firstPrompt && firstPrompt !== comparableTitle && firstPrompt !== mainPrompt
+        ? firstPrompt
+        : null,
+  };
+}
+
 export interface EmptyStateInputs {
   isLoadingSessions: boolean;
   allQueriesErrored: boolean;

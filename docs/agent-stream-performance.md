@@ -54,6 +54,25 @@ The native library reparses and measures its entire `markdown` prop on each upda
 
 Completion restores one native text view per Mermaid-delimited segment, so selection crosses prose paragraphs again. The head retains its trailing block margin while split. JS reveal remains the pacing source; native opacity animation stays disabled.
 
+## 2026-10 bounded-history investigation
+
+Issue #4816 reported streaming work that grew with conversation length. On the October 2026 codebase,
+the broad version of that claim no longer reproduced: fully revealed history already stayed stable across
+head-only text updates. The reproducible regression was the normal bounded-history path used by longer
+conversations.
+
+The durable contract is: **growing the live head must not rerender unchanged committed history rows.**
+A renderer-level regression demonstrates the failure directly: before the fix, a 20-row bounded history
+rendered 20 rows initially and another 20 after one head-only update; after the fix it remains at 20.
+
+A temporary Node 22 benchmark on a GitHub-hosted runner also ran 200 head-only updates over a 2,000-item
+timeline. For a 1,000-item partially revealed window, median model-plus-layout work fell from 0.292ms to
+0.058ms. These are helper-level timings, not React commit or end-to-end UI latency measurements.
+
+Other full-history scans measured during the same investigation were individually small on current code
+(roughly hundredths of a millisecond at 2,000 items on the hosted runner). Treat them as separate
+follow-ups only when browser/React profiling shows that they materially contribute to user-visible stalls.
+
 ## Measuring
 
 - **Smoothness (user-perceived):** `packages/app/e2e/browser/agent-stream-smoothness.spec.ts`, gated behind `PASEO_AGENT_STREAM_PERF_E2E=1`. Drives the mock provider's `bursty-stream` model and reports coefficient of variation of characters painted per frame (smoothness) plus p95 gap between visible updates (stalls). Both numbers are needed: a stalled stream is perfectly smooth.

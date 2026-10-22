@@ -92,8 +92,11 @@ test.describe("real provider subagent timelines", () => {
           });
         }
         await rows.first().click();
-
-        // Choosing a row is a menu selection: the track panel goes with it.
+        // The entire row is a disclosure; opening the full session is an explicit action.
+        await expect(page.getByTestId("subagents-track-header-panel")).toBeVisible();
+        const openSession = page.locator('[data-testid^="subagents-track-open-"]').first();
+        await expect(openSession).toBeVisible();
+        await openSession.click();
         await expect(page.getByTestId("subagents-track-header-panel")).toBeHidden();
 
         const panel = page.getByTestId("provider-subagent-panel");

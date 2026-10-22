@@ -434,6 +434,31 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
     service.dispose();
   });
 
+  test("getCheckout reads fresh facts even when an observed snapshot exists", async () => {
+    const getCheckoutStatus = vi
+      .fn<(cwd: string) => Promise<CheckoutStatusGit>>()
+      .mockImplementationOnce(async (cwd: string) => createCheckoutStatus(cwd))
+      .mockImplementationOnce(async (cwd: string) =>
+        createCheckoutStatus(cwd, { currentBranch: "externally-changed" }),
+      );
+    const service = createService({ getCheckoutStatus });
+
+    await service.getSnapshot(REPO_CWD);
+    const subscription = service.registerWorkspace({ cwd: REPO_CWD }, vi.fn());
+
+    await expect(service.getCheckout(REPO_CWD)).resolves.toMatchObject({
+      cwd: REPO_CWD,
+      isGit: true,
+      currentBranch: "externally-changed",
+      remoteUrl: "https://github.com/acme/repo.git",
+      worktreeRoot: REPO_CWD,
+    });
+    expect(getCheckoutStatus).toHaveBeenCalledTimes(2);
+
+    subscription.unsubscribe();
+    service.dispose();
+  });
+
   test("getSnapshot returns the current snapshot without shelling out", async () => {
     let nowMs = Date.parse("2026-04-12T00:00:00.000Z");
     const getCheckoutStatus = vi.fn(async (cwd: string) => createCheckoutStatus(cwd));
@@ -487,6 +512,45 @@ describe("WorkspaceGitServiceImpl primitive refresh entrypoint", () => {
       expect(metrics.provenanceTop).toEqual([
         ["workspace-refresh:provenance-test", metrics.submitted],
       ]);
+    } finally {
+      service.dispose();
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test("attributes Git commands submitted by a fresh checkout read", async () => {
+    const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "workspace-checkout-provenance-")));
+    const repoDir = join(tempDir, "repo");
+    mkdirSync(repoDir, { recursive: true });
+    execFileSync("git", ["init", "-b", "main"], { cwd: repoDir, stdio: "pipe" });
+    writeFileSync(join(repoDir, "tracked.txt"), "tracked\n");
+    execFileSync("git", ["add", "tracked.txt"], { cwd: repoDir, stdio: "pipe" });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "user.name=Paseo Test",
+        "-c",
+        "user.email=paseo@example.test",
+        "commit",
+        "-m",
+        "initial",
+      ],
+      { cwd: repoDir, stdio: "pipe" },
+    );
+    snapshotGitCommandRuntimeMetrics();
+    const service = createService({
+      getCheckoutStatus: getCheckoutStatusUncached as never,
+    });
+
+    try {
+      await service.getCheckout(repoDir);
+
+      const metrics = snapshotGitCommandRuntimeMetrics();
+      expect(metrics.submitted).toBeGreaterThan(0);
+      expect(metrics.provenanceTop).toEqual([["workspace-checkout-read", metrics.submitted]]);
     } finally {
       service.dispose();
       rmSync(tempDir, { recursive: true, force: true });

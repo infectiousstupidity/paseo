@@ -1,0 +1,52 @@
+name: Fork Windows Desktop Builds
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only the newest push to main needs a build. Manual runs can also be replaced.
+concurrency:
+  group: fork-windows-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  EP_GH_IGNORE_TIME: "true"
+  # Mark the fork build as local so upstream auto-updates cannot replace it.
+  PASEO_LOCAL_BUILD_COMMIT: ${{ github.sha }}
+
+jobs:
+  windows-x64:
+    name: Windows / x64
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+          scope: "@boudra"
+      - name: Install dependencies
+        run: node scripts/npm-retry.mjs ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build unsigned Windows x64 installer and ZIP
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build:desktop -- --publish never --win --x64
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-fork-windows-x64
+          path: |
+            packages/desktop/release/Paseo-Setup-*-x64.exe
+            packages/desktop/release/Paseo-*-x64.zip
+          if-no-files-found: error
+          retention-days: 14

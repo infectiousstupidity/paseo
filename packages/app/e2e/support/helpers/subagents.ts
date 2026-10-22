@@ -151,10 +151,18 @@ export async function openSubagentsTrack(page: Page): Promise<void> {
   await expect(panel).toBeVisible({ timeout: 30_000 });
 }
 
-/** On compact the track opens as a sheet, which closes once a row is chosen. */
+/** Expand the worker first; session navigation is an explicit action inside its details. */
+export async function openSubagentSessionFromTrack(page: Page, childId: string): Promise<void> {
+  const row = page.getByTestId(`subagents-track-row-${childId}`);
+  // Menu content is retained between openings, including its disclosure state.
+  if ((await row.getAttribute("aria-expanded")) !== "true") await row.click();
+  await page.getByTestId(`subagents-track-open-${childId}`).click();
+}
+
+/** On compact the track opens as a sheet, then explicitly navigates to the child. */
 export async function openSubagentFromCompactTrack(page: Page, childId: string): Promise<void> {
   await page.getByTestId("subagents-track-header").click();
-  await page.getByTestId(`subagents-track-row-${childId}`).click();
+  await openSubagentSessionFromTrack(page, childId);
 }
 
 export async function expectSubagentRowVisible(page: Page, childId: string): Promise<void> {

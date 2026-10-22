@@ -8,6 +8,7 @@ import {
   computeEmptyState,
   formatDirectoryLabel,
   getPromptPreview,
+  getSessionRowPresentation,
   getSessionTitle,
   hasMoreSessions,
   nextPageLimit,
@@ -36,6 +37,88 @@ function entry(
   };
 }
 
+const rowPresentationCases: Array<{
+  name: string;
+  session: FetchRecentProviderSessionEntry;
+  expected: ReturnType<typeof getSessionRowPresentation>;
+}> = [
+  {
+    name: "preserves a useful saved title and distinguishes the prompts",
+    session: entry({
+      providerId: "pi",
+      title: "Release readiness",
+      firstPromptPreview: "Check the release notes",
+      lastPromptPreview: "Keep the session handle unchanged",
+    }),
+    expected: {
+      title: "Release readiness",
+      isPiSubagent: false,
+      promptPreview: "Keep the session handle unchanged",
+      firstPromptPreview: "Check the release notes",
+    },
+  },
+  {
+    name: "shows the role for an exact generated Pi title",
+    session: entry({
+      providerId: "pi",
+      title: "subagent-reviewer-550e8400-e29b-41d4-a716-446655440000-1",
+      firstPromptPreview: "Review import identity",
+      lastPromptPreview: "Confirm one-press import",
+    }),
+    expected: {
+      title: "Reviewer",
+      isPiSubagent: true,
+      promptPreview: "Confirm one-press import",
+      firstPromptPreview: "Review import identity",
+    },
+  },
+  {
+    name: "keeps malformed generated-looking titles",
+    session: entry({
+      providerId: "pi",
+      title: "subagent-reviewer-550e8400-e29b-41d4-a716-446655440000-01",
+      firstPromptPreview: "First task",
+      lastPromptPreview: "Last task",
+    }),
+    expected: {
+      title: "subagent-reviewer-550e8400-e29b-41d4-a716-446655440000-01",
+      isPiSubagent: false,
+      promptPreview: "Last task",
+      firstPromptPreview: "First task",
+    },
+  },
+  {
+    name: "does not reinterpret another provider title",
+    session: entry({
+      providerId: "claude",
+      title: "subagent-reviewer-550e8400-e29b-41d4-a716-446655440000-1",
+      firstPromptPreview: "First task",
+      lastPromptPreview: "Last task",
+    }),
+    expected: {
+      title: "subagent-reviewer-550e8400-e29b-41d4-a716-446655440000-1",
+      isPiSubagent: false,
+      promptPreview: "Last task",
+      firstPromptPreview: "First task",
+    },
+  },
+  {
+    name: "collapses whitespace and omits duplicate prompt excerpts",
+    session: entry({
+      providerId: "pi",
+      title: "Helpful session",
+      firstPromptPreview: " Find   task metadata ",
+      lastPromptPreview: "Find\n task metadata",
+    }),
+    expected: {
+      title: "Helpful session",
+      isPiSubagent: false,
+      promptPreview: "Find task metadata",
+      firstPromptPreview: null,
+    },
+  },
+];
+
 function settled(
   data: SessionsQueryResult["data"],
   flags?: Partial<Omit<SessionsQueryResult, "data">>,
@@ -48,6 +131,14 @@ function settled(
     ...flags,
   };
 }
+
+describe("getSessionRowPresentation", () => {
+  it.each(rowPresentationCases)("$name", ({ session, expected }) => {
+    const originalTitle = session.title;
+    expect(getSessionRowPresentation(session)).toEqual(expected);
+    expect(session.title).toBe(originalTitle);
+  });
+});
 
 describe("resolveProvidersToFetch", () => {
   it("returns null when the daemon does not support provider snapshots", () => {

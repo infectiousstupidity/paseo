@@ -322,6 +322,63 @@ test("listImportableProviderSessions looks past already-imported rows to fill th
   expect(result.filteredAlreadyImportedCount).toBe(1);
 });
 
+test("scoped Pi requests do not overfetch sessions imported from unrelated directories", async () => {
+  const cwd = "/tmp/active-pi-project";
+  const otherCwd = "/tmp/old-pi-project";
+  const listImportableSessions = vi.fn(async () => makeImportableSessionsResult([
+    makeImportableSession({ provider: "pi", sessionId: "available", cwd }),
+  ]));
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ cwd, providers: ["pi"], limit: 1 }),
+    agentManager: { listAgents: () => [], listImportableSessions },
+    agentStorage: {
+      list: async () =>
+        Array.from({ length: 80 }, (_, index) => ({
+          provider: "pi",
+          cwd: otherCwd,
+          persistence: { provider: "pi", sessionId: `imported-${index}` },
+        })) as StoredAgentRecord[],
+    },
+    providerSnapshotManager: { getProviderLabel: () => "Pi" },
+  });
+
+  expect(listImportableSessions).toHaveBeenCalledWith({
+    limit: 1,
+    providerFilter: new Set(["pi"]),
+    cwd,
+  });
+  expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["available"]);
+  expect(result.filteredAlreadyImportedCount).toBe(0);
+});
+
+test("Pi search uses the requested page size while other providers retain deep scanning", async () => {
+  const listImportableSessions = vi.fn(async () =>
+    makeImportableSessionsResult([
+      makeImportableSession({
+        provider: "pi",
+        sessionId: "matched",
+        cwd: "/tmp/project",
+        title: "invoice",
+      }),
+    ]),
+  );
+  const result = await listImportableProviderSessions({
+    request: makeRequest({ providers: ["pi", "claude"], query: "INVOICE", limit: 2 }),
+    agentManager: { listAgents: () => [], listImportableSessions },
+    agentStorage: { list: async () => [] },
+    providerSnapshotManager: { getProviderLabel: (provider) => provider },
+  });
+  expect(listImportableSessions).toHaveBeenCalledWith({
+    limit: 500,
+    piSearchLimit: 2,
+    query: "invoice",
+    scanLimit: 500,
+    providerFilter: new Set(["pi", "claude"]),
+    cwd: undefined,
+  });
+  expect(result.entries.map((entry) => entry.providerHandleId)).toEqual(["matched"]);
+});
+
 test("listImportableProviderSessions requests a bounded deep scan for search results", async () => {
   const matchingSessions = [
     makeImportableSession({
@@ -366,6 +423,7 @@ test("listImportableProviderSessions requests a bounded deep scan for search res
 
   expect(listImportableSessions).toHaveBeenCalledWith({
     limit: 500,
+    piSearchLimit: 10,
     query: "invoice",
     scanLimit: 500,
     providerFilter: undefined,

@@ -1390,6 +1390,7 @@ export const SendAgentMessageRequestSchema = z.object({
   sourceAgentServerId: z.string().min(1).optional(),
   sessionMode: z.string().optional(),
   messageId: z.string().optional(), // Client-provided ID for deduplication
+  unarchive: z.boolean().optional(),
   activeTurnBehavior: ActiveTurnBehaviorSchema.optional(),
   images: z.array(ImageAttachmentSchema).optional(),
   attachments: AgentAttachmentsSchema,
@@ -1921,6 +1922,58 @@ export const ProviderSubagentListRequestMessageSchema = z.object({
   parentAgentId: z.string(),
   requestId: z.string(),
 });
+
+/** Only opaque Paseo row identity crosses the wire, never native Pi run or child IDs. */
+export const ProviderSubagentControlRequestMessageSchema = z
+  .object({
+    type: z.literal("agent.provider_subagents.control.request"),
+    parentAgentId: z.string().min(1),
+    subagentId: z.string().min(1),
+    action: z.enum(["status", "stop", "steer"]),
+    message: z.string().max(360).optional(),
+    requestId: z.string(),
+  })
+  .strict();
+
+/** Explicit owner action only. Agentation creation events never trigger this RPC. */
+export const AgentFeedbackRequestSchema = z
+  .object({
+    type: z.literal("agent.feedback.request"),
+    action: z.enum(["submit", "record_proposal", "approve", "record_outcome", "get"]),
+    requestId: z.string().min(1),
+    parentAgentId: z.string().min(1),
+    sourceNamespace: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,100}$/)
+      .optional(),
+    screen: z.string().max(32).optional(),
+    annotations: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),
+            comment: z.string().min(1).max(1200),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(12)
+      .optional(),
+    recordId: z
+      .string()
+      .regex(/^[0-9a-f]{40}$/)
+      .optional(),
+    revision: z
+      .string()
+      .regex(/^sha256:[0-9a-f]{64}$/)
+      .optional(),
+    proposal: z.string().min(1).max(3000).optional(),
+    outcome: z
+      .enum(["verification_passed", "verification_failed", "failed", "blocked", "cancelled"])
+      .optional(),
+    evidence: z.string().min(1).max(1000).optional(),
+  })
+  .strict();
 
 export const ProviderSubagentTimelineRequestMessageSchema = z.object({
   type: z.literal("agent.provider_subagents.timeline.get.request"),
@@ -3332,6 +3385,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsRequestMessageSchema,
   ProviderSubagentListRequestMessageSchema,
   ProviderSubagentTimelineRequestMessageSchema,
+  ProviderSubagentControlRequestMessageSchema,
+  AgentFeedbackRequestSchema,
   SetAgentTimelineSubscriptionRequestMessageSchema,
   AgentForkContextRequestMessageSchema,
   SetAgentModeRequestMessageSchema,
@@ -3735,6 +3790,10 @@ export const ServerInfoStatusPayloadSchema = z
         agentForkContextCursor: z.boolean().optional(),
         // COMPAT(providerSubagents): added in v0.1.107, remove gate after 2027-01-12.
         providerSubagents: z.boolean().optional(),
+        // COMPAT(providerSubagentControls): added 2026-10-13; old daemons cannot route controls.
+        providerSubagentControls: z.boolean().optional(),
+        // COMPAT(agentFeedback): introduced 2026-10-13; old daemons do not route this API.
+        agentFeedback: z.boolean().optional(),
         // COMPAT(projectedSubagentTimeline): added after v0.8.0, remove gates after 2027-03-14; retain wire field.
         projectedSubagentTimeline: z.boolean().optional(),
         // COMPAT(providerSubagentNesting): added in v0.7, remove gate after 2027-03-04.
@@ -4761,6 +4820,21 @@ export const AgentTimelineListPromptsResponseMessageSchema = z.object({
   }),
 });
 
+/**
+ * Bounded current-activity projection for a provider subagent row: the newest completed tool
+ * call the daemon observed in the child transcript, so the row keeps advancing after the
+ * retained history caps. The label is short and display-ready; clients show it as latest
+ * activity and never parse it further.
+ */
+export const ProviderSubagentActivitySchema = z.object({
+  kind: z.literal("tool"),
+  label: z.string(),
+  /** Real timestamp of the observed event (or the observation time when the row carries none). */
+  at: z.string(),
+});
+
+export type ProviderSubagentActivity = z.infer<typeof ProviderSubagentActivitySchema>;
+
 export const ProviderSubagentDescriptorPayloadSchema = z.object({
   id: z.string(),
   parentAgentId: z.string(),
@@ -4777,6 +4851,14 @@ export const ProviderSubagentDescriptorPayloadSchema = z.object({
   // Compact provider-owned context for the shared track. Providers choose what belongs here and
   // format it for display; clients must not parse provider-specific facts out of this string.
   subtitle: z.string().nullable().optional(),
+  // Actual Pi child-session model/effort. Older daemons may omit both.
+  model: z.string().nullable().optional(),
+  thinkingOptionId: z.string().nullable().optional(),
+  // COMPAT(providerSubagentActivity): optional so pre-existing clients ignore it and older
+  // daemons simply omit it (clients then fall back to the streamed timeline tail).
+  activity: ProviderSubagentActivitySchema.nullable().optional(),
+  // COMPAT(providerSubagentControls): optional; does not bypass live target validation.
+  controlEligible: z.boolean().optional(),
 });
 
 export type ProviderSubagentDescriptorPayload = z.infer<
@@ -4789,6 +4871,41 @@ export const ProviderSubagentListResponseMessageSchema = z.object({
     requestId: z.string(),
     parentAgentId: z.string(),
     subagents: z.array(ProviderSubagentDescriptorPayloadSchema),
+    error: z.string().nullable(),
+  }),
+});
+
+export const AgentFeedbackResponseSchema = z.object({
+  type: z.literal("agent.feedback.response"),
+  payload: z.object({
+    requestId: z.string(),
+    success: z.boolean(),
+    error: z.string().nullable(),
+    records: z
+      .array(
+        z.object({
+          recordId: z.string(),
+          revision: z.string(),
+          state: z.string(),
+          runId: z.string().optional(),
+        }),
+      )
+      .optional(),
+    proposal: z.string().optional(),
+  }),
+});
+
+export const ProviderSubagentControlResponseMessageSchema = z.object({
+  type: z.literal("agent.provider_subagents.control.response"),
+  payload: z.object({
+    requestId: z.string(),
+    parentAgentId: z.string(),
+    subagentId: z.string(),
+    action: z.enum(["status", "stop", "steer"]),
+    success: z.boolean(),
+    state: z.string().optional(),
+    runState: z.string().optional(),
+    deliveryStatus: z.enum(["queued", "delivered"]).optional(),
     error: z.string().nullable(),
   }),
 });
@@ -7011,6 +7128,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentTimelineListPromptsResponseMessageSchema,
   ProviderSubagentListResponseMessageSchema,
   ProviderSubagentTimelineResponseMessageSchema,
+  ProviderSubagentControlResponseMessageSchema,
+  AgentFeedbackResponseSchema,
   ProviderSubagentUpdateMessageSchema,
   SetAgentTimelineSubscriptionResponseMessageSchema,
   AgentAttentionRequiredMessageSchema,

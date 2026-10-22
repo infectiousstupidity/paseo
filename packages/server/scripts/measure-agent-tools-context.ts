@@ -4,7 +4,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import pino from "pino";
 
-import { createAgentMcpServer } from "../src/server/agent/mcp-server.js";
+import { connectAgentMcpServer, createAgentMcpServer } from "../src/server/agent/mcp-server.js";
 import type { AgentManager, ManagedAgent } from "../src/server/agent/agent-manager.js";
 import type { AgentStorage, StoredAgentRecord } from "../src/server/agent/agent-storage.js";
 import type { AgentProvider, ProviderSnapshotEntry } from "../src/server/agent/agent-sdk-types.js";
@@ -192,7 +192,7 @@ async function measureCatalog(params: {
   const client = new Client({ name: "paseo-agent-tools-measurement", version: "0.0.0" });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
-  await server.connect(serverTransport);
+  await connectAgentMcpServer(server, serverTransport);
   await client.connect(clientTransport);
   try {
     const result = await client.listTools();

@@ -4,6 +4,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createPiExtensionHost } from "../index.js";
+import { piSubagents } from "./index.js";
 import {
   parseToolArgs,
   parseToolResult,
@@ -46,6 +47,132 @@ function hasCompletedChild(events: AgentStreamEvent[]) {
 }
 
 describe("pi-subagents adapter", () => {
+  test("recognizes native asynchronous workflow launches without agent/task inputs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-target-"));
+    const adapter = piSubagents.createSession();
+    try {
+      const initial = adapter.mapToolCall?.({
+        callId: "workflow-call", toolName: "subagent",
+        args: { workflow: true, async: true },
+        status: "completed",
+        result: { details: {
+          mode: "workflow", runId: "workflow-run", asyncId: "workflow-run",
+          asyncDir: dir, results: [],
+        } },
+      });
+      expect(initial?.subagents).toEqual([
+        expect.objectContaining({ id: "workflow-call", status: "running" }),
+      ]);
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "workflow-run", sessionId: "parent-session",
+        steps: [
+          { agent: "implementer", status: "running", workflowKey: "implement" },
+          { agent: "reviewer", status: "running", workflowKey: "review" },
+        ],
+      }));
+      expect(adapter.poll?.()?.subagents).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: "workflow-call:1",
+          controlTarget: {
+            runId: "workflow-run", childId: "review", snapshotId: "review",
+            index: 1, sessionId: "parent-session",
+          },
+        }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("retains distinct native stop identity and projected workflow identity", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-workflow-canonical-"));
+    const adapter = piSubagents.createSession();
+    try {
+      adapter.mapToolCall?.({
+        callId: "canonical-call", toolName: "subagent", args: { workflow: true, async: true },
+        status: "completed",
+        result: { details: { mode: "workflow", runId: "canonical-run",
+          asyncId: "canonical-run", asyncDir: dir, results: [] } },
+      });
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "canonical-run", sessionId: "session-1",
+        steps: [{ agent: "builder", status: "running",
+          childId: "true-child-id", workflowKey: "workflow-visible-key" }],
+      }));
+      const observed = adapter.poll?.()?.subagents ?? [];
+      expect(observed).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "canonical-call", controlTarget: {
+          runId: "canonical-run", childId: "true-child-id",
+          snapshotId: "workflow-visible-key", index: 0, sessionId: "session-1",
+        } }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("binds a native second child, never a display-row index or ambiguous alias", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-native-child-"));
+    const adapter = piSubagents.createSession();
+    try {
+      adapter.mapToolCall?.({
+        callId: "call-native", toolName: "subagent",
+        args: { agent: "scout", task: "Two children", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "parallel", runId: "run-native", asyncId: "run-native",
+            asyncDir: dir, results: [] },
+        },
+      });
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running", childId: "first-native" },
+          { agent: "second", status: "running", childId: "second-native" },
+        ],
+      }));
+      const observations = adapter.poll?.()?.subagents ?? [];
+      expect(observations).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: "call-native:1",
+          controlTarget: {
+            runId: "run-native", childId: "second-native", snapshotId: "second-native",
+            index: 1, sessionId: "parent-session",
+          },
+        }),
+      ]));
+
+      // A missing ID must not be synthesized as step:1. A duplicate cannot be resolved.
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running", childId: "duplicate" },
+          { agent: "second", status: "running", childId: "duplicate" },
+        ],
+      }));
+      const changed = adapter.poll?.()?.subagents ?? [];
+      expect(changed.filter((event) => event.type === "upsert")).toEqual(
+        expect.arrayContaining([expect.objectContaining({
+          id: "call-native:1", controlTarget: null,
+        })]),
+      );
+      await writeFile(join(dir, "status.json"), JSON.stringify({
+        state: "running", runId: "run-native", sessionId: "parent-session",
+        steps: [
+          { agent: "first", status: "running" },
+          { agent: "second", status: "running" },
+        ],
+      }));
+      const missing = adapter.poll?.()?.subagents ?? [];
+      expect(missing).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "call-native:1", controlTarget: null }),
+      ]));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+
   test("follows async status and transcript without bg_wait", async () => {
     const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
     const file = join(dir, "child.jsonl");
@@ -82,6 +209,54 @@ describe("pi-subagents adapter", () => {
         }),
       );
       await expect.poll(() => hasCompletedChild(received)).toBe(true);
+    } finally {
+      host.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  test("does not repeat equivalent descriptor upserts while async status is unchanged", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
+    const file = join(dir, "child.jsonl");
+    const received: AgentStreamEvent[] = [];
+    const host = createPiExtensionHost();
+    try {
+      host.follow((event) => received.push(event));
+      host.mapToolCall({
+        callId: "call-1",
+        toolName: "subagent",
+        args: { agent: "scout", task: "Inspect", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "single", runId: "run-1", asyncId: "run-1", asyncDir: dir, results: [] },
+        },
+      });
+      await writeFile(
+        file,
+        '{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"BEGIN"}]}}\n',
+      );
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          state: "running",
+          steps: [{ agent: "scout", status: "running", sessionFile: file }],
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const upserts = received.filter(
+        (event) =>
+          event.type === "provider_subagent" &&
+          event.event.type === "upsert" &&
+          event.event.id === "call-1",
+      );
+      const timelines = received.filter(
+        (event) => event.type === "provider_subagent" && event.event.type === "timeline",
+      );
+      // First observation only; the transcript keeps flowing while the descriptor stays quiet.
+      expect(upserts.length).toBeLessThanOrEqual(2);
+      expect(timelines.length).toBeGreaterThan(0);
+      for (let i = 1; i < upserts.length; i += 1) {
+        expect(upserts[i].event).not.toEqual(upserts[i - 1].event);
+      }
     } finally {
       host.close();
       await rm(dir, { recursive: true, force: true });
@@ -196,9 +371,10 @@ describe("pi-subagents adapter", () => {
     });
     const events = await verifySubagentFixture(fixture);
     const upserts = events
-      .filter((event) => event.event.type === "upsert")
+      .filter((event) => event.event.type === "upsert" && event.event.status)
       .map((event) => (event.event.type === "upsert" ? event.event : null));
-    // bg_wait settles the child; the later completion notice repeats it.
+    // bg_wait settles the child; the later completion notice repeats it. Activity-only upserts
+    // (Task 03) carry no status and are not part of the lifecycle sequence.
     expect(upserts.map((event) => event?.status)).toEqual([
       "running",
       "running",
@@ -270,6 +446,124 @@ describe("pi-subagents adapter", () => {
         description: "Inspect",
         toolCallId: "failed",
         status: "failed",
+      },
+    ]);
+  });
+
+  test("reports per-step terminal states while sibling steps keep running", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
+    const session = piSubagents.createSession();
+    try {
+      session.mapToolCall!({
+        callId: "call-1",
+        toolName: "subagent",
+        args: { agent: "scout", task: "Inspect", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "single", runId: "run-1", asyncId: "run-1", asyncDir: dir, results: [] },
+        },
+      });
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({
+          state: "running",
+          steps: [
+            { agent: "scout", status: "complete" },
+            { agent: "builder", status: "running" },
+          ],
+        }),
+      );
+      expect(session.poll?.().subagents).toEqual([
+        { type: "upsert", id: "call-1:0", title: "scout", status: "completed" },
+        { type: "upsert", id: "call-1:1", title: "builder", status: "running" },
+      ]);
+      // A repeat observation of the same state emits nothing and never claims the run finished.
+      expect(session.poll?.()).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports a stopped run as canceled and stops polling it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
+    const session = piSubagents.createSession();
+    try {
+      session.mapToolCall!({
+        callId: "call-1",
+        toolName: "subagent",
+        args: { agent: "scout", task: "Inspect", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "single", runId: "run-1", asyncId: "run-1", asyncDir: dir, results: [] },
+        },
+      });
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({ state: "stopped", steps: [{ agent: "scout", status: "pending" }] }),
+      );
+      expect(session.poll?.().subagents).toEqual([
+        { type: "upsert", id: "call-1", title: "scout", status: "canceled" },
+      ]);
+      // Terminal: no further polling or upserts.
+      expect(session.poll?.()).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("missing or partial status files never manufacture a failure", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "paseo-pi-async-"));
+    const session = piSubagents.createSession();
+    try {
+      session.mapToolCall!({
+        callId: "call-1",
+        toolName: "subagent",
+        args: { agent: "scout", task: "Inspect", async: true },
+        status: "completed",
+        result: {
+          details: { mode: "single", runId: "run-1", asyncId: "run-1", asyncDir: dir, results: [] },
+        },
+      });
+      // No status file yet, then a truncated write: the child keeps its prior state.
+      expect(session.poll?.()).toBeUndefined();
+      await writeFile(join(dir, "status.json"), '{"state":"run');
+      expect(session.poll?.()).toBeUndefined();
+      // A valid later observation still reports.
+      await writeFile(
+        join(dir, "status.json"),
+        JSON.stringify({ state: "running", steps: [{ agent: "scout", status: "running" }] }),
+      );
+      expect(session.poll?.().subagents).toEqual([
+        { type: "upsert", id: "call-1", title: "scout", status: "running" },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an unjudged result row is a neutral finish, not a failure", () => {
+    const host = createPiExtensionHost();
+    const out = host.mapToolCall({
+      callId: "call-1",
+      toolName: "subagent",
+      args: { agent: "scout", task: "Inspect" },
+      status: "completed",
+      result: {
+        details: {
+          mode: "single",
+          runId: "run-x",
+          results: [{ agent: "scout", sessionFile: "/tmp/paseo-pi-unjudged.jsonl" }],
+        },
+      },
+    });
+    expect(out?.subagents).toEqual([
+      {
+        type: "upsert",
+        id: "call-1",
+        title: "scout",
+        description: "Inspect",
+        toolCallId: "call-1",
+        status: "completed",
       },
     ]);
   });

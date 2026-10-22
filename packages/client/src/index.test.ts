@@ -271,6 +271,7 @@ test("createPaseoApi borrows daemon capabilities without exposing connection own
     "observeEvents",
     "projects",
     "providers",
+    "supportsNonReactivatingSend",
     "terminals",
     "workspaces",
   ]);

@@ -7,7 +7,9 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const oxlintBin = path.join(repoRoot, "node_modules/.bin/oxlint");
+const oxlintBin = fileURLToPath(
+  new URL("./bin/oxlint", import.meta.resolve("oxlint/package.json")),
+);
 const pluginPath = path.join(repoRoot, "scripts/oxlint/paseo-plugin.mjs");
 
 function lint(source) {
@@ -18,11 +20,16 @@ function lint(source) {
       JSON.stringify({ jsPlugins: [pluginPath], rules: { "paseo/no-raw-pressable": "error" } }),
     );
     writeFileSync(path.join(dir, "probe.tsx"), source);
-    const result = spawnSync(oxlintBin, ["-c", ".oxlintrc.json", "probe.tsx"], {
+    const result = spawnSync(process.execPath, [oxlintBin, "-c", ".oxlintrc.json", "probe.tsx"], {
       cwd: dir,
       encoding: "utf8",
     });
-    return { failed: result.status !== 0, output: result.stdout + result.stderr };
+    if (result.error) {
+      throw new Error(`Failed to launch oxlint: ${result.error.message}`, { cause: result.error });
+    }
+    const output = result.stdout + result.stderr;
+    assert.notEqual(result.status, null, `oxlint terminated by ${result.signal}:\n${output}`);
+    return { failed: result.status !== 0, output };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

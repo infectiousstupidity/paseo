@@ -98,3 +98,9 @@ app.json
 
 # Project-local Serena configuration and memories.
 .serena/
+
+# Local agent and tool scratch state: critiques, caches, dumps, screenshots.
+.impeccable/
+.impeccable-scratch/
+.pi-lens/
+.tmp/

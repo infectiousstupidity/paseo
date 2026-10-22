@@ -147,11 +147,18 @@ export const PASEO_TOOL_CATALOG = {
       outputFields: ["status", "lastMessage", "permission"],
     },
   },
+  inspect_agent: {
+    label: "Inspect agent",
+    context: targetAgent(),
+    detail: { inputOrder: ["agentId", "limit"] },
+  },
+  // COMPAT(getAgentStatusPresentation): added 2026-10-21, remove after 2027-04-22 once timelines hold no retired calls.
   get_agent_status: {
     label: "Check agent",
     context: targetAgent(),
     detail: { inputOrder: ["agentId"] },
   },
+  // COMPAT(getAgentActivityPresentation): added 2026-10-21, remove after 2027-04-22 once timelines hold no retired calls.
   get_agent_activity: {
     label: "Read agent activity",
     context: targetAgent(),
@@ -159,18 +166,30 @@ export const PASEO_TOOL_CATALOG = {
   },
   list_agents: {
     label: "List agents",
-    detail: { inputOrder: ["cwd", "statuses", "sinceHours", "limit", "includeArchived"] },
+    detail: {
+      inputOrder: [
+        "cwd",
+        "ids",
+        "statuses",
+        "sinceHours",
+        "limit",
+        "includeArchived",
+        "includeActivity",
+      ],
+    },
   },
   update_agent: {
     label: "Update agent",
     context: fieldOrTargetAgent("name"),
     detail: { inputOrder: AGENT_FIELDS },
   },
+  // COMPAT(setAgentModePresentation): added 2026-10-21, remove after 2027-04-22 once timelines hold no retired calls.
   set_agent_mode: {
     label: "Set agent mode",
     context: field("modeId"),
     detail: { inputOrder: ["agentId", "modeId"] },
   },
+  // COMPAT(cancelAgentPresentation): added 2026-10-21, remove after 2027-04-22 once timelines hold no retired calls.
   cancel_agent: {
     label: "Cancel agent",
     context: targetAgent(),
@@ -181,6 +200,12 @@ export const PASEO_TOOL_CATALOG = {
     context: targetAgent(),
     detail: { inputOrder: ["agentId"] },
   },
+  terminate_agent: {
+    label: "Terminate agent",
+    context: targetAgent(),
+    detail: { inputOrder: ["agentId", "mode", "reason"] },
+  },
+  // COMPAT(killAgentPresentation): added 2026-10-21, remove after 2027-04-22 once timelines hold no retired calls.
   kill_agent: { label: "Kill agent", context: targetAgent(), detail: { inputOrder: ["agentId"] } },
   list_pending_permissions: { label: "List permissions" },
   respond_to_permission: {
@@ -211,6 +236,11 @@ export const PASEO_TOOL_CATALOG = {
     },
   },
   list_workspace_scripts: { label: "List scripts", detail: { inputOrder: ["workspaceId"] } },
+  workspace_scripts: {
+    label: "Workspace scripts",
+    context: field("scriptName"),
+    detail: { inputOrder: ["workspaceId", "action", "scriptName"] },
+  },
   start_workspace_script: {
     label: "Start script",
     context: field("scriptName"),
@@ -229,6 +259,11 @@ export const PASEO_TOOL_CATALOG = {
     detail: { inputOrder: ["cwd", "workspaceId", "name", "command"] },
   },
   list_terminals: { label: "List terminals", detail: { inputOrder: ["cwd", "all"] } },
+  inspect_terminal: {
+    label: "Inspect terminal",
+    context: field("terminalId"),
+    detail: { inputOrder: ["terminalId", "cwd", "all", "start", "end", "scrollback"] },
+  },
   capture_terminal: {
     label: "Read terminal",
     context: field("terminalId"),
@@ -242,7 +277,7 @@ export const PASEO_TOOL_CATALOG = {
   kill_terminal: {
     label: "Kill terminal",
     context: field("terminalId"),
-    detail: { inputOrder: ["terminalId"] },
+    detail: { inputOrder: ["terminalId", "all", "cwd"] },
   },
 
   // Schedules and heartbeats

@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, relative } from "node:path";
+import { createRequire } from "node:module";
+import { join, relative, resolve } from "node:path";
 
 // In CI we often install a single workspace (e.g. server/relay/website). Only apply patches
 // when the patched dependency is actually present.
@@ -67,8 +68,7 @@ if (!existsSync("patches") || installedPackages.length === 0) {
 
 const patchFiles = readdirSync("patches").filter((file) => file.endsWith(".patch"));
 
-const isWindows = process.platform === "win32";
-const cmd = isWindows ? "patch-package.cmd" : "patch-package";
+const require = createRequire(resolve("package.json"));
 
 let failed = false;
 for (const [index, { nodeModulesPath, patchPrefix, cwd = "." }] of installedPackages.entries()) {
@@ -98,25 +98,34 @@ process.exit(failed ? 1 : 0);
 
 function applyPatches(cwd, files, index) {
   const tempPatchDir = join(".tmp", `postinstall-patches-${process.pid}-${index}`);
-  mkdirSync(tempPatchDir, { recursive: true });
-  for (const patchFile of files) {
-    copyFileSync(join("patches", patchFile), join(tempPatchDir, patchFile));
-  }
-
   let result;
   try {
-    result = spawnSync(cmd, ["--patch-dir", relative(cwd, tempPatchDir), "--error-on-fail"], {
-      cwd,
-      shell: isWindows,
-      stdio: "inherit",
-      windowsHide: true,
-    });
+    mkdirSync(tempPatchDir, { recursive: true });
+    for (const patchFile of files) {
+      copyFileSync(join("patches", patchFile), join(tempPatchDir, patchFile));
+    }
+    const cli = require.resolve("./node_modules/patch-package/index.js");
+    result = spawnSync(
+      process.execPath,
+      [cli, "--patch-dir", relative(cwd, tempPatchDir), "--error-on-fail"],
+      { cwd, stdio: "inherit", windowsHide: true },
+    );
+  } catch (error) {
+    console.error("postinstall-patches: patch-package unavailable:", error.message);
+    return "unavailable";
   } finally {
     rmSync(tempPatchDir, { recursive: true, force: true });
   }
 
   if (result.error) {
     console.error("postinstall-patches: patch-package failed to spawn:", result.error.message);
+    return "unavailable";
+  }
+  if (result.signal || result.status === null) {
+    console.error(
+      "postinstall-patches: patch-package terminated without an exit code:",
+      result.signal,
+    );
     return "unavailable";
   }
   return result.status === 0 ? "applied" : "rejected";

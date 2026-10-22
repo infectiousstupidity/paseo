@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_LIFECYCLE_STATUSES } from "./agent-manager.js";
 import {
   buildStoredAgentPayload,
+  selectAgentListItems,
   toAgentPayload,
   toRecentProviderSessionDescriptorPayload,
   toStoredAgentRecord,
@@ -538,4 +539,22 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
       lastPromptPreview: null,
     });
   });
+});
+
+it("pins requested archived agents beyond the recent window without returning other agents", () => {
+  const archived = toAgentPayload(createManagedAgent({ id: "old-archived" }), {
+    archivedAt: "2020-01-01T00:00:00.000Z",
+  });
+  const other = toAgentPayload(createManagedAgent({ id: "other" }));
+  expect(
+    selectAgentListItems([archived, other], { sinceHours: 0 }).map((agent) => agent.id),
+  ).toEqual(["other"]);
+  expect(
+    selectAgentListItems([archived, other], { ids: [archived.id], sinceHours: 0 }).map(
+      (agent) => agent.id,
+    ),
+  ).toEqual([archived.id]);
+  expect(
+    selectAgentListItems([archived, other], { ids: [archived.id], statuses: ["running"] }),
+  ).toEqual([]);
 });

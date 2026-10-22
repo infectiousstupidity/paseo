@@ -134,7 +134,7 @@ import { createSpeechService } from "./speech/speech-runtime.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentStorage } from "./agent/agent-storage.js";
 import { attachAgentStoragePersistence } from "./persistence-hooks.js";
-import { createAgentMcpServer } from "./agent/mcp-server.js";
+import { connectAgentMcpServer, createAgentMcpServer } from "./agent/mcp-server.js";
 import {
   createPaseoToolCatalog,
   createPaseoAgentToolManifest,
@@ -1482,14 +1482,11 @@ export async function createPaseoDaemon(
     const agentMcpRoute = "/mcp/agents";
 
     const createAgentMcpSession = async (callerAgentId?: string) => {
-      const agentMcpServer = await createAgentMcpServer(
-        createAgentToolHostDependencies({
-          callerAgentId,
-          paseoToolPolicy: callerAgentId
-            ? agentManager.getPaseoToolPolicy(callerAgentId)
-            : undefined,
-        }),
-      );
+      const agentMcpDependencies = createAgentToolHostDependencies({
+        callerAgentId,
+        paseoToolPolicy: callerAgentId ? agentManager.getPaseoToolPolicy(callerAgentId) : undefined,
+      });
+      const agentMcpServer = await createAgentMcpServer(agentMcpDependencies);
 
       // Stateless mode: each HTTP request builds a fresh server + transport that is
       // torn down when the response closes, so no per-session state is retained between
@@ -1508,7 +1505,7 @@ export async function createPaseoDaemon(
         },
       });
 
-      await agentMcpServer.connect(transport);
+      await connectAgentMcpServer(agentMcpServer, transport);
       return { server: agentMcpServer, transport };
     };
 

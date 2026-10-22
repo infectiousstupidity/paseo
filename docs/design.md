@@ -24,6 +24,8 @@ A pressable styled to look like a button is wrong; the button is `<Button>` (`pa
 
 Before adding a new component, read `components/ui/`. The primitive usually exists.
 
+For the planned live mock/annotation workflow, including how to reuse these primitives instead of duplicating HTML controls, see [visual-mock-workflow.md](visual-mock-workflow.md). This workflow is not yet implemented.
+
 ---
 
 ## 3. Hierarchy
@@ -147,6 +149,8 @@ One row off the rail makes the whole card look unconsidered.
 ## 9. Responsiveness
 
 Compact-first. The small case is designed; the large case adds chrome around it.
+
+Responsive layout primitives and the platform gates that select them are in [Platform Gating](platform-gating.md).
 
 The list+detail pattern is canonical and reused across surfaces. The settings shell (`packages/app/src/screens/settings-screen.tsx`) and the projects screen (`packages/app/src/screens/projects-screen.tsx`) implement it identically:
 

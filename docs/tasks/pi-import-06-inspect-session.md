@@ -1,0 +1,35 @@
+# Pi import 06 — Inspect without importing
+
+Status: **implemented in `6beba9cfb9`; manual desktop/narrow-width review pending**. Task 05 was previously marked blocked on the same review, not on implementation; validate both slices together. Follow the verified [implementation plan](../plans/pi-import-session-identification.md). The HTML mock is **illustrative**; do not port its one-way/reversible scope handling, fake counts, shortcut, custom CSS or full-text search.
+
+Visual reference: [interactive Import session HTML mock](../mockups/import-session.html). Compare its Details expansion and narrow layout, but reuse the real sheet's focus/scroll/import semantics. Its example data and simulation controls are not requirements.
+
+## Change
+
+1. In `packages/app/src/components/import-session-sheet.tsx`, put a focusable, accessible `Details` control **beside**, never inside, the row's existing import `Pressable`. Use an expanded-state accessibility property and a stable details test ID. The row still imports with one press/Enter; Details expands/collapses without importing.
+2. Keep at most one `expandedKey` local to the sheet, keyed by `providerId:providerHandleId`. Reset on close, host, scope, provider or query change and after import. Render inline content within the existing scroll view; no nested sheet, new component framework or second data store.
+3. Show original saved title (or unavailable), actual provider, full cwd, local absolute last-activity date/time, and distinct **first/last user-prompt excerpts**. These are not agent outputs or full transcripts. Handle long paths, unavailable text/dates and compact-width wrapping. If a separate `Import session` control within details is useful, reuse `handleImportSession(entry)` unchanged.
+4. If the current 160-character Pi excerpts remain inadequate on real sessions, increase **only Pi's** `normalizePromptPreview` cap to at most **512** using the same 64KiB head / 256KiB tail reads. Do not change the shared protocol, read full JSONL, add an RPC, infer metadata, or add another cache. This also widens Pi's existing bounded excerpt search, not full-text search.
+5. Use the existing `importSession` i18n namespace and themed components. Preserve multi-provider behavior, search, paging, manual refresh, import errors, cross-workspace placement and compact/mobile presentation.
+
+## Verify, minimally
+
+- One focused interaction test: Details does **not** call `importAgent`; the original row still imports exactly once with unchanged handle/cwd (and optional detail import if implemented).
+- If preview cap changes, one Pi JSONL assertion for capped excerpts and matching a term past old 160 characters; no new test harness.
+- Run affected existing Vitest files, relevant app/server typechecks, changed-file formatting, and a manual desktop/narrow-width check with two similar sessions.
+
+**Done:** the user can compare real task clues and exact metadata before importing without extra RPCs or reads. If 512 bounded characters still give indistinguishable sessions, stop and investigate child-session naming at creation time instead of building a transcript browser.
+
+## Implementation and verification status
+
+- Added a sibling `Details` control with an expanded accessibility state and stable test ID. It toggles one locally expanded session keyed by provider and handle; closing, changing host/scope/provider/query, or importing clears it.
+- Inline details show the saved title, provider label, full working directory, local date/time, and non-duplicated first/last user-prompt excerpts. No RPC, import-listing change, or session-file read was added.
+- Kept Pi prompt caps unchanged at 160 characters because no real-session evidence showed that cap was inadequate.
+- Passed: focused import-sheet suite (29), i18n resource suite (39), app typecheck, changed-file lint, and formatting.
+- Manual desktop/narrow-width review with real Pi sessions remains pending. Task 05 is still marked blocked on the same visual review, so the visual acceptance check is not claimed complete.
+
+### Follow-up hardening (2026-10-13)
+
+The task's original implementation already existed on `main` (commit `6beba9cfb9`). This follow-up guards malformed/missing last-activity timestamps in the *row* as well as in Details, using the existing translated “Unavailable” label; it does not change the import path, RPC count, provider parsing, query cache, or Pi's 160-character excerpt cap. Focused interaction regressions now exercise two similar Pi sessions with one expanded at a time and no additional fetch/import, plus invalid dates and equivalent first/last excerpts.
+
+**Verification disclosure:** The new tests and affected app checks could not be executed from this GitHub-only environment. As requested, the commit is pushed to `main` without making verification a prerequisite. Real Pi-session desktop and narrow-width visual review remains pending; do not mark visual acceptance complete.

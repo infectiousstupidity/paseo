@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import {
   MENU_ITEM_HEIGHT,
@@ -57,6 +57,8 @@ export interface ComposerTrackPillProps {
   /** Sheet header on compact. Popovers never show one. */
   panelTitle: string;
   testID: string;
+  /** Larger inspection surface for worker lists; ordinary composer menus remain unchanged. */
+  widePanel?: boolean;
   /** Spell out anything the segments abbreviate — a bare count reads as nothing out loud. */
   accessibilityLabel?: string;
   /** Panel body. Rendered into a popover on wide screens and a sheet on compact ones. */
@@ -67,7 +69,7 @@ export interface ComposerTrackPillProps {
  * Size of the panel, not the pill: the pill is as wide as its label, the panel is not. The
  * ceiling is generous because the rows carry real content — a subagent's task description, a
  * task's active form — and there is nothing above the composer competing for the space. The
- * surface still shrinks to its content and clamps to the viewport.
+ * normal surface remains content-sized while the inspector takes a responsive width.
  */
 const PANEL_MIN_WIDTH = 280;
 const PANEL_MAX_WIDTH = 620;
@@ -85,7 +87,13 @@ export function ComposerTrackPill({
   testID,
   accessibilityLabel,
   children,
+  widePanel = false,
 }: ComposerTrackPillProps): ReactElement {
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const wideWidth = widePanel ? Math.max(0, Math.min(860, viewportWidth - 24)) : undefined;
+  const panelHeight = widePanel
+    ? Math.min(720, Math.floor(viewportHeight * 0.8))
+    : PANEL_MAX_HEIGHT;
   return (
     <MenuRoot compactMode="sheet">
       <ComposerTrackPillTrigger
@@ -98,9 +106,12 @@ export function ComposerTrackPill({
         align="start"
         offset={PANEL_OFFSET}
         sheetTitle={panelTitle}
-        minWidth={PANEL_MIN_WIDTH}
-        maxWidth={PANEL_MAX_WIDTH}
-        maxHeight={PANEL_MAX_HEIGHT}
+        width={wideWidth}
+        minWidth={
+          widePanel ? Math.min(PANEL_MIN_WIDTH, wideWidth ?? PANEL_MIN_WIDTH) : PANEL_MIN_WIDTH
+        }
+        maxWidth={wideWidth ?? PANEL_MAX_WIDTH}
+        maxHeight={panelHeight}
         scrollable
         testID={`${testID}-panel`}
       >
@@ -200,6 +211,8 @@ export interface ComposerTrackRowProps {
    */
   closeOnSelect?: boolean;
   disabled?: boolean;
+  /** For rows that disclose inline content rather than navigate. */
+  expanded?: boolean;
   accessibilityLabel?: string;
   testID?: string;
 }
@@ -221,10 +234,15 @@ export function ComposerTrackRow({
   onPress,
   closeOnSelect = true,
   disabled = false,
+  expanded,
   accessibilityLabel,
   testID,
 }: ComposerTrackRowProps): ReactElement {
   const { selectItem } = useMenuContext("ComposerTrackRow");
+  const accessibilityState = useMemo(
+    () => (expanded === undefined ? undefined : { expanded }),
+    [expanded],
+  );
   const [hovered, setHovered] = useState(false);
   const handlePointerEnter = useCallback(() => setHovered(true), []);
   const handlePointerLeave = useCallback(() => setHovered(false), []);
@@ -255,6 +273,8 @@ export function ComposerTrackRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityState={accessibilityState}
+        aria-expanded={expanded}
         testID={testID}
         disabled={disabled}
         onPress={handleSelect}

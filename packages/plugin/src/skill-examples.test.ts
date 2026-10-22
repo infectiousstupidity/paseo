@@ -5,7 +5,11 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const skill = readFileSync(path.join(repository, "skills/paseo-plugin/SKILL.md"), "utf8");
+// The skill routes each task to a reference file; the composer pill example lives in the composer reference.
+const skill = readFileSync(
+  path.join(repository, "skills/paseo-plugin/references/composer.md"),
+  "utf8",
+);
 
 function sectionCode(heading: string): string {
   const section = skill.slice(skill.indexOf(`\n## ${heading}\n`));

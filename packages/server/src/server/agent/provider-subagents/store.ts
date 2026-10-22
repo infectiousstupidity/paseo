@@ -7,7 +7,31 @@ import type {
   AgentTimelineRow,
 } from "../agent-timeline-store-types.js";
 
+/** Server-only capability. Native identities must never be serialized to clients. */
+export interface ProviderSubagentControlTarget {
+  runId: string;
+  childId: string;
+  /** Native snapshot projection ID, which may differ from the upstream stop childId. */
+  snapshotId: string;
+  index: number;
+  sessionId: string;
+}
+
 export type ProviderSubagentStatus = "running" | "completed" | "failed" | "canceled";
+
+/**
+ * Bounded current-activity projection for a subagent row: the newest completed tool call
+ * observed from the child transcript, kept small enough that a two-line popover never needs
+ * the full history. Sent as part of the descriptor; absent on older daemons (clients fall
+ * back to the streamed timeline tail).
+ */
+export interface ProviderSubagentActivity {
+  kind: "tool";
+  /** Short display-ready label, e.g. "edit track.tsx". */
+  label: string;
+  /** Real timestamp of the observed event (or observation time when the row carries none). */
+  at: string;
+}
 
 export interface ProviderSubagentDescriptor {
   id: string;
@@ -23,6 +47,11 @@ export interface ProviderSubagentDescriptor {
   toolCallId: string | null;
   cwd: string | null;
   subtitle: string | null;
+  model: string | null;
+  thinkingOptionId: string | null;
+  activity: ProviderSubagentActivity | null;
+  /** Presence of an exact native target; actual control is always revalidated. */
+  controlEligible?: boolean;
 }
 
 export type ProviderSubagentInputEvent =
@@ -39,7 +68,12 @@ export type ProviderSubagentInputEvent =
       toolCallId?: string | null;
       cwd?: string | null;
       subtitle?: string | null;
+      model?: string | null;
+      thinkingOptionId?: string | null;
+      activity?: ProviderSubagentActivity | null;
       parentSubagentId?: string | null;
+      /** Native, session-owned target from verified Pi status.json, not display metadata. */
+      controlTarget?: ProviderSubagentControlTarget | null;
       timestamp?: string;
     }
   | {
@@ -77,6 +111,7 @@ function stickyField<T>(next: T | undefined, previous: T | null | undefined): T 
 
 export class ProviderSubagentStore {
   private readonly descriptors = new Map<string, ProviderSubagentDescriptor>();
+  private readonly controlTargets = new Map<string, ProviderSubagentControlTarget>();
   private readonly timelines = new InMemoryAgentTimelineStore();
 
   apply(
@@ -87,6 +122,7 @@ export class ProviderSubagentStore {
     const key = storeKey(parentAgentId, event.id);
     if (event.type === "remove") {
       this.descriptors.delete(key);
+      this.controlTargets.delete(key);
       this.timelines.delete(key);
       return { type: "remove", parentAgentId, subagentId: event.id };
     }
@@ -125,8 +161,19 @@ export class ProviderSubagentStore {
       toolCallId: stickyField(event.toolCallId, previous?.toolCallId),
       cwd: stickyField(event.cwd, previous?.cwd),
       subtitle: stickyField(event.subtitle, previous?.subtitle),
+      model: stickyField(event.model, previous?.model),
+      thinkingOptionId: stickyField(event.thinkingOptionId, previous?.thinkingOptionId),
+      activity: stickyField(event.activity, previous?.activity),
       parentSubagentId: stickyField(event.parentSubagentId, previous?.parentSubagentId),
     };
+    // Invalidate control authority as soon as the child is no longer running.
+    if (provider !== "pi" || (previous !== undefined && previous.provider !== provider) ||
+        subagent.status !== "running" || event.controlTarget === null) {
+      this.controlTargets.delete(key);
+    } else if (event.controlTarget !== undefined && provider === "pi") {
+      this.controlTargets.set(key, event.controlTarget);
+    }
+    subagent.controlEligible = this.controlTargets.has(key);
     this.descriptors.set(key, subagent);
     return { type: "upsert", subagent };
   }
@@ -145,6 +192,10 @@ export class ProviderSubagentStore {
     return this.descriptors.get(storeKey(parentAgentId, subagentId)) ?? null;
   }
 
+  getControlTarget(parentAgentId: string, subagentId: string): ProviderSubagentControlTarget | null {
+    return this.controlTargets.get(storeKey(parentAgentId, subagentId)) ?? null;
+  }
+
   fetchTimeline(
     parentAgentId: string,
     subagentId: string,
@@ -158,6 +209,7 @@ export class ProviderSubagentStore {
     for (const subagent of this.list(parentAgentId)) {
       const key = storeKey(parentAgentId, subagent.id);
       this.descriptors.delete(key);
+      this.controlTargets.delete(key);
       this.timelines.delete(key);
       events.push({ type: "remove", parentAgentId, subagentId: subagent.id });
     }

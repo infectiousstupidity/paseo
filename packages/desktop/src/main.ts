@@ -110,12 +110,17 @@ import {
   type AgentDeepLinkTarget,
 } from "@getpaseo/protocol/agent-deep-link";
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
+import { getLocalDesktopBuildInfo } from "./local-build.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const APP_SCHEME = "paseo";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
 const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
+const LOCAL_BUILD = getLocalDesktopBuildInfo();
+const LOCAL_BUILD_LABEL = LOCAL_BUILD.isLocal
+  ? `Paseo Local · ${app.getVersion()} · ${LOCAL_BUILD.commit ?? "unknown"}`
+  : null;
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,
@@ -140,6 +145,8 @@ log.info("[desktop] app startup", {
   platform: process.platform,
   arch: process.arch,
   isPackaged: app.isPackaged,
+  localBuild: LOCAL_BUILD.isLocal,
+  localBuildCommit: LOCAL_BUILD.commit,
 });
 
 interface AttachedBrowserInput {
@@ -691,7 +698,7 @@ async function createWindow(
     ? clampWindowStateToWorkAreas(savedWindowState, getWorkAreasPrimaryFirst())
     : null;
 
-  const title = devWorktreeName ? `${APP_NAME} (${devWorktreeName})` : APP_NAME;
+  const title = LOCAL_BUILD_LABEL ?? (devWorktreeName ? `${APP_NAME} (${devWorktreeName})` : APP_NAME);
   const mainWindow = new BrowserWindow({
     title,
     ...resolveWindowBounds(restoredWindowState),

@@ -29,8 +29,7 @@ import {
   computeEmptyState,
   type DirectoryProject,
   formatDirectoryLabel,
-  getPromptPreview,
-  getSessionTitle,
+  getSessionRowPresentation,
   hasMoreSessions,
   resolveDirectoryLabel,
   nextPageLimit,
@@ -74,6 +73,7 @@ type RecentSessionsResponse = Awaited<
 type SessionsQueryKey = ReadonlyArray<string | number | null>;
 
 function buildSessionsQueryKey(input: {
+  serverId: string | null;
   cwd: string | null;
   query: string;
   limit: number;
@@ -81,6 +81,7 @@ function buildSessionsQueryKey(input: {
 }): SessionsQueryKey {
   return [
     "recent-provider-sessions",
+    input.serverId,
     input.cwd,
     input.query,
     input.limit,
@@ -102,17 +103,27 @@ interface SessionsQueryConfig {
 function buildSessionsQueriesConfig(args: {
   providersToFetch: AgentProvider[] | null;
   visible: boolean;
+  serverId: string | null;
   client: RecentProviderSessionsClient | null;
   cwd: string | null;
   query: string;
   limit: number;
   hostDisconnectedMessage?: string;
 }): SessionsQueryConfig[] {
-  const { providersToFetch, visible, client, cwd, query, limit, hostDisconnectedMessage } = args;
+  const {
+    providersToFetch,
+    visible,
+    serverId,
+    client,
+    cwd,
+    query,
+    limit,
+    hostDisconnectedMessage,
+  } = args;
   if (providersToFetch === null) return [];
   const enabled = visible && Boolean(client);
   return providersToFetch.map((provider) => ({
-    queryKey: buildSessionsQueryKey({ cwd, query, limit, provider }),
+    queryKey: buildSessionsQueryKey({ serverId, cwd, query, limit, provider }),
     enabled,
     retry: false as const,
     placeholderData: keepPreviousData,
@@ -294,29 +305,36 @@ function ImportSessionSheetRow({
   entry,
   disabled,
   importing,
+  expanded,
   folder,
   onImportSession,
+  onToggleDetails,
 }: {
   serverId: string | null;
   entry: FetchRecentProviderSessionEntry;
   disabled: boolean;
   importing: boolean;
+  expanded: boolean;
   /** The row's directory, shown only when rows can come from more than one. */
   folder: string | null;
   onImportSession: (entry: FetchRecentProviderSessionEntry) => void;
+  onToggleDetails: (entry: FetchRecentProviderSessionEntry) => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const title = getSessionTitle(entry);
-  const promptPreview = getPromptPreview(entry);
+  const presentation = getSessionRowPresentation(entry);
   const ProviderIcon = useProviderIcon(entry.providerId, serverId);
   const accessibilityState = useMemo(
     () => (disabled ? DISABLED_ACCESSIBILITY_STATE : undefined),
     [disabled],
   );
+  const detailsAccessibilityState = useMemo(() => ({ expanded, disabled }), [disabled, expanded]);
   const handlePress = useCallback(() => {
     onImportSession(entry);
   }, [entry, onImportSession]);
+  const handleToggleDetails = useCallback(() => {
+    onToggleDetails(entry);
+  }, [entry, onToggleDetails]);
   const pressableStyle = useCallback(
     ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
       styles.row,
@@ -325,50 +343,164 @@ function ImportSessionSheetRow({
     ],
     [],
   );
+  const detailsStyle = useCallback(
+    ({ pressed, hovered = false }: PressableStateCallbackType & { hovered?: boolean }) => [
+      styles.detailsButton,
+      Boolean(hovered) && styles.rowHovered,
+      pressed && styles.rowPressed,
+    ],
+    [],
+  );
 
   return (
-    <Pressable
-      disabled={disabled}
-      onPress={handlePress}
-      accessibilityRole="button"
-      accessibilityState={accessibilityState}
-      style={pressableStyle}
-      testID={`import-session-session-${entry.providerId}-${entry.providerHandleId}`}
-    >
-      <View style={styles.rowIconWrap}>
-        <ProviderIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
+    <View>
+      <View style={styles.rowActionGroup}>
+        <Pressable
+          disabled={disabled}
+          onPress={handlePress}
+          accessibilityRole="button"
+          accessibilityState={accessibilityState}
+          style={pressableStyle}
+          testID={`import-session-session-${entry.providerId}-${entry.providerHandleId}`}
+        >
+          <View style={styles.rowIconWrap}>
+            <ProviderIcon size={theme.iconSize.md} color={theme.colors.foregroundMuted} />
+          </View>
+          <View style={styles.rowContent}>
+            <View style={styles.rowHeader}>
+              <View style={styles.rowTitleGroup}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {presentation.title}
+                </Text>
+                {presentation.isPiSubagent ? (
+                  <Text style={styles.rowSubagent} numberOfLines={1}>
+                    {t("subagents.pillLabelOne")}
+                  </Text>
+                ) : null}
+              </View>
+              {importing ? (
+                <Text style={styles.rowMeta}>{t("importSession.row.importing")}</Text>
+              ) : (
+                <ImportSessionActivityTime date={entry.lastActivityAt} />
+              )}
+            </View>
+            {presentation.promptPreview ? (
+              <Text style={styles.rowPreview} numberOfLines={2}>
+                {presentation.promptPreview}
+              </Text>
+            ) : null}
+            {presentation.firstPromptPreview ? (
+              <Text style={styles.rowPreviewSecondary} numberOfLines={1}>
+                {presentation.firstPromptPreview}
+              </Text>
+            ) : null}
+            {folder ? (
+              <Text
+                style={styles.rowFolder}
+                numberOfLines={1}
+                testID={`import-session-row-folder-${entry.providerId}-${entry.providerHandleId}`}
+              >
+                {folder}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
+        <Pressable
+          disabled={disabled}
+          onPress={handleToggleDetails}
+          accessibilityRole="button"
+          accessibilityLabel={t("importSession.details.label")}
+          accessibilityState={detailsAccessibilityState}
+          aria-expanded={expanded}
+          style={detailsStyle}
+          testID={`import-session-details-${entry.providerId}-${entry.providerHandleId}`}
+        >
+          <Text style={styles.detailsButtonText}>{t("importSession.details.label")}</Text>
+        </Pressable>
       </View>
-      <View style={styles.rowContent}>
-        <View style={styles.rowHeader}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          {importing ? (
-            <Text style={styles.rowMeta}>{t("importSession.row.importing")}</Text>
-          ) : (
-            <ImportSessionActivityTime date={entry.lastActivityAt} />
-          )}
-        </View>
-        <Text style={styles.rowPreview} numberOfLines={2}>
-          {promptPreview}
-        </Text>
-        {folder ? (
-          <Text
-            style={styles.rowFolder}
-            numberOfLines={1}
-            testID={`import-session-row-folder-${entry.providerId}-${entry.providerHandleId}`}
-          >
-            {folder}
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
+      {expanded ? <ImportSessionDetails entry={entry} /> : null}
+    </View>
   );
 }
 
 function ImportSessionActivityTime({ date }: { date: string }) {
-  const label = useTimeAgo(new Date(date));
-  return <Text style={styles.rowMeta}>{label}</Text>;
+  const { t } = useTranslation();
+  const timestamp = new Date(date);
+  const label = useTimeAgo(Number.isFinite(timestamp.getTime()) ? timestamp : null);
+  return <Text style={styles.rowMeta}>{label || t("importSession.details.unavailable")}</Text>;
+}
+
+function ImportSessionDetails({ entry }: { entry: FetchRecentProviderSessionEntry }) {
+  const { t } = useTranslation();
+  const unavailable = t("importSession.details.unavailable");
+  const firstPrompt = entry.firstPromptPreview?.trim() || null;
+  const lastPrompt = entry.lastPromptPreview?.trim() || null;
+  const firstPromptIsDistinct =
+    firstPrompt !== null &&
+    (lastPrompt === null ||
+      normalizePromptExcerpt(firstPrompt) !== normalizePromptExcerpt(lastPrompt));
+  const activityDate = formatAbsoluteSessionTime(entry.lastActivityAt);
+  const details: Array<{ key: string; label: string; value: string }> = [
+    {
+      key: "title",
+      label: t("importSession.details.savedTitle"),
+      value: entry.title?.trim() ? entry.title : unavailable,
+    },
+    {
+      key: "provider",
+      label: t("importSession.details.provider"),
+      value: entry.providerLabel || entry.providerId,
+    },
+    {
+      key: "cwd",
+      label: t("importSession.details.workingDirectory"),
+      value: entry.cwd || unavailable,
+    },
+    {
+      key: "activity",
+      label: t("importSession.details.lastActivity"),
+      value: activityDate ?? unavailable,
+    },
+  ];
+
+  if (firstPromptIsDistinct && firstPrompt) {
+    details.push({
+      key: "first-prompt",
+      label: t("importSession.details.firstUserPrompt"),
+      value: firstPrompt,
+    });
+  }
+  if (lastPrompt) {
+    details.push({
+      key: "last-prompt",
+      label: t("importSession.details.lastUserPrompt"),
+      value: lastPrompt,
+    });
+  }
+
+  return (
+    <View style={styles.detailsPanel}>
+      {details.map(({ key, label, value }) => (
+        <View key={key} style={styles.detailsField}>
+          <Text style={styles.detailsLabel}>{label}</Text>
+          <Text style={styles.detailsValue}>{value}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function normalizePromptExcerpt(text: string): string {
+  return text.trim().replace(/\s+/gu, " ");
+}
+
+function formatAbsoluteSessionTime(timestamp: string): string | null {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function SessionRows({
@@ -376,29 +508,38 @@ function SessionRows({
   entries,
   disabled,
   importingSessionKey,
+  expandedKey,
   resolveFolder,
   onImportSession,
+  onToggleDetails,
 }: {
   serverId: string | null;
   entries: ReadonlyArray<FetchRecentProviderSessionEntry>;
   disabled: boolean;
   importingSessionKey: string | null;
+  expandedKey: string | null;
   resolveFolder: (entry: FetchRecentProviderSessionEntry) => string | null;
   onImportSession: (entry: FetchRecentProviderSessionEntry) => void;
+  onToggleDetails: (entry: FetchRecentProviderSessionEntry) => void;
 }) {
   return (
     <View style={styles.list}>
-      {entries.map((entry) => (
-        <ImportSessionSheetRow
-          key={`${entry.providerId}:${entry.providerHandleId}`}
-          serverId={serverId}
-          entry={entry}
-          disabled={disabled}
-          importing={importingSessionKey === `${entry.providerId}:${entry.providerHandleId}`}
-          folder={resolveFolder(entry)}
-          onImportSession={onImportSession}
-        />
-      ))}
+      {entries.map((entry) => {
+        const key = `${entry.providerId}:${entry.providerHandleId}`;
+        return (
+          <ImportSessionSheetRow
+            key={key}
+            serverId={serverId}
+            entry={entry}
+            disabled={disabled}
+            importing={importingSessionKey === key}
+            expanded={expandedKey === key}
+            folder={resolveFolder(entry)}
+            onImportSession={onImportSession}
+            onToggleDetails={onToggleDetails}
+          />
+        );
+      })}
     </View>
   );
 }
@@ -424,6 +565,7 @@ export function ImportSessionSheet({
   const [searchInput, setSearchInput] = useState("");
   const [pageLimit, setPageLimit] = useState(PER_PROVIDER_LIMIT);
   const [selectedProvider, setSelectedProvider] = useState<string>(ALL_FILTER_VALUE);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const scopeCwd = isShowingAllDirectories ? null : (cwd ?? null);
   const supportsSearch = useHostFeature(serverId, "importSessionSearch");
@@ -434,6 +576,10 @@ export function ImportSessionSheet({
     setIsShowingAllDirectories(false);
     setSearchInput("");
   }, [visible]);
+
+  useEffect(() => {
+    setExpandedKey(null);
+  }, [visible, serverId, scopeCwd, selectedProvider, searchInput, query]);
 
   // A narrower or wider list starts at page one; keeping a grown limit would
   // fetch 200 rows for a query that matches three.
@@ -462,20 +608,31 @@ export function ImportSessionSheet({
     [snapshotEntries],
   );
 
-  const sessionsQueryRoot = useMemo(() => ["recent-provider-sessions", scopeCwd], [scopeCwd]);
+  const sessionsQueryRoot = useMemo(
+    () => ["recent-provider-sessions", serverId, scopeCwd],
+    [serverId, scopeCwd],
+  );
+  const activeProvidersToFetch = useMemo(
+    () =>
+      selectedProvider === ALL_FILTER_VALUE || !providersToFetch?.includes(selectedProvider)
+        ? providersToFetch
+        : providersToFetch.filter((provider) => provider === selectedProvider),
+    [providersToFetch, selectedProvider],
+  );
 
   const queriesConfig = useMemo(
     () =>
       buildSessionsQueriesConfig({
-        providersToFetch,
+        providersToFetch: activeProvidersToFetch,
         visible,
+        serverId,
         client,
         cwd: scopeCwd,
         query,
         limit: pageLimit,
         hostDisconnectedMessage: t("workspace.terminal.hostDisconnected"),
       }),
-    [providersToFetch, visible, client, scopeCwd, query, pageLimit, t],
+    [activeProvidersToFetch, visible, serverId, client, scopeCwd, query, pageLimit, t],
   );
 
   const queries = useQueries({ queries: queriesConfig });
@@ -556,6 +713,7 @@ export function ImportSessionSheet({
 
   const handleFilterSelect = useCallback((id: string) => {
     setSelectedProvider(id);
+    setExpandedKey(null);
     setIsFilterOpen(false);
   }, []);
 
@@ -637,14 +795,25 @@ export function ImportSessionSheet({
 
   const handleImportSession = useCallback(
     (entry: FetchRecentProviderSessionEntry) => {
+      setExpandedKey(null);
       importMutation.mutate(entry);
     },
     [importMutation],
   );
 
+  const handleToggleDetails = useCallback((entry: FetchRecentProviderSessionEntry) => {
+    const key = `${entry.providerId}:${entry.providerHandleId}`;
+    setExpandedKey((current) => (current === key ? null : key));
+  }, []);
+
+  const handleSearchInputChange = useCallback((value: string) => {
+    setSearchInput(value);
+    setExpandedKey(null);
+  }, []);
+
   const providerErrorRows = useMemo(
-    () => collectProviderErrorRows(providersToFetch, queries, providerLabelById),
-    [queries, providersToFetch, providerLabelById],
+    () => collectProviderErrorRows(activeProvidersToFetch, queries, providerLabelById),
+    [queries, activeProvidersToFetch, providerLabelById],
   );
 
   // Every query settles, errors included, so this stops turning (#2512).
@@ -657,10 +826,16 @@ export function ImportSessionSheet({
   const handleRetryProvider = useCallback(
     (provider: string) => {
       void queryClient.refetchQueries({
-        queryKey: buildSessionsQueryKey({ cwd: scopeCwd, query, limit: pageLimit, provider }),
+        queryKey: buildSessionsQueryKey({
+          serverId,
+          cwd: scopeCwd,
+          query,
+          limit: pageLimit,
+          provider,
+        }),
       });
     },
-    [pageLimit, query, queryClient, scopeCwd],
+    [pageLimit, query, queryClient, scopeCwd, serverId],
   );
 
   const handleShowAll = useCallback(() => setIsShowingAllDirectories(true), []);
@@ -685,7 +860,7 @@ export function ImportSessionSheet({
       ...(supportsSearch
         ? {
             search: {
-              onChange: setSearchInput,
+              onChange: handleSearchInputChange,
               placeholder: t("importSession.searchPlaceholder"),
               // The compact sheet keeps its content mounted while hidden, so the
               // field has to be told to drop the text the state already dropped.
@@ -696,7 +871,17 @@ export function ImportSessionSheet({
         : {}),
       actions: <RefreshAction isRefreshing={isRefreshing} onPress={handleRefresh} />,
     }),
-    [handleRefresh, handleShowAll, hostLabel, isRefreshing, scopeCwd, supportsSearch, t, visible],
+    [
+      handleRefresh,
+      handleSearchInputChange,
+      handleShowAll,
+      hostLabel,
+      isRefreshing,
+      scopeCwd,
+      supportsSearch,
+      t,
+      visible,
+    ],
   );
 
   const isSnapshotUnsupported = requiresHostUpgrade;
@@ -733,7 +918,7 @@ export function ImportSessionSheet({
       onClose={onClose}
       header={header}
       testID="import-session-sheet"
-      desktopMaxWidth={560}
+      desktopMaxWidth={820}
       snapPoints={IMPORT_SHEET_SNAP_POINTS}
     >
       {showFilter ? (
@@ -787,8 +972,10 @@ export function ImportSessionSheet({
           entries={visibleEntries}
           disabled={importMutation.isPending}
           importingSessionKey={importingSessionKey}
+          expandedKey={expandedKey}
           resolveFolder={resolveFolder}
           onImportSession={handleImportSession}
+          onToggleDetails={handleToggleDetails}
         />
       ) : null}
       {showLoadMore ? (
@@ -860,13 +1047,20 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing[2],
     alignItems: "center",
   },
+  rowActionGroup: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing[1],
+    marginHorizontal: -theme.spacing[2],
+  },
   row: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: theme.spacing[2],
     paddingVertical: theme.spacing[2],
     paddingHorizontal: theme.spacing[2],
-    marginHorizontal: -theme.spacing[2],
     borderRadius: theme.borderRadius.lg,
   },
   rowHovered: {
@@ -874,6 +1068,40 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowPressed: {
     backgroundColor: theme.colors.surface2,
+  },
+  detailsButton: {
+    paddingVertical: theme.spacing[1.5],
+    paddingHorizontal: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
+  detailsButtonText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
+  detailsPanel: {
+    marginLeft: theme.iconSize.md + theme.spacing[3],
+    marginRight: theme.spacing[2],
+    marginBottom: theme.spacing[1],
+    padding: theme.spacing[3],
+    gap: theme.spacing[2],
+    backgroundColor: theme.colors.surface1,
+    borderRadius: theme.borderRadius.md,
+  },
+  detailsField: {
+    minWidth: 0,
+    gap: theme.spacing[1],
+  },
+  detailsLabel: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  detailsValue: {
+    flexShrink: 1,
+    minWidth: 0,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
   },
   rowIconWrap: {
     width: theme.iconSize.md,
@@ -892,6 +1120,13 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     gap: theme.spacing[2],
   },
+  rowTitleGroup: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: theme.spacing[1],
+    flex: 1,
+    minWidth: 0,
+  },
   rowTitle: {
     flex: 1,
     minWidth: 0,
@@ -902,10 +1137,19 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
   },
+  rowSubagent: {
+    flexShrink: 0,
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+  },
   rowPreview: {
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.base,
     lineHeight: 20,
+  },
+  rowPreviewSecondary: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
   },
   rowFolder: {
     color: theme.colors.foregroundMuted,

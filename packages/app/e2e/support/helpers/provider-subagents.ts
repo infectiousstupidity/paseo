@@ -49,6 +49,7 @@ async function selectOnlyRootSubagent(page: Page, label: RegExp): Promise<void> 
   await openSubagentsTrack(page);
   const row = await expectOnlySubagent(page, label);
   await row.click();
+  await page.locator('[data-testid^="subagents-track-open-"]').first().click();
 }
 
 async function openOwnedSubagents(page: Page, ownerPanel: Locator): Promise<void> {
@@ -72,6 +73,7 @@ export async function expectNestedProviderSubagentOwnership(
   const nestedRow = await expectOnlySubagent(page, /^nested_owner\b/);
   await attachScreenshot(page, testInfo, `nested-ownership-${phase}-tree`);
   await nestedRow.click();
+  await page.locator('[data-testid^="subagents-track-open-"]').first().click();
 
   const nestedPanel = page.locator('[data-testid="provider-subagent-panel"]:visible');
   await expect(

@@ -1402,6 +1402,13 @@ test(
       workspaceId: workspace.id,
       title: "Unrelated equal ID on A",
     });
+    const advertised = (await mcp.listTools()).tools.map((tool) => tool.name);
+    expect(advertised).toContain("inspect_agent");
+    expect(advertised).not.toContain("get_agent_status");
+    expect(await call("inspect_agent", { serverId, agentId: remote.agentId })).toMatchObject({
+      serverId,
+      snapshot: { id: remote.agentId, title: "B child", cwd: b.staticDir },
+    });
     expect(await call("get_agent_status", { serverId, agentId: remote.agentId })).toMatchObject({
       serverId,
       snapshot: { id: remote.agentId, title: "B child", cwd: b.staticDir },
@@ -1428,6 +1435,22 @@ test(
       agentId: remote.agentId,
       currentModeId: "full-access",
       content: expect.stringContaining("REMOTE_FOLLOWUP_MARKER"),
+    });
+    expect(
+      await call("inspect_agent", { serverId, agentId: remote.agentId, includeActivity: true }),
+    ).toMatchObject({
+      serverId,
+      snapshot: { id: remote.agentId, title: "B child" },
+      content: expect.stringContaining("REMOTE_FOLLOWUP_MARKER"),
+    });
+    expect(
+      await call("list_agents", { serverId, ids: [remote.agentId], includeActivity: true }),
+    ).toMatchObject({
+      serverId,
+      agents: [expect.objectContaining({ id: remote.agentId, title: "B child" })],
+      activity: [
+        { agentId: remote.agentId, content: expect.stringContaining("REMOTE_FOLLOWUP_MARKER") },
+      ],
     });
     expect(await call("list_agents", { serverId })).toMatchObject({
       serverId,

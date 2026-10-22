@@ -56,7 +56,11 @@ import {
 } from "./agent-sdk-types.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
-import type { StoredAgentRecord, AgentStorage } from "./agent-storage.js";
+import {
+  AUTOMATION_REVOKED_LABEL,
+  type StoredAgentRecord,
+  type AgentStorage,
+} from "./agent-storage.js";
 import type { AgentOwner } from "./agent-owner.js";
 import {
   InMemoryAgentTimelineStore,
@@ -88,6 +92,7 @@ import { isPaseoToolPolicyEnabled } from "./paseo-tool-policy.js";
 import {
   ProviderSubagentStore,
   type ProviderSubagentDescriptor,
+  type ProviderSubagentControlTarget,
   type ProviderSubagentStoreEvent,
 } from "./provider-subagents/store.js";
 import { withTimeout } from "../../utils/promise-timeout.js";
@@ -260,6 +265,8 @@ export type ImportablePersistedAgentQueryOptions = ListImportableSessionsOptions
    * built-in importable allowlist + enabled + non-derived rules.
    */
   providerFilter?: Set<string>;
+  /** Pi filters during scanning; cap only the number of Pi matches, not the files searched. */
+  piSearchLimit?: number;
 };
 
 export interface ManagedImportableProviderSession extends ImportableProviderSession {
@@ -1042,7 +1049,10 @@ export class AgentManager {
         try {
           const sessions = await withTimeout(
             client.listImportableSessions!({
-              limit: options?.limit,
+              limit:
+                provider === "pi" && options?.query
+                  ? (options.piSearchLimit ?? options.limit)
+                  : options?.limit,
               query: options?.query,
               scanLimit: options?.scanLimit,
               cwd: options?.cwd,
@@ -1257,6 +1267,14 @@ export class AgentManager {
   ): ProviderSubagentDescriptor | null {
     this.requirePublicAgent(parentAgentId);
     return this.providerSubagents.get(parentAgentId, subagentId);
+  }
+
+  getProviderSubagentControlTarget(
+    parentAgentId: string,
+    subagentId: string,
+  ): ProviderSubagentControlTarget | null {
+    this.requirePublicAgent(parentAgentId);
+    return this.providerSubagents.getControlTarget(parentAgentId, subagentId);
   }
 
   fetchProviderSubagentTimeline(
@@ -1955,7 +1973,13 @@ export class AgentManager {
     record: StoredAgentRecord,
     options: { archivedAt: string; updatedAt?: string },
   ): Promise<ArchivedStoredAgentRecord> {
-    const archivedRecord = buildArchivedAgentRecord(record, options);
+    const archivedRecord = buildArchivedAgentRecord(
+      {
+        ...record,
+        labels: { ...record.labels, [AUTOMATION_REVOKED_LABEL]: "true" },
+      },
+      options,
+    );
     await this.requireRegistry().upsert(archivedRecord);
     if (!record.archivedAt && !record.internal) {
       this.pluginLifecycle?.emit("agent.archived", {
@@ -2548,7 +2572,20 @@ export class AgentManager {
   }): Promise<string> {
     const { agent, agentId, pendingRun, prompt, options } = params;
     try {
-      const result = await agent.session.startTurn(prompt, options);
+      // Archive and provider turn admission share the same lifecycle lane.
+      // A send queued before archive may start first, but archive then waits
+      // for its acceptance and closes it. A send after archive is rejected.
+      const result = await this.runLifecycleMutation(agentId, async () => {
+        if (pendingRun.settled) {
+          throw new Error(`Agent ${agentId} run was canceled before its turn started`);
+        }
+        const record = await this.registry?.get(agentId);
+        if (record?.archivedAt) throw new Error(`Agent is archived: ${agentId}`);
+        if (options?.nonReactivating && record?.labels?.[AUTOMATION_REVOKED_LABEL] === "true") {
+          throw new Error(`Automated messages were revoked by archiving agent ${agentId}`);
+        }
+        return agent.session.startTurn(prompt, options);
+      });
       if (pendingRun.settled) {
         throw new Error(`Agent ${agentId} run was canceled before its turn started`);
       }

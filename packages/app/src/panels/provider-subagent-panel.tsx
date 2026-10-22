@@ -209,7 +209,8 @@ function ProviderSubagentPanel() {
   const firstTimelineSeq = timeline?.cursor?.startSeq ?? null;
   const progressKey =
     timeline?.epoch && firstTimelineSeq !== null ? `${timeline.epoch}:${firstTimelineSeq}` : null;
-  const subtitle = descriptor?.subtitle?.trim();
+  const subtitle = [descriptor?.model?.trim(), descriptor?.thinkingOptionId?.trim(),
+    descriptor?.subtitle?.trim()].filter(Boolean).join(" · ");
 
   const streamContext = useMemo<AgentScreenAgent>(
     () => ({

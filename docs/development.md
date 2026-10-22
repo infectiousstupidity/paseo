@@ -7,6 +7,8 @@
 
 ## Running the dev server
 
+For the **proposed** Git-backed live mock preview and Design Mode → Pi feedback workflow, see [visual-mock-workflow.md](visual-mock-workflow.md). It is not an implemented dev-server feature. Worktree service URLs are documented in [service-proxy.md](service-proxy.md).
+
 ```bash
 npm run dev:server
 npm run dev:app

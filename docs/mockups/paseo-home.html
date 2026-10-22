@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Paseo · Home v7.1 — Side-chat picker</title>
+<style>
+:root{--bg:#0e1118;--side:#0c0f17;--top:#10141d;--surface:#161c27;--raised:#1a2230;--hover:#1d2635;--border:#273142;--line:#232c3b;--strong:#35445b;--fg:#e9ecf4;--muted:#abb5c7;--dim:#8491a8;--accent:#a6baf0;--button:#3b5383;--btnhover:#47649b;--warm:#ddae7c;--warm-soft:#33281f;--cyan:#a6d0cf;--cyan-soft:#1e3538;--red:#ef6c73;--redsoft:#432026;--round:8px}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:13px;line-height:1.5}body{overflow-x:hidden}button,input,textarea,select{font:inherit}button{color:inherit;cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button:disabled{opacity:.42;cursor:not-allowed}svg{display:block}.icon{width:17px;height:17px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}.small-icon{width:14px;height:14px}.subtle{color:var(--muted)}.dim{color:var(--dim)}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.app{min-height:100vh;display:grid;grid-template-columns:252px minmax(0,1fr)}.sidebar{background:var(--side);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;min-width:0;scrollbar-width:thin}.side-brand{height:57px;display:flex;align-items:center;gap:12px;padding:0 19px;border-bottom:1px solid var(--border);flex:none}.logo{height:26px;width:26px;background:#dce5ff;color:#192438;display:grid;place-items:center;font-weight:850;font-size:17px;letter-spacing:-.08em;border-radius:6px}.brand-name{font-size:15px;letter-spacing:-.025em;font-weight:750}.side-menu{padding:16px 12px 8px}.nav-item{border:0;background:none;width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 13px;border-radius:7px;font-weight:530;color:#aeb9cc}.nav-item:hover,.project-link:hover,.side-iconbtn:hover{background:#1b2331;color:#eef2ff}.nav-item.active{background:#222f46;color:#f0f4fd}.nav-item .icon{width:18px;height:18px}.nav-count{margin-left:auto;font-size:11px;color:var(--warm);font-weight:750}.side-sep{height:1px;background:var(--border);margin:10px 17px 18px}.side-group{margin:0 12px 21px}.side-title{font-size:10px;letter-spacing:.12em;font-weight:800;color:#8e9cb3;text-transform:uppercase;padding:0 9px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}.side-title button{border:0;background:none;color:#a3b4d0;font-size:11px;letter-spacing:0;text-transform:none;font-weight:520;padding:3px}.side-title button:hover{text-decoration:underline}.project-link{width:100%;background:none;border:0;border-radius:7px;color:#e0e6f0;padding:8px;text-align:left;display:flex;gap:10px;align-items:center}.project-icon{width:31px;height:31px;border-radius:6px;display:grid;place-items:center;flex:none;font-weight:780;font-size:11px;background:#3a3650;color:#d3c5ee}.project-icon.warm{background:#423239;color:#e9bfa2}.project-icon.blue{background:#303c58;color:#aec5f5}.project-icon.teal{background:#254047;color:#add4d0}.project-icon.ash{background:#2c3644;color:#bdcada}.project-detail{min-width:0;flex:1}.project-detail strong{display:block;font-size:12px;font-weight:650;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.project-detail small{display:block;font-size:11px;color:#99a9c2;margin-top:1px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.star{color:#b1bdd4}.side-sub{margin:0 0 3px 48px;border:0;background:none;display:flex;gap:8px;align-items:center;color:#b2c5e9;font-size:11px;padding:4px 0}.side-sub:hover{color:#fff}.other{margin-bottom:3px}.other .project-icon{width:25px;height:25px;font-size:10px}.sidebar-foot{margin-top:auto;border-top:1px solid var(--border);padding:13px 15px 12px;flex:none;background:var(--side)}.device{display:flex;align-items:center;gap:8px;font-size:11px;color:#a6b8d1;white-space:nowrap}.online{height:8px;width:8px;background:#a4c7c9;border-radius:50%;margin-left:auto}.bottom-icons{display:flex;justify-content:space-between;margin-top:10px}.side-iconbtn{background:none;border:0;border-radius:5px;height:30px;min-width:30px;display:grid;place-items:center;color:#91a2bc}.content{min-width:0}.topbar{height:57px;border-bottom:1px solid var(--border);background:var(--top);display:flex;align-items:center;padding:0 28px;gap:14px;position:sticky;top:0;z-index:5}.top-location{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700}.top-location .icon{color:#a5b4d2}.top-spacer{flex:1}.top-action{height:34px;border:1px solid var(--strong);padding:0 12px;border-radius:6px;background:transparent;display:flex;gap:9px;align-items:center;justify-content:center;font-size:12px;font-weight:600;white-space:nowrap}.top-action:hover,.icon-button:hover{background:var(--hover)}.top-action.emphasis{background:#273a59;border-color:#365277}.top-action.emphasis:hover{background:#34507b}.top-action.minor{color:var(--muted)}.icon-button{border:0;background:transparent;color:#aab9ce;padding:8px;border-radius:6px}.top-divider{height:21px;width:1px;background:var(--border)}.main{padding:34px clamp(24px,3.25vw,54px) 74px;max-width:1850px;margin:0 auto}.heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:30px}.heading small{font-size:10px;color:#97acd0;font-weight:760;letter-spacing:.16em}.heading h1{font-size:33px;line-height:1.1;margin:9px 0 0;font-weight:735;letter-spacing:-.055em}.heading-actions{display:flex;gap:8px;align-items:center}.button{border:1px solid var(--strong);background:#171e2b;color:#e0e9f8;border-radius:6px;min-height:34px;padding:8px 13px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:12px;font-weight:650;white-space:nowrap}.button:hover{background:#26354c}.button.primary{background:var(--button);border-color:#5875aa;color:#fff}.button.primary:hover{background:var(--btnhover)}.button.quiet{background:transparent;border-color:transparent;color:#b0c1df}.button.quiet:hover{background:#1d2636}.button.danger{background:#4b2b34;border-color:#704048;color:#f3c1c2}.button.small{padding:5px 9px;min-height:29px;font-size:11px}.button .icon{width:15px;height:15px}.resume{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(290px,.8fr);background:linear-gradient(105deg,#1f2c40 0%,#192334 56%,#19202d 100%);border:1px solid #3c5273;border-left:3px solid #a2b8ec;border-radius:8px;min-height:215px;overflow:hidden;position:relative;margin-bottom:15px}.resume-content{padding:24px 27px 23px;display:flex;flex-direction:column;min-width:0}.eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.13em;font-weight:780;color:#a9bbd7}.resume-title{font-size:24px;line-height:1.25;font-weight:710;letter-spacing:-.04em;margin:7px 0}.resume-meta{color:#bfccde;font-size:12px}.resume-bottom{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:auto;padding-top:15px}.resume-bottom .button{min-height:36px}.resume-preview{position:relative;margin:21px 23px 20px 4px;border:1px solid #40526b;border-radius:7px;overflow:hidden;min-width:0;box-shadow:0 10px 33px #0a0e1777;align-self:stretch;background:#111824}.preview-top{height:28px;background:#202b3a;border-bottom:1px solid #43516a;display:flex;gap:5px;align-items:center;padding:0 11px}.preview-tab{padding:5px 9px 4px;font-size:9px;color:#9faec2;border-radius:3px 3px 0 0}.preview-tab.active{background:#344156;color:#f1f3fb}.preview-panes{display:grid;grid-template-columns:1.1fr .9fr;height:calc(100% - 28px)}.preview-pane{padding:11px 12px;border-right:1px solid #354258;min-width:0}.preview-pane:last-child{border:0}.preview-label{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:#89a1c4;font-weight:700;margin-bottom:7px}.preview-line{height:6px;border-radius:3px;background:#34425b;margin:7px 0}.preview-line.light{background:#536586}.preview-line.short{width:59%}.preview-line.med{width:84%}.preview-code{color:#c6d6e6;font:10px/1.85 ui-monospace,Consolas,monospace;white-space:nowrap}.preview-code.add{color:#98d5c4}.preview-code.warn{color:#deb49e}.focusbar{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:34px;background:#111722;color:#bbc8d9;min-height:48px;font-size:12px}.focusbar .label{color:#8192ad;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}.focusbar .focusname{font-weight:635;color:#d6e3fb}.focusbar .focusspacer{flex:1}.linkbutton{border:0;background:none;color:#aac0ed;display:inline-flex;gap:5px;align-items:center;padding:2px 3px;font-weight:600;font-size:12px}.linkbutton:hover{text-decoration:underline;color:#e2e9fa}.linkbutton .icon{width:14px;height:14px}.bodygrid{display:grid;grid-template-columns:minmax(0,1.24fr) minmax(300px,.76fr);gap:clamp(22px,2.5vw,38px)}.section{min-width:0}.section + .section{margin-top:30px}.section-head{display:flex;align-items:center;gap:13px;margin:0 0 8px}.section-head h2{font-size:14px;font-weight:750;white-space:nowrap;margin:0;letter-spacing:-.014em}.section-head .line{height:1px;background:var(--border);flex:1}.section-head .count{font-size:11px;color:#97a9c0}.activity-list{border-top:0}.attention-row,.agent-row,.queue-row,.outcome-row{border-bottom:1px solid var(--border);padding:16px 0;display:flex;align-items:center;gap:13px;min-width:0}.attention-row{padding:17px 0}.row-icon{height:34px;width:34px;border-radius:7px;flex:none;display:grid;place-items:center;background:#342a26;color:#e6b68a}.row-icon .icon{width:18px;height:18px}.row-icon.issue{background:var(--redsoft);color:var(--red)}.row-icon.agent{background:#253247;color:#b1c5ef}.row-icon.queue{background:var(--cyan-soft);color:#a6d4d0}.row-icon.success{background:#263939;color:#b1d9d1}.row-content{flex:1;min-width:0}.row-content strong{display:block;font-size:13px;line-height:1.3;font-weight:700;letter-spacing:-.01em;white-space:normal}.row-content small{display:block;color:var(--muted);font-size:11px;line-height:1.5;margin-top:6px}.row-buttons{display:flex;gap:6px;align-items:center;flex:none}.status{font-size:10px;border-radius:5px;padding:3px 7px;font-weight:740;white-space:nowrap}.status.live{color:#b4cfff;background:#263b5f}.status.warn{color:#f0bf8d;background:#3c2c22}.status.ready{color:#b5d8d1;background:#233c40}.status.neutral{color:#aebbd0;background:#232d3c}.subsection-foot{padding-top:10px;display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:11px}.recent-item{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);padding:12px 0}.recent-item .icon{color:var(--cyan)}.recent-item strong{font-size:12px;font-weight:670}.recent-item .meta{font-size:11px;color:var(--muted);margin-top:3px}.recent-spacer{flex:1}.muted-note{margin:11px 0;color:var(--dim);font-size:11px}.empty{padding:17px 0 14px;color:var(--muted);font-size:12px;border-bottom:1px solid var(--border)}.notch{height:8px;width:8px;background:var(--cyan);border-radius:50%;display:inline-block;margin-right:6px}.mock-label{font-size:10px;border:1px solid #4f5260;color:#aeb5c5;border-radius:4px;padding:3px 6px;letter-spacing:.04em;white-space:nowrap}.fixture-toolbar{position:fixed;bottom:17px;right:22px;z-index:8;display:flex;gap:6px;align-items:center;background:#202938;border:1px solid #48556b;box-shadow:0 6px 32px #0008;border-radius:8px;padding:7px 8px}.fixture-toggle{display:none}.fixture-toolbar span{font-size:10px;color:#aec0dc;font-weight:740;padding:0 5px;text-transform:uppercase;letter-spacing:.09em}.fixture-toolbar select{max-width:200px;border:1px solid #40516b;border-radius:5px;background:#131d2a;color:#f0f3fb;font-size:11px;padding:6px 8px}.overlay{position:fixed;inset:0;background:#05080eb6;z-index:20;display:flex;justify-content:flex-end;animation:fade .12s ease}.drawer{width:min(530px,100%);background:#121925;border-left:1px solid #3a495e;height:100%;overflow:auto;box-shadow:-12px 0 60px #0008;display:flex;flex-direction:column}.drawer-header{display:flex;align-items:start;gap:12px;padding:23px 25px 19px;border-bottom:1px solid var(--border)}.drawer-title{font-size:18px;font-weight:710;letter-spacing:-.03em;margin:2px 0 4px}.drawer-body{padding:20px 25px 26px;flex:1}.drawer-footer{border-top:1px solid var(--border);display:flex;gap:9px;padding:15px 25px;flex-wrap:wrap;align-items:center;justify-content:flex-end;background:#131b28}.close{margin-left:auto;border:0;background:transparent;color:#adb9cb;border-radius:5px;padding:6px}.close:hover{background:#293448}.detail-section{margin:0 0 23px}.detail-kicker{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#93a9c7;font-weight:750;margin-bottom:10px}.detail-text{color:#c3cede;font-size:12px;line-height:1.7}.evidence{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);font-size:12px;color:#d7dfeb}.evidence svg{color:var(--cyan)}.evidence span{flex:1}.evidence small{color:var(--dim)}.text-input{width:100%;background:#172235;border:1px solid #435671;color:#eaf0fd;border-radius:6px;padding:12px;resize:vertical;min-height:92px}.chat-preview{border:1px solid #38485f;border-radius:7px;overflow:hidden;background:#101822}.chat-preview .tabs{display:flex;gap:6px;background:#1c2737;border-bottom:1px solid #38485f;padding:8px}.chat-preview .tabs span{font-size:10px;padding:5px 9px;color:#b2c3db;background:#2a384d;border-radius:4px}.chat-preview .window{display:grid;grid-template-columns:1fr 1fr;min-height:230px}.chat-preview .col{padding:14px;border-right:1px solid #33435a}.chat-preview .col:last-child{border:0}.chat-preview h4{margin:0 0 15px;font-size:12px}.chat-preview p{font-size:11px;line-height:1.7;color:#acbbd1}.code{font-size:10px;white-space:pre-wrap;line-height:1.9;color:#c7d2e7;font-family:ui-monospace,Consolas,monospace}.code .add{color:#afdbb9}.step-list{padding:0;margin:0;list-style:none}.step-list li{display:flex;gap:11px;align-items:start;border-bottom:1px solid var(--border);padding:12px 0;font-size:12px;color:#d8e0ed}.step-list .n{border:1px solid #4a5a72;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:10px;color:#b7c9ee;flex:none}.secondary-panel{background:#1a2433;border:1px solid #32435d;border-radius:7px;padding:13px 15px;color:#cad4e5}.secondary-panel strong{font-size:12px}.secondary-panel p{font-size:11px;margin:6px 0 0;color:#aebdd1}.actionsheet{display:flex;flex-direction:column;gap:7px}.sheet-option{border:1px solid var(--border);background:#192232;border-radius:6px;display:flex;gap:12px;align-items:center;text-align:left;padding:12px;color:#dae4f3}.sheet-option:hover{background:#24354e}.sheet-option strong{display:block;font-size:12px}.sheet-option small{display:block;font-size:11px;color:#9daec7;margin-top:3px}.toast{position:fixed;z-index:50;bottom:74px;left:50%;transform:translateX(-50%);padding:10px 15px;border-radius:7px;background:#d9e4ff;color:#1d2c48;font-size:12px;font-weight:690;box-shadow:0 12px 40px #0008}.outcomes-block{border:1px solid var(--border);border-radius:7px;background:#121a26;padding:5px 13px;margin-top:12px}.mobile-nav{display:none}.nowrap{white-space:nowrap}@keyframes fade{from{opacity:0}to{opacity:1}}@media(min-width:1600px){.main{padding-top:43px}.heading{margin-bottom:34px}.resume{min-height:242px}.resume-content{padding:30px 35px}.resume-title{font-size:27px}.resume-preview{margin:24px 30px 22px 10px}}@media(max-width:1200px){.app{grid-template-columns:224px minmax(0,1fr)}.main{padding-left:27px;padding-right:27px}.bodygrid{grid-template-columns:minmax(0,1fr) minmax(260px,.8fr);gap:22px}.resume{grid-template-columns:minmax(0,1fr) minmax(200px,.72fr)}.resume-preview{margin-right:14px}.top-action .action-text{display:none}}@media(max-width:960px){.app{grid-template-columns:66px minmax(0,1fr)}.sidebar{align-items:center}.side-brand{width:100%;justify-content:center;padding:0}.brand-name,.sidebar .side-group,.sidebar .side-sep,.sidebar-foot .device,.side-sub{display:none}.side-menu{width:100%;padding:13px 7px}.nav-item{justify-content:center;padding:12px 5px}.nav-item>span,.nav-count{display:none}.sidebar-foot{width:100%;padding:7px}.bottom-icons{flex-direction:column}.topbar{padding:0 18px}.main{padding:24px}.resume{grid-template-columns:minmax(0,1.1fr) minmax(165px,.7fr)}.bodygrid{grid-template-columns:1fr 1fr}}@media(max-width:710px){.app{grid-template-columns:minmax(0,1fr)}.sidebar{display:none}.topbar{padding:0 13px;height:53px}.top-action.minor,.top-divider{display:none}.top-action{padding:0 9px;height:32px}.top-action .action-text{display:none}.main{padding:23px 17px 96px}.heading{margin-bottom:24px}.heading h1{font-size:29px}.heading-actions .button .full-label{display:none}.resume{grid-template-columns:1fr;min-height:0}.resume-content{padding:21px 21px 22px}.resume-preview{display:none}.resume-title{font-size:23px}.resume-meta{line-height:1.6}.resume-bottom{margin-top:12px}.focusbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 12px;padding:11px 12px;margin-bottom:27px}.focusbar .label{grid-column:1/-1}.focusbar .focusname{grid-column:1;min-width:0}.focusbar .focusspacer{display:none}.focusbar .linkbutton{white-space:nowrap}.bodygrid{display:block}.bodygrid .right{margin-top:30px}.attention-row,.agent-row,.queue-row{gap:9px}.attention-row .row-buttons{margin-left:auto}.row-icon{height:30px;width:30px}.section+.section{margin-top:24px}.fixture-toolbar{right:9px;bottom:8px;padding:5px}.fixture-toolbar span{display:none}.fixture-toolbar select{max-width:171px}.fixture-toolbar .button{padding:4px 7px}.mobile-nav{display:flex;border-top:1px solid var(--border);background:#0f1520;position:fixed;left:0;right:0;bottom:0;height:55px;align-items:center;justify-content:space-around;z-index:6}.mobile-nav button{background:transparent;border:0;color:#aabbd5;display:flex;align-items:center;gap:5px;flex-direction:column;font-size:10px;padding:5px}.mobile-nav button.active{color:#e0ebff}.fixture-toolbar{bottom:63px;right:9px;left:auto;background:transparent;border:0;box-shadow:none;padding:0}.fixture-toolbar .fixture-toggle{display:inline-flex;border-color:#4a5d7a;background:#24334a}.fixture-toolbar select,.fixture-toolbar [data-action="reset"]{display:none}.fixture-toolbar.expanded{background:#202938;border:1px solid #48556b;box-shadow:0 6px 32px #0008;padding:5px}.fixture-toolbar.expanded select,.fixture-toolbar.expanded [data-action="reset"]{display:inline-flex}.fixture-toolbar.expanded .fixture-toggle{display:none}.toast{bottom:114px}}@media(max-width:395px){.row-buttons .button{padding:7px 8px}.attention-row .row-content strong{font-size:12px}.attention-row .row-content small{font-size:10px}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Home iteration 02 — reduced persistent navigation, genuine execution visibility */
+.homepage{padding-top:24px;max-width:1740px}.return-note{color:#9baccc;display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:14px}.return-note .icon{height:13px;width:13px}.return-note.warn-note{color:#e3b783}.home-topline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:17px;min-height:20px}.header-meta{color:#8d9bb5;font-weight:800;letter-spacing:.10em;font-size:10px}.snapshot-state{color:#8496b1;display:flex;align-items:center;gap:5px;font-size:11px}.snapshot-state .icon{height:12px;width:12px}
+.resume-band{background:#192334;border:1px solid #3b4e69;border-left:3px solid #8faee8;border-radius:7px;padding:17px 20px;display:flex;align-items:center;gap:15px;justify-content:space-between;min-height:119px;margin-bottom:32px}
+.resume-detail{min-width:0}.resume-summary{display:flex;align-items:center;gap:11px;margin-top:9px}.resume-summary .project-icon{height:41px;width:41px;font-size:15px}.resume-copy{min-width:0}.resume-copy strong{font-size:20px;letter-spacing:-.03em;display:block;font-weight:720}.resume-copy small{color:#afc0d9;display:block;margin-top:3px;line-height:1.4;font-size:11px}.resume-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.workspace-panes{display:flex;gap:3px;align-items:center}.workspace-panes span{border:1px solid #42516b;border-radius:4px;padding:5px 8px;color:#b5c6df;background:#1d2d45;font-size:10px}.resume-actions .button{min-height:34px}.resume-actions .linkbutton{margin-left:2px}
+.home-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(25px,3vw,46px)}.home-body .section+.section{margin-top:26px}.home-body .section-head{margin-bottom:6px}.home-body .section-head h2{font-size:14px}.home-body .section-head .count{white-space:nowrap}
+.home-row{padding:16px 0}.project-avatar{display:inline-flex;flex:none}.project-avatar .project-icon{height:35px;width:35px;border-radius:8px;box-shadow:inset 0 0 0 1px #ffffff0a;font-size:12px}.attention-row .row-content strong,.suggestion-row strong,.live-agent strong{font-size:13px}.home-row .row-content small{margin-top:5px;line-height:1.4}.home-row .row-buttons{align-self:center}
+.suggestion-row{display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--border);padding:14px 0;min-width:0}.suggestion-row .row-content small{margin-top:4px}.suggestion-row .row-buttons{display:flex;align-items:center;align-self:center;gap:2px}.evidence-link{display:flex;align-items:center;gap:5px;margin-top:7px;font-size:10px;color:#a3b2cc}.evidence-link .icon{height:12px;width:12px}.tiny-dismiss{display:grid;place-items:center;padding:7px;color:#8696ad;background:transparent;border:0;border-radius:5px}.tiny-dismiss .icon{width:13px;height:13px}.tiny-dismiss:hover{background:#283247;color:#e6eefd}.footnote{font-size:10px;color:#7e8da6;padding-top:9px;line-height:1.5}.urgent-key{color:#e4b188;font-size:10px;font-weight:710;margin-top:5px;display:block}
+.live-agent{border:1px solid #32425d;border-radius:8px;background:#151c28;padding:14px;margin-top:11px}.agent-head{display:flex;gap:10px;align-items:center}.agent-head .row-content small{margin-top:4px}.agent-head .status{margin-left:auto}.run-track{margin:16px 0 15px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px}.run-stage{height:31px;border-top:3px solid #35445d;padding:4px 4px 0;display:flex;align-items:center;justify-content:space-between;gap:2px;min-width:0;color:#879bb7;font-size:10px}.run-stage.done-stage{border-color:#9bb5ea;color:#e4eafa}.run-stage.warn-stage{border-color:#d5a774;color:#e5c294}.run-stage small{font-size:9px;color:#aac3f1}.agent-tree{position:relative;padding:0 0 0 11px;margin-left:7px}.tree-rail{position:absolute;left:0;top:9px;bottom:13px;width:1px;background:#45536c}.agent-line{display:flex;align-items:center;gap:8px;color:#a9b5c9;min-width:0;margin:0 0 10px;font-size:11px}.agent-line strong{font-weight:660;white-space:nowrap;font-size:11px;color:#e1e7f2}.agent-line>span:last-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.agent-line.sub-line{margin-left:15px}.agent-line em{margin-left:auto;color:#a3d2d0;font-size:10px;font-style:normal}.waiting-dot{height:7px;width:7px;display:inline-block;border:1px solid #6d778b;border-radius:50%;flex:none}.live-dot{height:7px;width:7px;background:#93c8c3;border-radius:50%;display:inline-block;flex:none;box-shadow:0 0 0 3px #24414360}.inline-dot{margin-right:4px}.run-bottom{border-top:1px solid #2e3b50;padding-top:11px;margin-top:3px;display:flex;align-items:center;justify-content:space-between;gap:10px}.run-bottom>span{font-size:10px;color:#94a5bf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.queue-subhead{padding-top:8px;font-size:10px;letter-spacing:.06em;color:#8091ab;display:flex;justify-content:space-between;gap:10px}.queue-subhead>span{text-transform:none;letter-spacing:0}.queue-entry,.schedule-entry,.outcome-line{border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:13px 0;min-width:0}.queue-entry .row-content small,.schedule-entry .row-content small,.outcome-line .row-content small{margin-top:4px}.schedule-entry{margin-top:6px}.schedule-mark{width:35px;height:35px;display:grid;place-items:center;border:1px solid #38465e;border-radius:8px;color:#9fb1cf;flex:none}.schedule-mark .icon{width:17px;height:17px}.queue-entry .linkbutton,.schedule-entry .linkbutton{flex:none}.outcome-line .row-content strong{font-size:12px}.outcomes-section{margin-bottom:35px}.micro-context{display:flex;gap:8px}.mini-label{font-size:10px}.micro-state{color:#929caa}
+.side-indicator{height:7px;width:7px;border-radius:50%;margin-left:auto;flex:none}.side-indicator.live-dot{background:#93c8c3}.side-indicator.attention-dot{background:#dfaf7c}.unified-projects{margin-bottom:12px}.unified-projects .project-link{padding:7px 8px}.unified-projects .project-detail small{font-size:10px}.unified-projects .side-title{margin-bottom:6px}.unified-projects .project-link .project-icon{width:30px;height:30px}.unified-projects .project-link+.project-link{margin-top:2px}
+@media(max-width:1200px){.home-body{gap:20px}.resume-band{padding:14px 15px}.workspace-panes{display:none}.resume-copy strong{font-size:17px}}
+@media(max-width:960px){.resume-band{align-items:flex-start}.home-body{grid-template-columns:minmax(0,1fr)}.right-lane{display:contents}.live-section{order:-1}.left-lane,.right-lane{min-width:0}.homepage{padding-top:17px}.resume-band{margin-bottom:22px}.home-body .section+.section{margin-top:25px}}
+@media(max-width:710px){.home-topline{margin-bottom:12px}.resume-band{min-height:0;flex-direction:column;align-items:stretch;gap:13px;padding:14px}.resume-copy strong{font-size:16px}.resume-summary .project-icon{height:33px;width:33px;font-size:12px}.resume-copy small{font-size:11px}.resume-actions{justify-content:flex-start}.resume-actions .button{flex:0 0 auto}.homepage{padding:14px 16px 110px}.home-body{display:flex;flex-direction:column}.right-lane{display:contents}.attention-section{order:0}.live-section{order:1}.queue-section{order:2}.suggestions-section{order:3}.outcomes-section{order:4}.left-lane{display:contents}.run-track{margin:13px 0}.agent-line>span:last-of-type{display:none}.home-row .row-buttons,.suggestion-row .row-buttons{margin-left:auto}.home-row .row-content strong,.suggestion-row strong{font-size:12px}.home-body .section+.section{margin-top:15px}.home-body .section-head{padding-top:4px}.suggestion-row .row-buttons .tiny-dismiss{display:none}.footnote{font-size:10px}.queue-subhead{font-size:9px}.queue-subhead span{display:none}}
+@media(max-width:405px){.suggestion-row,.attention-row,.queue-entry{gap:8px}.attention-row .button,.suggestion-row .button{padding:5px 7px;font-size:10px}.resume-copy small{max-width:260px}.snapshot-state{font-size:10px}.header-meta{font-size:9px}}
+
+.mobile-preview-toggle{display:none}.project-icon .project-glyph{width:18px;height:18px;stroke-width:1.7}.project-icon.project-seicho{background:#533a32;color:#f3c59e}.project-icon.project-shiori{background:#403b64;color:#c8bdf8}.project-icon.project-food-core{background:#224a4c;color:#b7dedb}
+@media(max-width:710px){.mobile-preview-toggle{display:grid;place-items:center}.fixture-toolbar:not(.expanded){display:none}.fixture-toolbar.expanded{bottom:70px;right:8px;max-width:calc(100vw - 16px)}.fixture-toolbar.expanded .fixture-toggle{display:none}}
+
+/* HOME V3 · information hierarchy and density pass. Scoped: existing drawers retain their original CSS. */
+.v3home{padding-top:28px;max-width:1850px;padding-bottom:96px}
+.v3home .section-overline{color:#bed0f3;font-size:11px;font-weight:760;letter-spacing:.12em}
+.v3home .resume-v3{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:20px 26px 21px;margin-bottom:24px;border:1px solid #455b80;border-left:4px solid #9dbaf9;background:#1d2b43;border-radius:9px;min-height:132px}
+.v3home .res-title{display:flex;gap:14px;align-items:center;margin-top:9px;min-width:0}
+.v3home .res-title>.project-avatar .project-icon{width:49px;height:49px;border-radius:10px}
+.v3home .res-title strong{font-size:23px;font-weight:735;letter-spacing:-.035em;line-height:1.25;display:block}
+.v3home .res-meta{font-size:13px;color:#b8c8e0;margin-top:4px}
+.v3home .resume-state{font-size:12px;color:#b5cbe0;margin:10px 0 0 64px;display:flex;gap:8px;align-items:center}
+.v3home .res-actions{display:flex;gap:15px;flex:none;align-items:center}
+.v3home .res-actions .button{min-height:42px;font-size:13px;padding:9px 15px}
+.v3home .res-actions .linkbutton{font-size:13px}
+.v3home .home-layout{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:18px;align-items:start}
+.v3home .new-left,.v3home .new-right{display:flex;flex-direction:column;gap:18px;min-width:0}
+.v3home .home-panel{background:#141b27;border:1px solid #303c51;border-radius:10px;min-width:0;overflow:hidden}
+.v3home .panel-heading{display:flex;gap:12px;justify-content:space-between;align-items:center;padding:17px 20px 15px;border-bottom:1px solid #2b3548;min-height:64px}
+.v3home .panel-identity{display:flex;gap:10px;align-items:center;min-width:0}
+.v3home .panel-symbol{width:30px;height:30px;display:grid;place-items:center;border-radius:7px;flex:none}
+.v3home .panel-symbol .icon{width:16px;height:16px}
+.v3home .attention-symbol{background:#483225;color:#f3c394}
+.v3home .running-symbol{background:#2c3e61;color:#b2c8fd}
+.v3home .queue-symbol{background:#253a42;color:#a5d0d0}
+.v3home .idea-symbol{background:#352d4c;color:#c6b8ed}
+.v3home h2{font-size:19px;font-weight:745;letter-spacing:-.035em;line-height:1.2;margin:0}
+.v3home .panel-short{font-size:12px;color:#b4c1d4;display:flex;align-items:center;gap:7px;text-align:right;line-height:1.3}
+.v3home .panel-number{font-size:12px;font-weight:750;border-radius:6px;padding:3px 8px}
+.v3home .warm-number{background:#4b3426;color:#f3c394}
+.v3home .blue-number{background:#293d5b;color:#b9d0fc}
+.v3home .purple-number{background:#352d4c;color:#d2c4fa}
+.v3home .needs-panel{border-top:3px solid #b78d5f}
+.v3home .running-panel{border-top:3px solid #819edb}
+.v3home .proposals-panel{border-top:3px solid #9b86c5}
+.v3home .next-panel{border-top:3px solid #80aaa9}
+.v3home .panel-rows{padding:0 20px}
+.v3home .home-item{display:flex;align-items:center;gap:13px;padding:19px 0;min-width:0}
+.v3home .home-item+.home-item,.v3home .next-item+.next-item{border-top:1px solid #303a4a}
+.v3home .home-item>.project-avatar .project-icon,.v3home .next-item>.project-avatar .project-icon{height:42px;width:42px;border-radius:9px}
+.v3home .item-detail{flex:1;min-width:0}
+.v3home .item-detail>strong{font-size:15px;font-weight:715;letter-spacing:-.015em;line-height:1.3;display:block;color:#f0f2fa}
+.v3home .item-detail p{margin:5px 0 0;font-size:13px;line-height:1.45;color:#b5c2d5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+.v3home .item-project,.v3home .item-source{display:flex;align-items:center;gap:5px;color:#bba989;font-size:11.5px;margin-top:8px;font-weight:630}
+.v3home .item-source{color:#a7a1cb}
+.v3home .item-source .icon{height:13px;width:13px}
+.v3home .home-item>.button,.v3home .item-actions>.button{flex:none;min-height:36px;font-size:12px;padding:6px 11px}
+.v3home .item-actions{display:flex;gap:3px;align-items:center}
+.v3home .attention-item{background:transparent}
+.v3home .panel-empty{font-size:14px;color:#b8c6da;padding:27px 20px;line-height:1.5}
+.v3home .run-v3{padding:18px 20px 15px}
+.v3home .run-v3+.run-v3{border-top:1px solid #303b51}
+.v3home .agent-hero{display:flex;align-items:center;gap:12px}
+.v3home .agent-hero>.project-avatar .project-icon{width:43px;height:43px;border-radius:9px}
+.v3home .agent-hero .item-detail>strong{font-size:17px}
+.v3home .agent-context{font-size:12px;display:block;color:#b2c2d9;margin-top:4px}
+.v3home .agent-hero .status{font-size:12px;padding:5px 9px}
+.v3home .current-step{display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:4px;align-items:center;background:#1b2b45;border:1px solid #344968;border-radius:8px;padding:13px 15px;margin-top:17px}
+.v3home .step-label{color:#b7c9e9;font-weight:790;font-size:10px;letter-spacing:.08em}
+.v3home .current-step>strong{font-size:15px;color:#f0f3fc}
+.v3home .current-desc{font-size:12px;color:#b9c8df;grid-column:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v3home .stage-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:16px 0 15px}
+.v3home .stage-strip>span{border-top:4px solid #3b475f;padding-top:8px;color:#8699b6;display:flex;gap:6px;align-items:center;font-size:11.5px;font-weight:620;white-space:nowrap;min-width:0}
+.v3home .stage-strip>span i{display:block;width:6px;height:6px;flex:none;border-radius:50%;background:#516078}
+.v3home .stage-strip>span.is-active{border-color:#aac2ff;color:#e2eaff}
+.v3home .stage-strip>span.is-active i{background:#aac2ff;box-shadow:0 0 0 3px #aac2ff23}
+.v3home .stage-strip>span.is-blocked{border-color:#dfa36a;color:#f4c590}
+.v3home .stage-strip>span.is-blocked i{background:#dfa36a}
+.v3home .child-v3{display:flex;align-items:center;gap:8px;padding:12px 12px 12px 17px;background:#1a2131;border:1px solid #303a4b;border-radius:7px;min-width:0;flex-wrap:wrap}
+.v3home .child-v3 strong{font-size:13px;white-space:nowrap}
+.v3home .child-branch{font-size:17px;color:#8ba1c6}
+.v3home .child-activity{font-size:12px;color:#aebbd0;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v3home .child-state{color:#abdad4;font-size:11px;font-weight:750}
+.v3home .run-v3-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px}
+.v3home .run-v3-foot>span{font-size:11.5px;color:#a0b1c9}
+.v3home .run-v3-foot .button{min-height:35px;font-size:12px}
+.v3home .next-item{padding:17px 0;width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:none;border:0;min-width:0}
+.v3home .next-item:hover{background:#1c2635}
+.v3home .next-item>.icon{color:#a1b3cc;width:16px}
+.v3home .next-item .item-detail strong{font-size:14px}
+.v3home .next-type{font-size:10px;display:block;font-weight:790;color:#9eafc9;letter-spacing:.09em;margin-bottom:5px}
+.v3home .next-item .status{font-size:11.5px}
+.v3home .scheduled-icon{width:42px;height:42px;border:1px solid #465569;border-radius:9px;display:grid;place-items:center;color:#aabbd0;flex:none}
+.v3home .outcomes-v3{margin-top:18px;border:1px solid #303b4c;background:#131a24;border-radius:9px;padding:12px 17px;display:flex;align-items:center;gap:18px}
+.v3home .outcomes-intro{display:flex;align-items:center;gap:10px;flex:none}
+.v3home .outcome-check{width:34px;height:34px;border-radius:8px;background:#243b3c;color:#b3d4cb;display:grid;place-items:center}
+.v3home .outcomes-intro strong{font-size:13px;display:block}
+.v3home .outcomes-intro span:not(.outcome-check){font-size:11px;color:#a7b9c8}
+.v3home .outcomes-items{flex:1;min-width:0}
+.v3home .outcome-v3{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;text-align:left;min-width:0;padding:2px 0}
+.v3home .outcome-v3:hover strong{text-decoration:underline}
+.v3home .outcome-v3 .project-avatar .project-icon{width:31px;height:31px}
+.v3home .outcome-v3>span:not(.project-avatar){min-width:0;flex:1}
+.v3home .outcome-v3 strong{font-size:13px;display:block}
+.v3home .outcome-v3 small{font-size:11px;color:#b0c0d2;display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.v3home .outcome-v3>.icon{color:#a6b5cc}
+.v3home .outcomes-v3>.linkbutton{white-space:nowrap}
+@media(min-width:1800px){.v3home{padding-top:34px}}
+@media(max-width:1230px){.v3home .home-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}.v3home .new-left,.v3home .new-right{gap:14px}.v3home .panel-heading{padding:14px}.v3home .panel-rows{padding:0 14px}.v3home .home-item{gap:9px}.v3home .run-v3{padding:14px}.v3home .panel-short{display:none}}
+@media(max-width:1020px){.v3home .home-layout{display:flex;flex-direction:column;gap:15px}.v3home .new-left,.v3home .new-right{display:contents}.v3home .home-panel{width:100%}.v3home .needs-panel{order:1}.v3home .running-panel{order:2}.v3home .next-panel{order:3}.v3home .proposals-panel{order:4}.v3home .panel-short{display:flex}.v3home .outcomes-v3{flex-wrap:wrap}}
+@media(max-width:710px){.v3home{padding:15px 13px 99px}.v3home .resume-v3{padding:16px;display:block;margin-bottom:16px;min-height:0}.v3home .res-title strong{font-size:19px}.v3home .res-title>.project-avatar .project-icon{width:39px;height:39px}.v3home .resume-state{margin-left:53px;font-size:12px}.v3home .res-actions{margin-top:15px;justify-content:space-between}.v3home .res-actions .button{min-height:38px}.v3home .panel-heading{padding:14px 13px 12px;min-height:58px}.v3home h2{font-size:18px}.v3home .panel-short{font-size:11px}.v3home .panel-rows{padding:0 13px}.v3home .home-item{padding:15px 0;align-items:flex-start;gap:10px}.v3home .home-item>.project-avatar .project-icon,.v3home .next-item>.project-avatar .project-icon{width:37px;height:37px}.v3home .item-detail>strong{font-size:14px}.v3home .item-detail p{font-size:12.5px}.v3home .home-item>.button,.v3home .item-actions>.button{font-size:12px;padding:5px 9px}.v3home .run-v3{padding:15px 13px}.v3home .run-v3-foot>span{display:none}.v3home .outcomes-v3{padding:13px;gap:10px}.v3home .outcomes-items{flex-basis:100%;order:3}.v3home .outcome-v3 small{font-size:11px}.v3home .stage-strip>span{font-size:10px;gap:4px}.v3home .child-activity{flex-basis:100%;padding-left:28px}.v3home .agent-hero .status{padding:4px 6px;font-size:10px}.v3home .current-step{grid-template-columns:1fr;gap:5px}.v3home .current-desc{grid-column:1}.v3home .item-source{font-size:11px}}
+@media(max-width:405px){.v3home .panel-heading .panel-short{display:none}.v3home .attention-item{flex-wrap:wrap}.v3home .attention-item>.button{margin-left:47px}.v3home .res-actions{gap:5px}.v3home .res-actions .linkbutton{font-size:12px}.v3home .idea-item{flex-wrap:wrap}.v3home .idea-item .item-actions{margin-left:47px}.v3home .res-title strong{font-size:18px}}
+
+
+/* Preview settings are development chrome, not a Home dashboard widget. */
+.fixture-toolbar:not(.expanded)>.fixture-toggle{display:inline-flex;align-items:center}
+.fixture-toolbar:not(.expanded)>span,.fixture-toolbar:not(.expanded)>select,.fixture-toolbar:not(.expanded)>button[data-action="reset"]{display:none}
+.fixture-toolbar:not(.expanded){padding:5px;background:#182334;box-shadow:0 2px 16px #0006}
+.fixture-toolbar.expanded>.fixture-toggle{display:none}
+@media(max-width:710px){.v3home .attention-item{display:grid;grid-template-columns:37px minmax(0,1fr);gap:7px 11px}.v3home .attention-item>.project-avatar{grid-column:1;grid-row:1/3}.v3home .attention-item>.item-detail{grid-column:2}.v3home .attention-item>.button{grid-column:2;justify-self:start;min-height:33px;margin:5px 0 0}.v3home .idea-item{display:grid;grid-template-columns:37px minmax(0,1fr);gap:7px 11px}.v3home .idea-item>.project-avatar{grid-column:1;grid-row:1/3}.v3home .idea-item>.item-detail{grid-column:2}.v3home .idea-item>.item-actions{grid-column:2;justify-self:start;margin:3px 0 0}.v3home .item-detail p{-webkit-line-clamp:3;line-clamp:3}.fixture-toolbar:not(.expanded){display:none}.fixture-toolbar.expanded{display:flex;position:fixed;right:8px;bottom:70px}}
+
+/* HOME V5 — continuity-focused revision of V4. No section cards. */
+html,body{font-family:"Segoe UI Variable","Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif;font-size:14px;line-height:1.48}
+:root{--bg:#101116;--side:#0d0f15;--top:#101218;--fg:#f3f1ed;--muted:#b7bbc5;--dim:#89929f;--accent:#abbdeb;--red:#ef6c73;--redsoft:#48262b}
+.content{background:var(--bg)}
+.sidebar{background:#0d1017}
+.side-brand,.side-sep,.topbar{border-color:#292d36}
+.brand-name{letter-spacing:0;font-weight:680}
+.topbar{background:#101218}
+.nav-item.active{background:#212a3a}
+.project-link .project-detail strong{font-size:13px;font-weight:650}
+.project-link .project-detail small{font-size:11px;color:#a3aaba}
+.project-icon{border-radius:7px}
+.button.primary{background:#b4c3eb!important;color:#141a28!important;border-color:#b4c3eb!important;font-weight:700}
+.button.primary:hover{background:#d0d9ee!important}
+.v4home{max-width:1840px;margin:0 auto;padding:36px clamp(25px,3vw,62px) 98px;min-width:0}
+.v4home .home-kicker{font-size:12px;letter-spacing:.09em;font-weight:700;color:#aeb6c7;margin-bottom:11px}
+.v4home .resume-line{display:flex;align-items:center;gap:28px;justify-content:space-between;min-height:140px;padding:5px 0 28px;margin-bottom:30px;border-bottom:1px solid #3b4351;background:transparent}
+.v4home .resume-summary{min-width:0;flex:1}
+.v4home .resume-head{display:flex;align-items:center;gap:16px;min-width:0}
+.v4home .resume-head .project-icon{width:46px;height:46px}
+.v4home .resume-copy{min-width:0}
+.v4home .resume-copy h1{font-size:26px;letter-spacing:-.02em;font-weight:700;line-height:1.25;margin:0 0 8px;color:#f8f7f3;overflow-wrap:anywhere}
+.v4home .resume-details{font-size:13px;color:#aeb9cb;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.v4home .resume-controls{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.v4home .resume-controls .button{padding:11px 17px;min-height:42px;font-size:13px}
+.v4home .quiet-link{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:#b8c6e0;border:0;background:transparent;font-size:13px;font-weight:590;padding:5px;min-height:32px}
+.v4home .quiet-link:hover,.v4home .row-action:hover{text-decoration:underline;color:#eff3ff}
+.v4home .home-grid{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,1fr);gap:clamp(30px,4vw,74px);align-items:start}
+.v4home .home-column{min-width:0;display:flex;flex-direction:column;gap:42px}
+.v4home .open-section{min-width:0;background:none;border:0;border-radius:0;box-shadow:none}
+.v4home .open-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid #3e4655;padding-bottom:12px;margin-bottom:2px;min-height:43px}
+.v4home .open-section-heading h2{margin:0;font-size:22px;font-weight:725;letter-spacing:-.02em;color:#f1f0ed;line-height:1.25}
+.v4home .section-count{font-size:14px;font-weight:600;vertical-align:baseline;color:#9eaabf;margin-left:6px;font-variant-numeric:tabular-nums}
+.v4home .section-summary{font-size:12px;color:#9ba6b8;display:flex;align-items:center;gap:8px;text-align:right}
+.v4home .activity-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#94bebd;flex:none}
+.v4home .activity-dot.error-bg{background:var(--red)}
+.v4home .editorial-row{display:flex;align-items:center;gap:14px;min-height:92px;padding:20px 0;border-bottom:1px solid #2d3440;position:relative;background:none}
+.v4home .editorial-row:hover,.v4home .next-row:hover,.v4home .outcome-line:hover{background:#ffffff06}
+.v4home .editorial-row .project-icon{width:39px;height:39px;flex:none}
+.v4home .row-identity{align-self:center;flex:none}
+.v4home .row-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:5px}
+.v4home .row-copy strong{font-size:16px;color:#f0f1f3;font-weight:670;line-height:1.35;letter-spacing:0}
+.v4home .row-description{display:block;font-size:13px;line-height:1.45;color:#b9c1ce;max-width:490px}
+.v4home .row-origin{display:block;color:#949ead;font-size:11px;margin-top:2px}
+.v4home .row-action{border:0;background:transparent;color:#c6d4f2;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font-size:13px;font-weight:650;padding:9px 7px;min-height:35px;flex:none;border-radius:4px}
+.v4home .row-action .icon{width:14px;height:14px}
+.v4home .row-actions{display:flex;align-items:center;gap:0;flex:none}
+.v4home .row-dismiss{border:0;background:transparent;color:#8794a5;padding:8px;display:grid;place-items:center;border-radius:5px}
+.v4home .row-dismiss:hover{color:#e6e9ed;background:#ffffff0c}
+.v4home .attention-row.is-error{border-left:3px solid var(--red);padding-left:12px;margin-left:-15px}
+.v4home .attention-row.is-error .row-copy strong{color:#ffafb3}
+.v4home .error-text,.v4home .attention-row.is-error .row-origin,.v4home .danger-action{color:var(--red)!important}
+.v4home .danger-dot{background:var(--red)!important;box-shadow:none}
+.v4home .empty-section{font-size:14px;color:#aab3c0;padding:24px 0}
+.v4home .live-agent{padding:17px 0 22px;border-bottom:1px solid #303743}
+.v4home .live-agent-top{display:flex;align-items:center;gap:12px}
+.v4home .live-agent-top>.project-avatar .project-icon{width:42px;height:42px}
+.v4home .live-agent-name{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.v4home .live-agent-name strong{font-size:18px;color:#f4f2ed;font-weight:690}
+.v4home .live-agent-name>span{color:#aeb9ca;font-size:12px}
+.v4home .live-condition{color:#acdbcf;font-weight:680;font-size:13px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.v4home .live-condition i,.v4home .node-status{width:8px;height:8px;border-radius:50%;background:#88bdb7;display:inline-block;flex:none}
+.v4home .live-condition.danger{color:var(--red)}
+.v4home .live-condition.danger i,.v4home .node-status.danger-dot{background:var(--red)}
+.v4home .run-stage-heading{margin:26px 0 12px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.v4home .stage-caption{font-size:11px;color:#95a1b5;font-weight:630;text-transform:uppercase;letter-spacing:.06em}
+.v4home .run-stage-heading strong{font-size:14px;font-weight:675}
+.v4home .agent-blocked .run-stage-heading strong{color:var(--red)}
+.v4home .run-rail{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 18px}
+.v4home .run-rail .stage{min-width:0;display:flex;flex-direction:column;gap:8px;border-top:3px solid #303a49;padding-top:7px;color:#8693a4;font-size:11px}
+.v4home .run-rail .stage i{display:none}
+.v4home .run-rail .stage b{font-weight:550;white-space:nowrap}
+.v4home .run-rail .stage.working{border-color:#a4c0f0;color:#d0ddf3}
+.v4home .run-rail .stage.stop{border-color:var(--red);color:#ffaeb4}
+.v4home .agent-branches{padding-left:5px}
+.v4home .agent-node{display:flex;align-items:baseline;gap:9px;min-width:0;padding:7px 0;color:#9eacc0;font-size:12px;position:relative}
+.v4home .agent-node strong{color:#e2e6ec;font-size:13px;white-space:nowrap;font-weight:610}
+.v4home .agent-node>span:not(.node-status):not(.agent-tree-mark){min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v4home .agent-node .agent-tree-mark{color:#78869a;width:17px;flex:none;text-align:center}
+.v4home .agent-node .node-status{align-self:center;width:7px;height:7px}
+.v4home .agent-node em{font-style:normal;color:#a6ceca;font-size:11px;margin-left:auto}
+.v4home .agent-blocked .agent-node em{color:var(--red)}
+.v4home .agent-actions{display:flex;gap:10px;align-items:center;justify-content:space-between;padding-top:16px}
+.v4home .agent-actions>span{color:#99a4b7;font-size:12px}
+.v4home .agent-actions .row-action{padding-right:0}
+.v4home .next-row{display:flex;align-items:center;gap:13px;background:none;border:0;border-bottom:1px solid #303743;padding:16px 0;width:100%;text-align:left;min-width:0}
+.v4home .next-row .project-icon{width:37px;height:37px}
+.v4home .next-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:5px}
+.v4home .next-copy small{font-size:11px;color:#9aa7b9;letter-spacing:.015em}
+.v4home .next-copy strong{font-size:15px;font-weight:650;color:#ecedf0;line-height:1.3}
+.v4home .next-copy>span{font-size:12px;color:#aab5c4}
+.v4home .next-row>.icon{color:#aab5c8}
+.v4home .queue-state{font-weight:650;font-size:12px;color:#b0d3c8}
+.v4home .queue-state.waiting{color:#d5af8f}
+.v4home .schedule-mark{width:37px;height:37px;display:grid;place-items:center;color:#9cacbe;border:1px solid #3a4251;border-radius:6px;flex:none}
+.v4home .recent-outcomes{margin-top:47px;background:none;border:0;border-radius:0}
+.v4home .recent-outcomes .open-section-heading{margin-bottom:0}
+.v4home .outcome-line{display:flex;align-items:center;gap:13px;width:100%;background:none;border:0;border-bottom:1px solid #303743;text-align:left;padding:15px 0}
+.v4home .outcome-line .project-icon{width:32px;height:32px}
+.v4home .outcome-line>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.v4home .outcome-line strong{font-size:14px;font-weight:640;color:#e9eaf1}
+.v4home .outcome-line span{font-size:12px;color:#a5b0c2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v4home .context-flag{color:#b1bfce;font-size:13px;margin:0 0 15px;display:flex;gap:8px;align-items:center}
+.v4home .context-flag.error-text{color:var(--red);font-weight:650}
+/* The fixture controls are a design-only instrument: never float over the app content. */
+.fixture-toolbar{position:fixed;bottom:15px;right:16px;top:auto;z-index:30;background:#202530;border:1px solid #434c5c;box-shadow:0 3px 25px #0008;opacity:.15;transition:opacity .15s}
+.fixture-toolbar:hover,.fixture-toolbar:focus-within,.fixture-toolbar.expanded{opacity:1}
+@media(min-width:2400px){.v4home{max-width:2050px}}
+@media(max-width:1220px){.v4home{padding:28px 26px 90px}.v4home .home-grid{gap:30px}.v4home .open-section-heading .section-summary{display:none}}
+@media(max-width:970px){.v4home .home-grid{grid-template-columns:1fr;gap:37px}.v4home .home-column{gap:37px}.v4home .first-column,.v4home .second-column{display:contents}.v4home .attention-section{order:1}.v4home .work-section{order:2}.v4home .next-section{order:3}.v4home .suggestions-section{order:4}.v4home .open-section-heading .section-summary{display:flex}}
+@media(max-width:700px){.v4home{padding:20px 16px 100px}.v4home .resume-line{align-items:flex-start;flex-direction:column;gap:19px;padding:0 0 25px;margin-bottom:25px;min-height:0}.v4home .resume-copy h1{font-size:21px}.v4home .resume-head .project-icon{width:38px;height:38px}.v4home .resume-head{gap:11px}.v4home .resume-details{font-size:12px;gap:5px}.v4home .resume-controls{width:100%;justify-content:space-between}.v4home .resume-controls .button{font-size:12px;padding:9px 12px}.v4home .open-section-heading h2{font-size:19px}.v4home .open-section-heading .section-summary{font-size:11px}.v4home .editorial-row{padding:15px 0;gap:10px;min-height:0;align-items:flex-start}.v4home .editorial-row .project-icon{width:34px;height:34px}.v4home .row-copy strong{font-size:14px}.v4home .row-description{font-size:12px}.v4home .row-origin{font-size:11px}.v4home .row-action{font-size:12px}.v4home .live-agent-top .project-icon{width:36px;height:36px}.v4home .live-agent-name strong{font-size:16px}.v4home .agent-node{flex-wrap:wrap}.v4home .agent-node>span:not(.node-status):not(.agent-tree-mark){white-space:normal}.v4home .run-stage-heading{margin:18px 0 12px}.v4home .recent-outcomes{margin-top:33px}.v4home .outcome-line span{white-space:normal}.v4home .home-column{gap:30px}.v4home .home-grid{gap:30px}}
+@media(max-width:440px){.v4home .editorial-row{display:grid;grid-template-columns:34px 1fr;gap:8px 11px}.v4home .row-copy{grid-column:2}.v4home .editorial-row>.row-action,.v4home .editorial-row>.row-actions{grid-column:2;justify-self:start;margin-top:0;padding-left:0}.v4home .attention-row.is-error{margin-left:-8px;padding-left:5px}.v4home .open-section-heading .section-summary{display:none}.v4home .agent-branches .agent-node span:nth-last-child(1){flex-basis:60%}.v4home .resume-separator{display:none}.fixture-toolbar{display:none}}
+@media(prefers-reduced-motion:reduce){.fixture-toolbar{transition:none}}
+
+
+/* Corrections: remove inherited V2 card styles and restore label stacking. */
+.v4home .resume-summary{display:block!important;margin:0!important;flex:1;min-width:0}
+.v4home .home-kicker{width:auto!important;white-space:nowrap;margin-bottom:13px}
+.v4home .live-agent{background:transparent!important;border:0!important;border-bottom:1px solid #303743!important;border-radius:0!important;box-shadow:none!important;padding:16px 0 20px!important;margin:0!important}
+.v4home .live-agent-top{border:0!important;padding:0!important;background:none!important}
+.v4home .agent-branches,.v4home .run-stage-heading,.v4home .run-rail,.v4home .agent-actions{margin-left:0!important;margin-right:0!important}
+.v4home .agent-branches{border:0!important;background:none!important}
+.v4home .run-rail .stage{border-top-width:3px!important;border-radius:0!important}
+.v4home .resume-line{background:transparent!important;box-shadow:none!important}
+.v4home .recent-outcomes{padding:0!important}
+.v4home .open-rows{background:transparent!important}
+.v4home .live-condition.danger,.v4home .agent-blocked .agent-node .error-text{color:#ff737a!important}
+.status.blocked,.status.danger{color:#ff737a!important;background:#48262b!important;border-color:#a84754!important}
+@media(max-width:700px){.v4home .resume-summary{width:100%}.v4home .home-kicker{margin-bottom:12px}}
+
+
+/* Paseo Home V5: continuity with minimal additional chrome. */
+.fixture-toolbar{z-index:8!important} /* Preview control must not block review actions. */
+.v5home .resume-line{align-items:flex-start;gap:22px;min-height:0;padding-bottom:26px;margin-bottom:28px}
+.v5home .resume-summary{max-width:980px}
+.v5home .home-kicker{font-size:11px;letter-spacing:.12em;color:#a7b2c5}
+.v5home .resume-continuity{margin:13px 0 0 62px;padding:0;border:0;max-width:800px}
+.v5home .resume-why{font-size:14px;line-height:1.5;color:#dce0e8;font-weight:520;margin-bottom:10px}
+.v5home .resume-checkpoint{display:grid;grid-template-columns:57px minmax(0,1fr);align-items:start;gap:9px;margin:4px 0;line-height:1.5}
+.v5home .resume-checkpoint>span{color:#8594ab;font-size:12px;font-weight:600}
+.v5home .resume-checkpoint>strong{color:#b5c0d2;font-weight:440;font-size:12.5px}
+.v5home .resume-checkpoint:last-child>strong{color:#d3ddf3}
+.v5home .resume-controls{align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:365px;gap:9px;padding-top:22px}
+.v5home .resume-controls .button{font-size:12.5px;min-height:40px}
+.v5home .resume-controls .quiet-link{font-size:12.5px}
+.v5home .resume-controls .recent-quick{font-size:11.5px;color:#97a5bb}
+.v5home .context-flag{font-size:12px;margin-bottom:20px}
+.v5home .sample-hint{color:#76859b;font-size:11px}
+.v5home .attention-row.is-error .row-origin{font-weight:600}
+.v5home .attention-row .row-origin{letter-spacing:0;color:#8593a9}
+.v5home .work-section.empty-run .open-section-heading{border-bottom:1px solid #2f3744}
+.v5home .work-section.empty-run .empty-section{padding:12px 0 3px;color:#94a1b5;font-size:12.5px}
+.v5home .second-column:has(.empty-run){gap:27px}
+.v5home .suggestion-more{border:0;background:none;padding:14px 0 0;display:inline-flex;align-items:center;gap:7px;color:#acbddb;font-size:12px;font-weight:630}
+.v5home .suggestion-more:hover{text-decoration:underline;color:#f2f4fb}
+.v5home .suggestion-more .icon{width:12px;height:12px}
+.v5home .outcome-kind{color:#9eafbd;white-space:nowrap;font-size:11.5px;flex:none}
+.v5home .recent-outcomes{margin-top:42px}
+.next-action-note{padding:13px 15px;border-left:2px solid #9eb7e9;background:#202d44;color:#e3eafa;font-size:13px;line-height:1.5}
+@media(max-width:1280px){.v5home .resume-controls{max-width:270px}.v5home .resume-controls .recent-quick{display:none}}
+@media(max-width:970px){.v5home .second-column:has(.empty-run){gap:24px}.v5home .resume-controls{max-width:300px}}
+@media(max-width:700px){.v5home .resume-line{gap:12px}.v5home .resume-continuity{margin-left:0;margin-top:12px}.v5home .resume-why{font-size:13px}.v5home .resume-checkpoint{grid-template-columns:52px minmax(0,1fr)}.v5home .resume-checkpoint>strong{font-size:12px}.v5home .resume-controls{max-width:none;width:100%;padding-top:6px;justify-content:flex-start}.v5home .recent-quick{display:none}.v5home .outcome-kind{display:none}.v5home .resume-line{padding-bottom:22px}.v5home .recent-outcomes{margin-top:27px}}
+@media(max-width:440px){.v5home .resume-controls{gap:8px}.v5home .resume-controls .button{padding:9px 13px}.v5home .resume-controls .quiet-link{font-size:12px}}
+
+
+/* V6: a single priority above work, background information below it. */
+.v6home{max-width:1740px;margin:0 auto;padding:36px clamp(24px,3vw,56px) 100px;min-width:0}
+.v6home .v6-primary{padding:10px 0 35px;border-bottom:1px solid #39404b;margin-bottom:38px;display:flex;align-items:center;justify-content:space-between;gap:36px}
+.v6home .v6-maincopy{min-width:0;flex:1;max-width:930px}
+.v6home .v6-identity{display:flex;align-items:center;gap:16px}
+.v6home .v6-identity .project-icon{width:47px;height:47px;flex:none}
+.v6home .v6-identity h1{font-size:27px;line-height:1.25;color:#f5f3ef;font-weight:710;letter-spacing:-.025em;margin:0}
+.v6home .v6-meta{color:#929eaf;font-size:12px;margin-top:5px;display:block}
+.v6home .v6-primary-description{font-size:14px;color:#d8dce5;margin:18px 0 0 63px;line-height:1.55;max-width:850px}
+.v6home .v6-subline{margin:8px 0 0 63px;color:#9ca8b9;font-size:12.5px;line-height:1.55;max-width:850px}
+.v6home .v6-step{margin:15px 0 0 63px;color:#c5d1e6;font-size:13px;line-height:1.55;max-width:850px}
+.v6home .v6-step b{font-weight:700;color:#e4eafa;margin-right:8px}
+.v6home .v6-actions{display:flex;gap:10px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:350px}
+.v6home .v6-actions .button{font-size:13px;padding:11px 16px;min-height:43px}
+.v6home .v6-actions .button:not(.primary){background:transparent;border-color:#404858;color:#bac8db}
+.v6home .v6-actions .button:not(.primary):hover{background:#222938}
+.v6home .v6-blocked{background:linear-gradient(90deg,#28231f 0%,#191a1e 54%,#101116 100%);margin:-12px -18px 38px;padding:25px 18px 30px;border-left:3px solid #c3a079;border-bottom:1px solid #464039;border-radius:3px}
+.v6home .v6-blocked .v6-identity h1{font-size:26px}
+.v6home .v6-blocked .v6-identity .project-icon{width:47px;height:47px}
+.v6home .v6-indicator{font-size:11px;color:#d5b492;font-weight:700;border:1px solid #826548;border-radius:4px;padding:3px 7px;margin-right:8px}
+.v6home .v6-blocked .v6-primary-description{color:#ddd6cf}
+.v6home .v6-sections{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(300px,.92fr);gap:clamp(38px,5vw,84px);align-items:start}
+.v6home .v6-section{min-width:0}
+.v6home .v6-section-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #3b414c;padding-bottom:13px;gap:12px}
+.v6home .v6-section-head h2{font-size:21px;letter-spacing:-.02em;font-weight:700;line-height:1.35;color:#f2f1ef;margin:0}
+.v6home .v6-section-head .v6-count{font-size:13px;color:#8c98ab;margin-left:7px;font-weight:590}
+.v6home .v6-section-head .row-action{font-size:12px;color:#9eafca}
+.v6home .v6-review-row{display:flex;align-items:center;gap:13px;border-bottom:1px solid #2d333d;min-height:100px;padding:18px 0}
+.v6home .v6-review-row .project-icon{width:38px;height:38px;flex:none}
+.v6home .v6-item-copy{min-width:0;flex:1}
+.v6home .v6-item-copy strong{display:block;font-size:15px;font-weight:670;color:#f0eef0;line-height:1.35}
+.v6home .v6-item-copy p{margin:6px 0 0;font-size:12.5px;line-height:1.5;color:#b0bacb}
+.v6home .v6-item-copy small{display:block;color:#8d9baa;font-size:11px;margin-top:7px}
+.v6home .row-action{border:0;background:transparent;color:#bacbea;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;font-size:12px;font-weight:640;min-height:34px;padding:7px 5px;flex:none;border-radius:4px;line-height:1.3}
+.v6home .row-action:hover{color:#f4f6ff;text-decoration:underline;background:#ffffff08}
+.v6home .row-action .icon{width:13px;height:13px}
+.v6home .v6-review-row .row-action{padding:8px 0 8px 8px}
+.v6home .v6-queued-item{border:0;border-bottom:1px solid #2d333d;background:transparent;width:100%;display:flex;text-align:left;align-items:center;gap:13px;padding:18px 0;min-height:88px}
+.v6home .v6-queued-item:hover,.v6home .v6-review-row:hover,.v6home .v6-outcome:hover{background:#ffffff05}
+.v6home .v6-queued-item .project-icon{width:37px;height:37px;flex:none}
+.v6home .v6-queued-item .schedule-mark{width:37px;height:37px}
+.v6home .v6-queued-item .v6-item-copy strong{font-size:14.5px}
+.v6home .v6-queued-item .v6-item-copy small{margin-top:4px}
+.v6home .v6-queue-label{font-size:11px;color:#c4bea9;white-space:nowrap;font-weight:600}
+.v6home .v6-queue-label.ready{color:#a3c5bd}
+.v6home .v6-empty{padding:18px 0;color:#98a3b1;font-size:12.5px}
+.v6home .v6-running{margin:0 0 30px}
+.v6home .v6-running-row{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:1px solid #2d333d;min-width:0}
+.v6home .v6-running-row .v6-item-copy{flex:1}
+.v6home .v6-live-dot{width:7px;height:7px;border-radius:50%;background:#a4c7c3;display:inline-block;flex:none}
+.v6home .v6-lower{border-top:0;margin-top:46px}
+.v6home .v6-outcome{width:100%;background:none;border:0;border-bottom:1px solid #292f3a;display:flex;text-align:left;align-items:center;gap:12px;padding:14px 0}
+.v6home .v6-outcome .project-icon{width:32px;height:32px}
+.v6home .v6-outcome .v6-item-copy strong{font-size:13.5px}
+.v6home .v6-outcome .v6-item-copy small{font-size:11.5px;margin:4px 0 0;color:#9ca7b7}
+.v6home .v6-outcome>.icon{margin-left:auto;color:#8896aa}
+.v6home .v6-suggestions{margin-top:28px;border-bottom:1px solid #292f3a}
+.v6home .v6-disclosure{display:flex;align-items:center;gap:11px;width:100%;padding:13px 0 15px;background:none;border:0;color:#9daac0;font-size:13px;font-weight:620;text-align:left}
+.v6home .v6-disclosure:hover{color:#e0e7f5}
+.v6home .v6-disclosure .small-icon:last-child{margin-left:auto}
+.v6home .v6-idea{display:flex;align-items:center;gap:12px;padding:15px 0;border-top:1px solid #2d333d}
+.v6home .v6-idea .project-icon{width:32px;height:32px}
+.v6home .v6-idea .v6-item-copy strong{font-size:13.5px}
+.v6home .v6-idea .v6-item-copy small{margin-top:5px}
+.v6home .v6-idea .row-action{font-size:12px}
+.v6home .v6-idea .row-dismiss{margin-left:3px}
+.v6home .v6-archival{max-width:1060px}
+/* Treat sidebar status as one factual indicator, not a second alarm. */
+.side-indicator.danger-dot{background:#c3a079!important;box-shadow:none!important}
+@media(max-width:1060px){.v6home .v6-sections{gap:28px}.v6home .v6-primary{gap:20px}.v6home .v6-actions{max-width:260px}}
+@media(max-width:880px){.v6home .v6-primary{align-items:flex-start;flex-direction:column}.v6home .v6-actions{max-width:none;justify-content:flex-start;margin-left:63px}.v6home .v6-sections{grid-template-columns:1fr;gap:37px}}
+@media(max-width:690px){.v6home{padding:20px 16px 86px}.v6home .v6-identity{gap:11px}.v6home .v6-identity .project-icon{width:37px;height:37px}.v6home .v6-identity h1{font-size:20px}.v6home .v6-blocked .v6-identity h1{font-size:20px}.v6home .v6-identity .v6-meta{font-size:11px}.v6home .v6-primary-description,.v6home .v6-subline,.v6home .v6-step{margin-left:0}.v6home .v6-actions{margin-left:0;width:100%;gap:8px}.v6home .v6-actions .button{padding:10px 12px;font-size:12px}.v6home .v6-primary{margin-bottom:27px;padding-bottom:25px;gap:18px}.v6home .v6-blocked{margin:-10px -8px 27px;padding:19px 10px 24px}.v6home .v6-section-head h2{font-size:18px}.v6home .v6-review-row{gap:9px;flex-wrap:wrap}.v6home .v6-review-row .project-icon{width:34px;height:34px}.v6home .v6-review-row>.row-action{margin-left:43px;padding:0 0 5px}.v6home .v6-queue-label{font-size:11px}.v6home .v6-item-copy strong{font-size:14px}.v6home .v6-section-head .row-action{font-size:12px}.v6home .v6-lower{margin-top:34px}}
+@media(max-width:400px){.v6home .v6-queued-item{flex-wrap:wrap}.v6home .v6-queued-item .v6-queue-label{margin-left:48px}.v6home .v6-idea{flex-wrap:wrap}.v6home .v6-idea .row-action{margin-left:44px}.v6home .v6-identity h1{font-size:19px}}
+
+
+/* V7: quiet resume hierarchy and contextual links. */
+.v7home .v7-primary{padding-top:8px;padding-bottom:33px;align-items:center;gap:25px}
+.v7home .v6-maincopy{max-width:940px}
+.v7home .v6-identity{align-items:flex-start}
+.v7home .v6-identity .project-icon{margin-top:3px}
+.v7home .v6-identity h1{font-size:clamp(23px,2vw,30px);letter-spacing:-.035em;line-height:1.17;font-weight:760}
+.v7home .v7-meta{margin-top:10px;display:flex;gap:9px;flex-wrap:wrap;align-items:center;color:#8f9aaa;font-size:11.5px}
+.v7home .v7-meta>span:not(:first-child):before{content:'·';margin-right:9px;color:#606c7e}
+.v7home .v7-purpose{margin:20px 0 0 64px;color:#bec8d8;font-size:13.5px;line-height:1.5;max-width:630px}
+.v7home .v7-nextline{display:flex;align-items:baseline;gap:16px;margin:15px 0 0 64px;font-size:13px;line-height:1.5;max-width:820px}
+.v7home .v7-nextline span{font-size:11px;color:#9eafcb;font-weight:700;text-transform:uppercase;letter-spacing:.07em;min-width:34px}
+.v7home .v7-nextline strong{font-size:13px;color:#f3f2f4;font-weight:630}
+.v7home .v6-blocked{background:#1a1b20;border-left:3px solid #c3a079}
+.v7home .v7-blocked-status{color:#d9ad80;font-weight:700}
+.v7home .v6-queued-item.v7-queue-item{cursor:default}
+.v7home .v6-outcome.v7-outcome{cursor:default}
+.v7home .v6-queued-item.v7-queue-item:hover,.v7home .v6-outcome.v7-outcome:hover{background:transparent}
+.v7-link{display:inline;text-align:left;border:0;background:transparent;color:inherit;padding:0;cursor:pointer;font:inherit;font-weight:inherit;line-height:inherit;letter-spacing:inherit;border-radius:2px}
+.v7-link:hover{text-decoration:underline;text-underline-offset:3px;color:#d5e3ff}
+.v7-link:focus-visible{outline:2px solid #acbfe9;outline-offset:3px}
+.v6-identity h1 .v7-link{font-size:inherit;font-weight:inherit;color:inherit}
+.v6-identity .v7-dot{padding:0 .22em;color:#9aa6bb}
+.v6-identity .v7-hero-title{color:inherit}
+.v7home .v7-rowtitle{display:block;font-size:inherit;font-weight:670;color:#f0eef0;line-height:1.35}
+.v7home .v6-item-copy small .v7-link{color:#91a4bd}
+.v7home .v7-open-icon{background:none;border:0;cursor:pointer;padding:8px;color:#91a1b8;flex:none;border-radius:5px}
+.v7home .v7-open-icon:hover{color:#fff;background:#222a39}
+/* Universal centered command palette. Standalone HTML simulation: browser-focused hotkey only. */
+.qa-overlay{position:fixed;inset:0;background:rgba(4,7,13,.8);z-index:70;display:flex;justify-content:center;align-items:flex-start;padding:clamp(45px,12vh,126px) 16px 28px;overflow-y:auto;backdrop-filter:blur(3px)}
+.qa-modal{width:min(690px,100%);border:1px solid #47556b;border-radius:12px;background:#161c28;box-shadow:0 22px 80px #000b;overflow:hidden;flex-shrink:0;color:#e9edf6}
+.qa-top{display:flex;justify-content:space-between;align-items:center;padding:16px 19px;border-bottom:1px solid #2b3648}
+.qa-title{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:730}
+.qa-title .icon{width:18px;height:18px;color:#b9cdf4}
+.qa-x{background:none;border:0;color:#99aac5;padding:5px;border-radius:5px}
+.qa-x:hover{background:#28354b;color:#fff}
+.qa-prompt-wrap{position:relative;padding:16px 19px 15px;border-bottom:1px solid #2b3648}
+#quickText{width:100%;background:#0f1522;color:#f1f4fa;border:1px solid #51627e;border-radius:8px;padding:14px 14px 28px;resize:vertical;min-height:94px;max-height:215px;font:500 15px/1.5 inherit;outline:none}
+#quickText::placeholder{color:#98a5ba}
+#quickText:focus{border-color:#a2b7e9;box-shadow:0 0 0 2px #6986c444}
+.qa-input-hint{position:absolute;left:34px;bottom:27px;display:flex;gap:5px;align-items:center;color:#8d9eb8;font-size:10.5px;pointer-events:none}
+.qa-input-hint .icon{width:12px;height:12px}
+.qa-detection{padding:18px 19px 23px;min-height:160px}
+.qa-detection-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:13px}
+.qa-eyebrow{font-size:11px;color:#c0cde2;font-weight:740}
+.qa-reason{font-size:10px;color:#8092ab}
+.qa-choice-line{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:10px}
+.qa-selector-wrap{min-width:0;display:flex;flex-direction:column;gap:6px}
+.qa-selector-wrap label,.qa-field label{font-size:10.5px;color:#a4b4cb;font-weight:630}
+.qa-selector-wrap select{width:100%;padding:10px 12px;background:#202a3a;color:#e9edf4;border:1px solid #41516a;border-radius:6px;font-size:12px;min-width:0}
+.qa-preview-content{display:flex;gap:10px;align-items:flex-start;margin-top:15px;padding:13px 14px;border:1px solid #33445c;background:#1c2636;border-radius:7px}
+.qa-preview-icon{color:#c5d7f8}.qa-preview-content strong{display:block;font-size:12.5px;font-weight:680;overflow-wrap:anywhere}
+.qa-preview-content p{font-size:11.5px;color:#aabbd3;margin:4px 0 0}
+.qa-samples{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin-top:13px;color:#91a0b7;font-size:11px}
+.qa-samples button{border:0;background:none;padding:1px 0;color:#bbcae4;font-size:11.5px;text-align:left}
+.qa-samples button:hover{text-decoration:underline;color:#fff}
+.qa-review{padding:16px 19px 12px;max-height:48vh;overflow-y:auto}
+.qa-review-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;font-size:12px}
+.qa-back{display:flex;align-items:center;gap:6px;background:none;color:#adc1e3;font-size:11px;border:0}
+.qa-back .icon{width:12px;height:12px;transform:rotate(180deg)}
+.qa-field{display:flex;flex-direction:column;gap:7px;margin-bottom:13px}
+.qa-field-input{width:100%;padding:10px 12px;background:#101826;border:1px solid #42526e;border-radius:6px;color:#e9f1ff;font:inherit;font-size:12px;resize:vertical}
+.qa-field-input:focus{outline:2px solid #6f95d1;outline-offset:0}
+.qa-note{font-size:10.5px;color:#9faec4;line-height:1.6;margin:6px 0 0}
+.qa-commands{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:10px 19px;border-top:1px solid #2b3648}
+.qa-commands button{display:flex;align-items:center;gap:5px;font-size:10.5px;color:#b8c8e1;background:#202a3b;border:1px solid #303f56;border-radius:6px;padding:9px 7px;min-width:0;white-space:nowrap}
+.qa-commands button:hover{background:#2b3951;color:#fff}
+.qa-commands .icon{width:13px;height:13px;flex:none}
+.qa-commands kbd{margin-left:auto;color:#8297b4;font:10px ui-monospace,Consolas,monospace}
+.qa-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 19px;background:#131926;border-top:1px solid #2b3648;color:#8b9bb1;font-size:10.5px}
+.qa-foot .button{min-height:35px;padding:8px 13px}.qa-foot>.button:not(.primary){margin-left:auto}
+.qa-foot-dot{padding:0 3px;color:#66788f}
+@media(max-width:880px){.v7home .v7-primary{align-items:flex-start}.v7home .v7-purpose,.v7home .v7-nextline{margin-left:0}}
+@media(max-width:690px){.v7home .v6-identity h1{font-size:20px}.v7home .v6-identity .project-icon{width:37px;height:37px}.v7home .v7-meta{margin-top:6px}.v7home .v7-purpose{font-size:12.5px;margin-top:15px}.v7home .v7-nextline{margin-top:14px;gap:9px}.v7home .v6-actions{margin-top:0}.qa-overlay{padding:10px 8px 15px;align-items:flex-start}.qa-modal{border-radius:8px}.qa-commands{grid-template-columns:repeat(2,minmax(0,1fr))}.qa-foot{flex-direction:column;align-items:stretch}.qa-foot .button{width:100%}.qa-review{max-height:36vh}}
+@media(prefers-reduced-motion:reduce){.qa-overlay{backdrop-filter:none}}
+
+
+/* v7.1 — compact keyboard-first side-chat switcher. Independent of future chat UX. */
+.chat-switch{position:relative;display:flex;align-items:center;z-index:12}
+.chat-trigger{display:flex;align-items:center;gap:8px;min-height:35px;padding:0 10px;border:1px solid transparent;border-radius:6px;color:#bdc8dc;background:none;font-size:12px;font-weight:630;white-space:nowrap}
+.chat-trigger:hover,.chat-switch.is-open .chat-trigger{background:#202b3e;color:#eef3ff;border-color:#35465f}
+.chat-trigger .chat-icon{width:16px;height:16px;stroke-width:1.7}
+.chat-trigger .chat-chevron{width:12px;height:12px;color:#8fa2bd;transition:transform .12s ease}
+.chat-switch.is-open .chat-chevron{transform:rotate(180deg)}
+.chat-trigger .chat-count{min-width:18px;height:18px;display:grid;place-items:center;border-radius:4px;background:#25344d;color:#c2d2f3;font-size:10px;font-weight:700}
+.chat-popover{position:absolute;right:0;top:calc(100% + 10px);width:366px;padding:8px 8px 9px;background:#19212f;border:1px solid #39475e;border-radius:10px;box-shadow:0 18px 60px #0009,0 3px 14px #0007;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-4px);transition:opacity .12s ease,transform .12s ease,visibility .12s;z-index:24}
+.chat-popover:before{content:"";position:absolute;top:-11px;left:0;right:0;height:13px}
+.chat-switch:hover:not(.chat-suppressed) .chat-popover,.chat-switch.is-open .chat-popover{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0)}
+.chat-pop-head{display:flex;justify-content:space-between;align-items:center;padding:8px 11px 10px;gap:8px}
+.chat-pop-head strong{font-size:13px;color:#f1f3f8;font-weight:700}
+.chat-key{display:inline-flex;align-items:center;justify-content:center;min-width:24px;padding:3px 5px;border-radius:4px;border:1px solid #3f4d65;background:#222c3e;color:#aebbd0;font-size:10px;line-height:1.1;white-space:nowrap;font-family:inherit}
+.chat-head-hint{color:#8d9eb6;font-size:10px}
+.chat-list{display:grid;gap:2px}
+.chat-choice{width:100%;display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 9px;border-radius:6px;border:1px solid transparent;background:transparent;text-align:left;min-height:60px}
+.chat-choice:hover,.chat-choice:focus-visible{background:#263248;border-color:#364865}
+.chat-choice .chat-project-icon{height:31px;width:31px;display:grid;place-items:center;border-radius:7px;background:#333c53;color:#dee5f4;font-size:12px;font-weight:750}
+.chat-choice .chat-project-icon.seicho{background:#513a33;color:#e7bca0}
+.chat-choice .chat-project-icon.shiori{background:#3e3a65;color:#ccbef8}
+.chat-choice .chat-project-icon.paseo{background:#334362;color:#ceddfb}
+.chat-choice .chat-project-icon.food{background:#235154;color:#b8dedc}
+.chat-choice .chat-info{min-width:0}
+.chat-choice .chat-info strong{display:block;color:#e4eaf5;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-choice .chat-info small{display:block;color:#99aac4;font-size:11px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-pop-foot{border-top:1px solid #303d50;padding:9px 10px 2px;margin-top:7px;color:#8fa0b7;font-size:10px;display:flex;justify-content:space-between;gap:10px}
+.chat-preview-messages{display:flex;flex-direction:column;gap:14px}
+.chat-preview-message{background:#1d2939;border:1px solid #34435a;border-radius:8px;padding:12px 14px}
+.chat-preview-message.from-agent{background:#151c29}
+.chat-preview-message .who{display:block;color:#a4b9d7;font-size:11px;font-weight:720;margin-bottom:6px}
+.chat-preview-message p{color:#d9e1ee;font-size:12px;line-height:1.65;margin:0}
+.chat-preview-note{color:#99a9c0;font-size:11px;margin-top:19px;line-height:1.5}
+@media(max-width:710px){.chat-trigger{padding:0 6px;gap:5px}.chat-trigger .chat-label,.chat-trigger .chat-chevron{display:none}.chat-popover{position:fixed;top:54px;left:9px;right:9px;width:auto;max-width:430px;margin-left:auto}.chat-switch{position:static}.chat-pop-foot{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.chat-popover,.chat-trigger .chat-chevron{transition:none}}
+
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"><defs>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-8h6v8"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-work" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke-width="3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 5 7 7-7 7M13 19h7"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v12H9l-5 4z"/></symbol>
+<symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.9 6 6.6 1-4.8 4.6 1.1 6.4L12 18l-5.8 3 1.1-6.4L2.5 10l6.6-1z"/></symbol>
+<symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="16" r="2"/><path d="M6 6v12m0-9c8 0 12 2 12 5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="2" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 10-13h-7z"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20zM12 9v5m0 3v.01"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM15 2v6h5"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5 19 19M19 5 5 19"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8z"/></symbol>
+<symbol id="i-command" viewBox="0 0 24 24"><path d="M9 7V5a3 3 0 1 0-3 3h2v8H6a3 3 0 1 0 3 3v-2h6v2a3 3 0 1 0 3-3h-2V8h2a3 3 0 1 0-3-3v2z"/></symbol><symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m12 3 1.5 6.5L20 11l-6.5 1.5L12 19l-1.5-6.5L4 11l6.5-1.5zM19 18l.5 1.5L21 20l-1.5.5L19 22l-.5-1.5L17 20l1.5-.5z"/></symbol><symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M5 3h14v18l-7-5-7 5z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 4h16l2 12v4H2v-4zM2 15h6l2 3h4l2-3h6"/></symbol>
+<symbol id="i-sunrise" viewBox="0 0 24 24"><path d="M4 17h16M8 17a4 4 0 0 1 8 0M12 3v4M4.3 7l2.8 2.8M19.7 7l-2.8 2.8M2 12h3M19 12h3"/></symbol><symbol id="i-bowl" viewBox="0 0 24 24"><path d="M3 12h18a9 9 0 0 1-18 0ZM8 5v4M12 3v6M16 5v4"/></symbol></defs></svg>
+<div id="app"></div>
+<script>
+'use strict';
+// Side chats are illustrative saved conversations. The picker is an interaction mock, not a live provider integration.
+const sidechats=[
+ {id:'seicho',project:'SEICHO',name:'Today design',subtitle:'Reviewing the action-first layout',glyph:'S',color:'seicho',messages:[['You','Keep Today focused on the next useful action, not a dashboard.'],['Agent','I compared the proposed layout with the accepted design. The next step is checking the V12 visual contract.']]},
+ {id:'shiori',project:'Shiori',name:'Reviewer UX',subtitle:'Evidence and decision flow',glyph:'S',color:'shiori',messages:[['You','Make reviewer findings understandable without reading the full transcript.'],['Agent','The compact evidence layout is ready for review. The original technical output stays accessible.']]},
+ {id:'paseo',project:'Paseo',name:'Navigation redesign',subtitle:'Project and workspace hierarchy',glyph:'P',color:'paseo',messages:[['You','Projects must remain separate from native workspaces and split panes.'],['Agent','The current prototype keeps that separation. The hierarchy still needs your design decision.']]},
+ {id:'food',project:'food-core',name:'Import checks',subtitle:'Ingredient normalization questions',glyph:'F',color:'food',messages:[['You','Check the Norwegian terminology changes before another run.'],['Agent','I can inspect the saved checks. No additional task has been started.']]}
+];
+const initialFixture={
+  reviews:[{id:'seicho',project:'SEICHO',title:'Recipe import checks',description:'Automated checks passed. Language and visual acceptance still need your decision.',detail:'Norwegian recipe output · 12 samples · 3 screenshots',checks:['URL ingest and field mapping passed','Norwegian section and metric checks passed','Reference screenshots attached'],kind:'review'},
+  {id:'shiori',project:'Shiori',title:'Reviewer results presentation',description:'Code evidence ready. Confirm the review layout and interaction before finalization.',detail:'Reviewer UX · 2 changed files · 3 checks passed',checks:['Typecheck and targeted tests passed','Reviewed tree matches submitted diff','Visual acceptance not yet recorded'],kind:'review'}],
+  agents:[{id:'runner',host:'ANON-PC',children:[{name:'UI implementation',status:'Working',activity:'Editing review panel'}],project:'Shiori',title:'Reviewer UX',description:'Pi main agent · ANON-PC · 1 active subagent',model:'Qwen3.8-27B · xhigh',activity:'Improving task review presentation and inline decisions'}],
+  queue:[{id:'q24',project:'food-core',title:'Normalize Norwegian ingredient terms',description:'Independent terminology pass · ready to execute',status:'Ready'}],
+  outcomes:[{project:'food-core',title:'URL importer',description:'9 automatic checks passed · verified evidence saved'}],
+  suggestions:[{id:'p-note',project:'SEICHO',title:'Turn navigation note into a task draft',detail:'The Inbox note identifies a repeatable scroll-position issue.',source:'Inbox note · 11:24',match:'Existing SEICHO project link'},{id:'p-skill',project:'food-core',title:'Review repeated unit normalization corrections',detail:'Candidate vocabulary rule; compare against recent recipe cases first.',source:'Import QA notes',match:'Possible recurring pattern'}],
+  focus:'SEICHO · Recipe import reliability',resume:'Shiori · Reviewer UX',lastContext:'Agent + diff + terminal · ANON-PC',resumeState:'Agent running · 1 subagent active',
+  resumeContext:{why:'Make agent review understandable without reading long transcripts.',leftOff:'Refining the reviewer panel and subagent controls.',next:'Inspect the active implementation and compare its behavior with the accepted mock.',decision:'Use a concise evidence-first review; keep full technical details available.',changes:'Implementation is running; no verified completion yet.',source:'Shiori review UI task and saved Paseo workspace · illustrative fixture'}
+};
+function clone(o){return JSON.parse(JSON.stringify(o))};
+const cases={
+ normal:{label:'Normal day',patch:{}},
+ away:{label:'After four days',patch:{resume:'SEICHO · Today redesign',lastContext:'Browser + agent + reference · ANON-PC',resumeState:'Session idle · layout available',resumeContext:{why:'Make SEICHO Today show the next useful action without becoming a dashboard.',leftOff:'Comparing the Today redesign with the accepted SEICHO UI direction.',next:'Review the current layout before starting another implementation slice.',decision:'Keep Today action-first; project details belong in their own view.',changes:'Other projects finished work; the Today layout still needs your decision.',source:'Saved workspace, accepted SEICHO design direction · illustrative fixture'},reviews:[...initialFixture.reviews,{id:'paseo',project:'Paseo',title:'Project navigation proposal',description:'Comparison ready. Decide whether to accept the revised sidebar hierarchy.',detail:'Native sidebar · 4 screen widths · 6 interactions checked',checks:['Paseo navigation parity checked','Responsive screenshots attached','Requires layout decision'],kind:'review'}],agents:[],outcomes:[{project:'food-core',title:'URL importer',description:'9 automatic checks passed · evidence saved'},{project:'quicklog',title:'Capture flow',description:'Changes merged · 4 focused checks passed'},{project:'Crux',title:'Bookmark triage',description:'Classification task finished · review not required'}],queue:[{id:'q24',project:'food-core',title:'Normalize Norwegian ingredient terms',description:'Waiting for next authorized run',status:'Ready'}]}},
+ reentry:{label:'After 90 days',patch:{resume:'SEICHO · Today redesign',lastContext:'Browser + accepted design + workspace · ANON-PC',resumeState:'Workspace saved · session idle',resumeContext:{why:'Make Today the one reliable starting point for daily planning and action.',leftOff:'The chosen direction was an action-first Today view, rather than another widget dashboard.',next:'Check the accepted V12 visual contract and validate the next real Today slice.',decision:'Keep a single Today/Home destination; avoid duplicating source state or execution queues.',changes:'The Inbox foundation progressed; Today still needs real connected acceptance.',source:'SEICHO PROJECT.md, PLAN.md and saved design references · illustrative summary'},agents:[],outcomes:[{project:'SEICHO',title:'Inbox foundation',description:'Server-backed capture and project linking implemented; live acceptance remains',kind:'partial'},{project:'food-core',title:'URL importer',description:'Focused checks passed; evidence recorded',kind:'verified'}]}},
+ blocked:{label:'Agent blocked',patch:{resumeState:'Paused · waiting for recovery',resumeContext:{why:'Make reviewer output easier to act on.',leftOff:'Implementation stopped during Git finalization after a source conflict.',next:'Inspect the conflict; do not retry blindly.',decision:'Preserve worktree and require explicit reconciliation.',changes:'Work is blocked; the queued task is waiting.',source:'Simulated Shiori run state'},reviews:[{id:'blocker',project:'Shiori',title:'Runner blocked on Git conflict',description:'The source tree changed during finalization. Inspect the conflict before retrying.',detail:'Task SH-184 · source freshness mismatch',checks:['Worker stopped safely','Current work preserved','Git reconciliation requires decision'],kind:'blocked'},...initialFixture.reviews],agents:[{id:'runner',host:'ANON-PC',children:[{name:'UI implementation',status:'Stopped',activity:'Worktree preserved'}],project:'Shiori',title:'Reviewer UX',description:'Paused · source freshness conflict',blocked:true,model:'Qwen3.8-27B · xhigh',activity:'Last verified work preserved. No automatic retry until recovery.'}],queue:[{id:'q24',project:'food-core',title:'Normalize Norwegian ingredient terms',description:'Blocked behind current queue head',status:'Waiting'}]}},
+ quiet:{label:'No human attention',patch:{reviews:[],agents:[],queue:[{id:'q24',project:'food-core',title:'Normalize Norwegian ingredient terms',description:'Ready to start when you choose',status:'Ready'}],outcomes:[{project:'food-core',title:'URL importer',description:'9 automatic checks passed · evidence saved'}],resumeState:'Idle · workspace saved',resumeContext:{why:'Make reviewer output actionable.',leftOff:'Workspace saved without a running agent.',next:'Resume only when you have a new change to review.',decision:'Keep native workspace state separate from task completion.',changes:'No new work requires human intervention.',source:'Saved workspace · illustrative fixture'}}}
+};
+const state={scenario:'away',data:clone(initialFixture),drawer:null,drawerId:null,comment:'',captureType:'',fixtureOpen:false,showAllSuggestions:false,toastTimer:null,chatPickerOpen:false,quickOpen:false,quickText:'',quickMode:'auto',quickProject:'',quickStep:'capture',quickTitle:'',quickSummary:'',quickAcceptance:'',quickFocusReturn:null,taskDrafts:[],notes:[]};
+function icon(name,cl=''){return `<svg class="icon ${cl}" aria-hidden="true"><use href="#i-${name}"></use></svg>`}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function button(label,act,opt={}){return `<button class="button ${opt.cls||''}" data-action="${act}" ${opt.id?`data-id="${opt.id}"`:''}>${opt.ico?icon(opt.ico):''}${esc(label)}${opt.arrow?icon('arrow'):''}</button>`}
+function project(name,letter,cls=''){const custom={SEICHO:'sunrise',Shiori:'bookmark','food-core':'bowl'};let key=name.toLowerCase().replace(/[^a-z-]/g,'');return `<span class="project-icon ${cls} project-${key}">${custom[name]?icon(custom[name],'project-glyph'):letter}</span>`}
+function sidebar(){
+ const d=state.data;
+ const entries=[['SEICHO','S','warm'],['Shiori','S',''],['Paseo','P','blue'],['food-core','F','teal'],['Infrastructure','I','ash'],['Crux','C','warm'],['Pivolution','P',''],['Quicklog','Q','teal']];
+ const summary=(name)=>{
+  const active=d.agents.filter(a=>a.project===name&&!a.blocked).length;
+  const blocked=d.agents.some(a=>a.project===name&&a.blocked)||d.reviews.some(r=>r.project===name&&r.kind==='blocked');
+  const reviews=d.reviews.filter(r=>r.project===name&&r.kind!=='blocked').length;
+  const queued=d.queue.filter(q=>q.project===name).length;
+  if(blocked)return {detail:'Execution blocked',dot:'danger-dot',tip:'Execution needs intervention'};
+  if(active)return {detail:`${active} running${reviews?' · '+reviews+' review':''}`,dot:'live-dot',tip:'Active agent'};
+  if(reviews)return {detail:`${reviews} decision${reviews!==1?'s':''} waiting`,dot:'attention-dot',tip:'Decision waiting'};
+  if(queued)return {detail:`${queued} in queue`,dot:'',tip:''};
+  if(name==='Paseo')return {detail:'Design exploration',dot:'',tip:''};
+  return {detail:'',dot:'',tip:''};
+ };
+ return `<aside class="sidebar"><div class="side-brand"><span class="logo">P</span><span class="brand-name">Paseo</span></div><div class="side-menu">
+   <button class="nav-item active" data-action="home">${icon('home')}<span>Home</span></button>
+   <button class="nav-item" data-action="projects">${icon('folder')}<span>Projects</span></button>
+   <button class="nav-item" data-action="work">${icon('work')}<span>Work</span></button></div>
+   <div class="side-sep"></div><div class="side-group unified-projects"><div class="side-title">Projects <button data-action="projects">Manage</button></div>
+   ${entries.map(([name,letter,cl])=>{let st=summary(name);return `<button class="project-link" data-action="project" data-id="${name}" title="${name}">${project(name,letter,cl)}<span class="project-detail"><strong>${name}</strong>${st.detail?`<small>${esc(st.detail)}</small>`:''}</span>${st.dot?`<span class="side-indicator ${st.dot}" title="${esc(st.tip)}"></span>`:''}</button>`}).join('')}
+   </div><div class="sidebar-foot"><div class="device">${icon('git','small-icon')} ANON-PC · local preview <span class="online"></span></div><div class="bottom-icons"><button class="side-iconbtn" data-action="projects" aria-label="Projects">${icon('folder')}</button><button class="side-iconbtn" data-action="work" aria-label="Workspaces">${icon('git')}</button><button class="side-iconbtn" data-action="tools" aria-label="Tools">${icon('zap')}</button><button class="side-iconbtn" data-action="tools" aria-label="Apps">${icon('grid')}</button><button class="side-iconbtn" data-action="settings" aria-label="Settings">${icon('sliders')}</button></div></div></aside>`
+}
+
+function topbar(){return `<header class="topbar"><div class="top-location">${icon('home')} Home</div><div class="top-spacer"></div><div class="chat-switch ${state.chatPickerOpen?'is-open':''}" id="chatSwitch"><button class="chat-trigger" data-action="chatToggle" id="chatTrigger" aria-label="Choose side chat" aria-expanded="${state.chatPickerOpen?'true':'false'}" aria-haspopup="menu" aria-controls="chatPicker" title="Switch side chat · Shift+E">${icon('chat','chat-icon')}<span class="chat-label">Chats</span><span class="chat-count">4</span>${icon('chevron','chat-chevron')}</button><div class="chat-popover" id="chatPicker" role="menu" aria-label="Choose side chat"><div class="chat-pop-head"><strong>Side chats</strong><span class="chat-head-hint"><span class="chat-key">Shift E</span> to open</span></div><div class="chat-list">${sidechats.map((c,i)=>`<button class="chat-choice" role="menuitem" data-action="chatSelect" data-id="${c.id}" aria-label="Open ${c.project} ${c.name}"><span class="chat-project-icon ${c.color}">${c.glyph}</span><span class="chat-info"><strong>${esc(c.project)} · ${esc(c.name)}</strong><small>${esc(c.subtitle)}</small></span><span class="chat-key">Alt ${i+1}</span></button>`).join('')}</div><div class="chat-pop-foot"><span>Choose a saved conversation</span><span>Esc to close</span></div></div></div><button class="icon-button" data-action="split" aria-label="Split workspace">${icon('split')}</button><div class="top-divider"></div><button class="icon-button mobile-preview-toggle" data-action="toggleFixture" aria-label="Preview scenarios">${icon('sliders')}</button><button class="icon-button" data-action="search" aria-label="Search">${icon('search')}</button><button class="icon-button global-add" data-action="add" title="Quick actions · Ctrl/⌘ Shift K" aria-label="Quick actions">${icon('plus')}</button></header>`}
+function resumePreview(){return `<div class="resume-preview" aria-label="Preview of saved workspace layout"><div class="preview-top"><span class="preview-tab active">Agent · Reviewer UX</span><span class="preview-tab">Diff</span><span class="preview-tab">Terminal</span></div><div class="preview-panes"><div class="preview-pane"><div class="preview-label">Agent · Shiori</div><div class="preview-line light med"></div><div class="preview-line short"></div><div class="preview-line light" style="width:91%"></div><div style="display:flex;gap:6px;align-items:center;margin-top:14px;color:#b5c4da;font-size:9px"><span class="notch" style="margin:0"></span>Child agent working</div></div><div class="preview-pane"><div class="preview-label">Changes · review-panel.tsx</div><div class="preview-code warn">- toggleSession()</div><div class="preview-code add">+ toggleDetails()</div><div class="preview-code add">+ StopButton</div><div class="preview-line short"></div></div></div></div>`}
+
+function projectText(name,cl=''){return `<button class="v7-link ${cl}" data-action="project" data-id="${esc(name)}" aria-label="Open ${esc(name)} project">${esc(name)}</button>`}
+function taskText(label,action,id,cl=''){return `<button class="v7-link ${cl}" data-action="${action}" data-id="${esc(id)}">${esc(label)}</button>`}
+function primaryName(value){const parts=String(value||'').split(' · ');return parts.length>1?`${projectText(parts[0])}<span class="v7-dot">·</span>${taskText(parts.slice(1).join(' · '),'resume',null,'v7-feature')}`:projectText(value)}
+function projectMark(name){const meta={SEICHO:['S','warm'],Shiori:['S',''],Paseo:['P','blue'],'food-core':['F','teal'],Crux:['C','warm'],Pivolution:['P',''],Infrastructure:['I','ash'],Quicklog:['Q','teal']};const x=meta[name]||[name?.charAt(0)?.toUpperCase()||'?','ash'];return `<span class="project-avatar" title="${esc(name)}">${project(name,x[0],x[1])}</span>`}
+function sectionHead(title,extra=''){return `<div class="section-head"><h2>${esc(title)}</h2><div class="line"></div>${extra}</div>`}
+function contextRow(kind,detail='',stateText=''){return `<div class="micro-context"><span class="mini-label">${esc(kind)}</span>${esc(detail)}${stateText?`<span class="micro-state">${esc(stateText)}</span>`:''}</div>`}
+function suggestionRows(){return state.data.suggestions?.length?state.data.suggestions.map(p=>`<div class="suggestion-row">
+  ${projectMark(p.project)}<div class="row-content"><strong>${esc(p.title)}</strong><small>${esc(p.detail)}</small><div class="evidence-link">${icon('bookmark','small-icon')} ${esc(p.source)} · ${esc(p.match)}</div></div>
+  <div class="row-buttons"><button class="button small" data-action="proposal" data-id="${p.id}">Inspect ${icon('chevron')}</button><button class="tiny-dismiss" data-action="dismissSuggestion" data-id="${p.id}" aria-label="Dismiss suggestion">${icon('close')}</button></div></div>`).join(''):`<div class="empty">No new suggestions.</div>`}
+function main(){
+ const d=state.data,ctx=d.resumeContext||{};
+ const primaryBlocker=d.reviews.find(r=>r.kind==='blocked')||null;
+ const blocked=!!primaryBlocker;
+ const otherReviews=d.reviews.filter(r=>r!==primaryBlocker);
+ const visibleAgents=d.agents.filter(a=>!a.blocked);
+ const resumeProject=(d.resume||'Shiori').split(' · ')[0];
+ const reviewRow=r=>`<div class="v6-review-row">${projectMark(r.project)}<div class="v6-item-copy">${taskText(r.title,'review',r.id,'v7-rowtitle')}<p>${esc(r.description)}</p><small>${projectText(r.project)}</small></div><button class="row-action" data-action="review" data-id="${esc(r.id)}">Review ${icon('arrow','small-icon')}</button></div>`;
+ const heading=blocked?'Git conflict stopped Reviewer UX':d.resume;
+ const top=blocked?`<section class="v6-primary v6-blocked v7-primary" aria-label="Blocked work"><div class="v6-maincopy"><div class="v6-identity">${projectMark('Shiori')}<div><h1>${taskText(heading,'review',primaryBlocker.id,'v7-hero-title')}</h1><div class="v7-meta">${projectText('Shiori')}<span>Task SH-184</span><span>ANON-PC</span><span class="v7-blocked-status">Blocked</span></div></div></div><p class="v7-purpose">Git source changed during finalization. Your work is preserved.</p><div class="v7-nextline"><span>Next</span><strong>Inspect the conflict before retrying.</strong></div></div><div class="v6-actions">${button('Inspect conflict','review',{cls:'primary',id:primaryBlocker.id})}${button('Open workspace','resume')}</div></section>`:
+ `<section class="v6-primary v7-primary" aria-label="Resume work"><div class="v6-maincopy"><div class="v6-identity">${projectMark(resumeProject)}<div><h1>${primaryName(d.resume)}</h1><div class="v7-meta"><span>${esc(d.resumeState)}</span><span>${esc(d.lastContext.split(' · ').at(-1))}</span></div></div></div><p class="v7-purpose">${esc(ctx.why||'')}</p><div class="v7-nextline"><span>Next</span><strong>${esc(ctx.next||'')}</strong></div></div><div class="v6-actions">${button('Resume workspace','resume',{cls:'primary',ico:'arrow'})}${button('Open project','project',{id:resumeProject})}</div></section>`;
+ const queueRows=d.queue.slice(0,2).map(q=>`<div class="v6-queued-item v7-queue-item">${projectMark(q.project)}<div class="v6-item-copy">${taskText(q.title,'queue',q.id,'v7-rowtitle')}<small>${projectText(q.project)} · ${esc(blocked?'Waiting for conflict resolution':q.description||'')}</small></div><span class="v6-queue-label ${q.status==='Ready'&&!blocked?'ready':''}">${blocked?'Waiting':esc(q.status)}</span><button class="v7-open-icon" data-action="queue" data-id="${esc(q.id)}" aria-label="Open ${esc(q.title)}">${icon('chevron','small-icon')}</button></div>`).join('');
+ const outcomes=d.outcomes.slice(0,3).map((o,i)=>`<div class="v6-outcome v7-outcome">${projectMark(o.project)}<div class="v6-item-copy">${taskText(o.title,'outcome',i,'v7-rowtitle')}<small>${projectText(o.project)} · ${esc(o.description)}</small></div><button class="v7-open-icon" data-action="outcome" data-id="${i}" aria-label="Open ${esc(o.title)}">${icon('arrow','small-icon')}</button></div>`).join('');
+ const suggestions=(d.suggestions||[]).map(p=>`<div class="v6-idea">${projectMark(p.project)}<div class="v6-item-copy">${taskText(p.title,'proposal',p.id,'v7-rowtitle')}<small>${projectText(p.project)} · ${esc(p.detail)}</small></div><button class="row-action" data-action="proposal" data-id="${esc(p.id)}">Inspect ${icon('arrow','small-icon')}</button><button class="row-dismiss" data-action="dismissSuggestion" data-id="${esc(p.id)}" aria-label="Dismiss ${esc(p.title)}">${icon('close','small-icon')}</button></div>`).join('');
+ const taskDraftRows=state.taskDrafts.filter(x=>!x.approved).map(x=>`<div class="v6-review-row">${projectMark(x.project)}<div class="v6-item-copy">${taskText(x.title,'draft',x.id,'v7-rowtitle')}<p>${esc(x.summary)}</p><small>${projectText(x.project)} · Draft only</small></div><button class="row-action" data-action="draft" data-id="${esc(x.id)}">Edit ${icon('arrow','small-icon')}</button></div>`).join('');
+ const actionable=otherReviews.length+state.taskDrafts.filter(x=>!x.approved).length;
+ return `<main class="v6home v7home">
+ ${top}
+ <div class="v6-sections">
+ <section class="v6-section v6-attention"><div class="v6-section-head"><h2>Needs action <span class="v6-count">${actionable||''}</span></h2></div>${taskDraftRows}${otherReviews.length?otherReviews.map(reviewRow).join(''):(!taskDraftRows?`<div class="v6-empty">No decisions waiting.</div>`:'')}</section>
+ <div class="v6-section v6-next">
+ ${visibleAgents.length&&!blocked?`<div class="v6-running"><div class="v6-section-head"><h2>Running <span class="v6-count">${visibleAgents.length}</span></h2></div>${visibleAgents.map(a=>`<div class="v6-running-row"><span class="v6-live-dot"></span><div class="v6-item-copy">${taskText(a.title,'agent',a.id,'v7-rowtitle')}<small>${projectText(a.project)} · ${(a.children||[]).length} helper · ${esc(a.host||'ANON-PC')}</small></div><button class="row-action" data-action="agent" data-id="${esc(a.id)}">Open ${icon('arrow','small-icon')}</button></div>`).join('')}</div>`:''}
+ <div class="v6-section-head"><h2>${blocked?'Waiting in queue':'Up next'}</h2><button class="row-action" data-action="queueAll">View queue ${icon('chevron','small-icon')}</button></div>
+ ${queueRows||`<div class="v6-empty">Nothing queued.</div>`}
+ ${!blocked?`<button class="v6-queued-item" data-action="schedule"><span class="schedule-mark">${icon('clock')}</span><span class="v6-item-copy"><strong>Shiori regression check</strong><small>Scheduled tomorrow · 08:00</small></span>${icon('chevron','small-icon')}</button>`:''}
+ </div></div>
+ <section class="v6-lower v6-archival"><div class="v6-section-head"><h2>Completed recently</h2><button class="row-action" data-action="activity">View activity ${icon('chevron','small-icon')}</button></div>${outcomes||`<div class="v6-empty">No new completed work.</div>`}</section>
+ ${d.suggestions?.length?`<section class="v6-suggestions v6-archival"><button class="v6-disclosure" data-action="showSuggestions" aria-expanded="${state.showAllSuggestions}">${icon('bookmark','small-icon')} ${d.suggestions.length} suggestions ${icon(state.showAllSuggestions?'down':'chevron','small-icon')}</button>${state.showAllSuggestions?suggestions:''}</section>`:''}
+ </main>`;
+}
+
+function foot(){return `<div class="fixture-toolbar ${state.fixtureOpen?'expanded':''}"><span>Home v7 · preview state</span><button class="button small fixture-toggle" data-action="toggleFixture" aria-expanded="${state.fixtureOpen}">Preview states</button><select id="scenario" aria-label="Change home preview state">${Object.entries(cases).map(([id,v])=>`<option value="${id}" ${state.scenario===id?'selected':''}>${esc(v.label)}</option>`).join('')}</select><button class="button small" data-action="reset" aria-label="Reset preview">Reset</button></div><nav class="mobile-nav"><button class="active" data-action="home">${icon('home')}Home</button><button data-action="projects">${icon('folder')}Projects</button><button data-action="work">${icon('work')}Work</button><button data-action="add">${icon('plus')}New</button></nav>`}
+const KNOWN_PROJECTS=['SEICHO','Shiori','Paseo','food-core','Infrastructure','Crux','Pivolution','Quicklog'];
+function identifyProject(text){const low=text.toLowerCase().replace(/pivoliution/g,'pivolution');const start=KNOWN_PROJECTS.find(p=>new RegExp('^\\s*'+p.toLowerCase().replace(/[-]/g,'[- ]')+'\\b','i').test(low));if(start)return start;return KNOWN_PROJECTS.find(p=>new RegExp('\\b'+p.toLowerCase().replace(/[-]/g,'[- ]')+'\\b','i').test(low))||''}
+function inferInput(raw){
+ const t=raw.trim();if(!t)return {kind:'',project:'',body:'',reason:''};
+ const explicit=t.match(/^\s*([\w-]+)\s+(task|note|idea)\s*:\s*([\s\S]*)$/i);
+ const p=explicit?KNOWN_PROJECTS.find(x=>x.toLowerCase()===explicit[1].toLowerCase()):identifyProject(t);
+ if(explicit&&p)return {kind:explicit[2].toLowerCase()==='task'?'task':'note',project:p,body:explicit[3].trim(),reason:'Explicit command'};
+ const prefix=t.match(/^\s*(task|note|idea)\s*:\s*([\s\S]*)$/i);
+ if(prefix)return {kind:prefix[1].toLowerCase()==='task'?'task':'note',project:p,body:prefix[2].trim(),reason:'Explicit type'};
+ if(/\b(task|implement|fix|bug|refactor)\s*:/i.test(t))return {kind:'task',project:p,body:t.replace(/^\s*[^:]{1,65}:\s*/,''),reason:'Task wording'};
+ if(/\b(i want|would be nice|should|idea|remember|suggest|weekly|someday)\b/i.test(t))return {kind:'note',project:p,body:t,reason:'Possible idea or note'};
+ return {kind:'note',project:p,body:t,reason:'Saved as a note unless you choose Task'};
+}
+function inferred(){const match=inferInput(state.quickText);return {kind:state.quickMode==='auto'?match.kind:state.quickMode,project:state.quickProject||match.project,body:match.body,reason:state.quickMode==='auto'?match.reason:'Type selected manually'};}
+function openQuick(mode='auto'){
+ state.chatPickerOpen=false;state.quickOpen=true;state.quickStep='capture';state.quickText='';state.quickMode=mode;state.quickProject='';state.quickTitle='';state.quickSummary='';state.quickAcceptance='';state.editingDraft=null;state.quickFocusReturn=document.activeElement;
+ state.drawer=null;state.drawerId=null;draw();
+ document.getElementById('quickText')?.focus({preventScroll:true});
+}
+function closeQuick(){state.quickOpen=false;state.quickStep='capture';draw();if(state.quickFocusReturn?.isConnected)state.quickFocusReturn.focus({preventScroll:true});}
+function quickDraft(){const x=inferred();if(!x.body){document.getElementById('quickText')?.focus();return}state.quickStep='review';state.quickTitle=x.body.replace(/\s+/g,' ').replace(/[.?!]$/,'').slice(0,105);state.quickSummary=x.body;state.quickAcceptance='';draw();document.getElementById('quickTitle')?.focus({preventScroll:true});}
+function quickSave(approve=false){
+ const x=inferred();if(!x.project){document.getElementById('quickProject')?.focus();toast('Choose a project first');return}
+ if(!x.body){document.getElementById('quickText')?.focus();toast('Enter something first');return}
+ if(x.kind==='task'){
+  if(state.quickStep!=='review'){quickDraft();return}
+  const title=(document.getElementById('quickTitle')?.value||'').trim(),summary=(document.getElementById('quickSummary')?.value||'').trim(),accept=(document.getElementById('quickAcceptance')?.value||'').trim();
+  if(!title||!summary){toast('Title and scope are required');return}
+  const existing=state.editingDraft?state.taskDrafts.find(t=>t.id===state.editingDraft):null;
+  if(existing){Object.assign(existing,{title,summary,acceptance:accept,project:x.project,approved:approve})}else{state.taskDrafts.unshift({id:'draft-'+Date.now(),title,summary,acceptance:accept,project:x.project,approved:approve})}
+  state.quickOpen=false;state.editingDraft=null;draw();toast(approve?'Task proposal approved in mock · Not queued':'Task draft saved in mock · Not queued');return
+ }
+ state.notes.unshift({id:'note-'+Date.now(),project:x.project,text:x.body});state.quickOpen=false;draw();toast('Note saved to '+x.project+' in mock');
+}
+function quickEdit(id){const t=state.taskDrafts.find(x=>x.id===id);if(!t)return;openQuick('task');state.editingDraft=id;state.quickProject=t.project;state.quickText=t.summary;state.quickStep='review';state.quickTitle=t.title;state.quickSummary=t.summary;state.quickAcceptance=t.acceptance;draw();document.getElementById('quickTitle')?.focus()}
+function quickPreview(){
+ const m=inferred(),typed=!!state.quickText.trim();
+ if(state.quickStep==='review')return `<div class="qa-review"><div class="qa-review-header"><strong>Shiori Task · Draft</strong><button data-action="quickBack" class="qa-back">${icon('arrow','small-icon')} Edit request</button></div><div class="qa-field"><label for="quickTitle">Task title</label><input id="quickTitle" class="qa-field-input" value="${esc(state.quickTitle)}" placeholder="Short task title" /></div><div class="qa-field"><label for="quickSummary">Scope / task instructions</label><textarea id="quickSummary" rows="4" class="qa-field-input">${esc(state.quickSummary)}</textarea></div><div class="qa-field"><label for="quickAcceptance">Acceptance criteria (optional)</label><textarea id="quickAcceptance" rows="2" class="qa-field-input" placeholder="What would prove this is done?">${esc(state.quickAcceptance)}</textarea></div><p class="qa-note">Review the proposal, then save or approve. Production requires Shiori template validation; neither action queues or runs work in this mock.</p></div>`;
+ return `<div class="qa-detection"><div class="qa-detection-head"><span class="qa-eyebrow">${typed?'Detected destination':'Create'}</span>${typed?`<span class="qa-reason">${esc(m.reason)}</span>`:''}</div><div class="qa-choice-line"><div class="qa-selector-wrap"><label for="quickKind">Type</label><select id="quickKind"><option value="auto" ${state.quickMode==='auto'?'selected':''}>${typed?(m.kind==='task'?'Task draft':'Note / idea'):'Automatic'}</option><option value="task" ${state.quickMode==='task'?'selected':''}>Task draft</option><option value="note" ${state.quickMode==='note'?'selected':''}>Note / idea</option></select></div><div class="qa-selector-wrap"><label for="quickProject">Project</label><select id="quickProject"><option value="">${m.project?'Detected: '+esc(m.project):'Choose project'}</option>${KNOWN_PROJECTS.map(p=>`<option value="${esc(p)}" ${state.quickProject===p?'selected':''}>${esc(p)}</option>`).join('')}</select></div></div>${typed?`<div class="qa-preview-content"><span class="qa-preview-icon">${icon(m.kind==='task'?'file':'bookmark')}</span><div><strong>${esc(m.body.slice(0,120))}</strong><p>${m.kind==='task'?'Review a Shiori task draft before saving.':'Save an ordinary project note. No agent is launched.'}</p></div></div>`:`<div class="qa-samples"><div>Try typing:</div><button data-action="quickExample" data-id="task">seicho task: Fix Inbox scroll position</button><button data-action="quickExample" data-id="note">I want Pivolution to suggest improvements weekly</button></div>`}</div>`;
+}
+function quickMarkup(){if(!state.quickOpen)return '';const m=inferred(),editing=state.quickStep==='review';return `<div class="qa-overlay" id="quickBackdrop"><section class="qa-modal" role="dialog" aria-modal="true" aria-labelledby="quickHeading"><div class="qa-top"><div class="qa-title" id="quickHeading">${icon('command')} Quick actions</div><button data-action="quickClose" class="qa-x" aria-label="Close quick actions">${icon('close')}</button></div><div class="qa-prompt-wrap"><textarea id="quickText" rows="2" placeholder="Type an idea, task, or command…" aria-label="Quick capture">${esc(state.quickText)}</textarea><span class="qa-input-hint">${icon('sparkles','small-icon')} Local rules · preview</span></div><div id="quickDynamic">${quickPreview()}</div><div class="qa-commands"><button data-action="quickCommand" data-id="agent">${icon('chat')} New agent <kbd>Alt A</kbd></button><button data-action="quickCommand" data-id="terminal">${icon('terminal')} New terminal <kbd>Alt T</kbd></button><button data-action="quickModeTask">${icon('file')} Task <kbd>Alt K</kbd></button><button data-action="quickModeNote">${icon('bookmark')} Note <kbd>Alt N</kbd></button></div><div class="qa-foot"><span>Esc close <span class="qa-foot-dot">·</span> Ctrl/⌘ Shift K reopen <span class="qa-foot-dot">·</span> Enter review</span>${editing?`<button class="button" data-action="quickSave">Save draft</button>`:''}<button class="button primary" data-action="${editing?'quickApprove':'quickSave'}" ${(!m.body&&!editing)?'disabled':''}>${m.kind==='task'?(editing?'Approve proposal':'Review task'):'Save note'} ${icon('arrow','small-icon')}</button></div></section></div>`}
+function updateQuickDynamic(){const node=document.getElementById('quickDynamic');if(node)node.innerHTML=quickPreview();const save=document.querySelector('.qa-foot .button.primary');const m=inferred();if(save){save.disabled=!m.body&&state.quickStep!=='review';save.innerHTML=(m.kind==='task'?(state.quickStep==='review'?'Approve proposal':'Review task'):'Save note')+' '+icon('arrow','small-icon')} }
+function openShortcut(kind){state.quickOpen=false;state.editingDraft=null;state.quickStep='capture';if(kind==='agent'||kind==='terminal'){open('quickSession',kind)} }
+function drawerMarkup(){if(!state.drawer)return '';let kind=state.drawer,id=state.drawerId;let rv=state.data.reviews.find(r=>r.id===id),agent=state.data.agents.find(a=>a.id===id),q=state.data.queue.find(q=>q.id===id),out=state.data.outcomes[+id];let title='',subtitle='',body='',actions='';const close=button('Close','close');
+if(kind==='proposal'){
+ const p=state.data.suggestions?.find(x=>x.id===id);
+ if(p){title=p.project+' · Proposal';subtitle='Suggested from '+p.source;body=`<div class="detail-section"><div class="detail-kicker">Proposed next step</div><h3>${esc(p.title)}</h3><p class="detail-text">${esc(p.detail)}</p><div class="evidence">${icon('bookmark')} Source: ${esc(p.source)}<br>Matching basis: ${esc(p.match)}</div><p class="detail-text" style="margin-top:18px">This is an AI suggestion, not a scheduled task or an approved change. Confirm the destination and exact scope before creating a draft.</p></div>`;actions=`<button class="button primary" data-action="acceptSuggestion" data-id="${esc(id)}">Create draft (preview)</button><button class="button" data-action="dismissSuggestion" data-id="${esc(id)}">Dismiss</button>`;}else{title='Proposal';subtitle='No longer available';body='';actions=close}
+ }
+ else if(kind==='schedule'){title='Scheduled agent session';subtitle='Paseo · Schedule';body=`<div class="detail-section"><div class="detail-kicker">Tomorrow · 08:00</div><p class="detail-text">Shiori regression check · read-only verification on ANON-PC.</p><div class="evidence">Time-based agent launch is separate from the Shiori ordered Task queue. Due time never bypasses Task authorization or admission.</div></div>`;actions=close;}
+ else if(kind==='catchup'){
+ const c=state.data.resumeContext||{};
+ title='Project context · '+state.data.resume;
+ subtitle='Saved context · example, not live project knowledge';
+ body=`<div class="detail-section"><div class="detail-kicker">Why this work exists</div><p class="detail-text">${esc(c.why)}</p></div>
+ <div class="detail-section"><div class="detail-kicker">Last agreed direction</div><p class="detail-text">${esc(c.decision)}</p></div>
+ <div class="detail-section"><div class="detail-kicker">Where you stopped</div><p class="detail-text">${esc(c.leftOff)}</p></div>
+ <div class="detail-section"><div class="detail-kicker">What changed</div><p class="detail-text">${esc(c.changes)}</p></div>
+ <div class="detail-section"><div class="detail-kicker">Recommended next step</div><div class="next-action-note">${esc(c.next)}</div></div>
+ <div class="detail-section"><div class="detail-kicker">Where this came from</div><p class="detail-text">${esc(c.source)}</p></div>
+ <div class="secondary-panel"><strong>Design-only example</strong><p>A real version must assemble this from linked project decisions, current Shiori state and saved workspace history. It must mark missing or stale evidence rather than invent an answer.</p></div>`;
+ actions=`${button('Resume workspace','resume',{cls:'primary',ico:'arrow'})}${close}`;
+ }
+ else if(kind==='resume'){
+ title=state.data.resume;
+ subtitle='Saved workspace · '+state.data.lastContext;
+ const c=state.data.resumeContext||{};
+ body=`<div class="detail-section"><div class="detail-kicker">Restored workspace preview</div><div class="chat-preview"><div class="tabs"><span>Agent</span><span>Browser / changes</span><span>Reference</span></div><div class="window"><div class="col"><h4>${esc(state.data.resume)}</h4><p>${esc(c.leftOff)}</p><p style="color:#a5c4ee">${esc(state.data.resumeState)}</p></div><div class="col"><h4>Workspace context</h4><p>${esc(c.next)}</p><div class="preview-line med"></div><div class="preview-line short"></div></div></div></div></div><div class="secondary-panel"><strong>Saved layout only</strong><p>No live agent or filesystem action is performed by this preview.</p></div>`;
+ actions=`${button('Project context','catchup')}${close}`;
+ }
+
+else if(kind==='review'&&rv){title=rv.project+' · '+rv.title;subtitle=rv.detail;body=`<div class="detail-section"><div class="detail-kicker">Decision required</div><p class="detail-text">${esc(rv.description)}</p></div><div class="detail-section"><div class="detail-kicker">Evidence</div>${rv.checks.map(x=>`<div class="evidence">${icon('check')}<span>${esc(x)}</span></div>`).join('')}</div><div class="detail-section"><div class="detail-kicker">Change request</div><textarea class="text-input" id="changeComment" placeholder="What needs to change before approval?">${esc(state.comment)}</textarea></div><div class="secondary-panel"><strong>Before you decide</strong><p>Approval in this prototype changes only the simulated Home state. Production approval must verify the exact revision and Git finalization.</p></div>`;actions=rv.kind==='blocked'?`${button('Open saved workspace','resume',{cls:'primary',ico:'arrow'})}${close}`:`${button('Request changes','request',{id:rv.id})}${button('Approve review','approve',{cls:'primary',id:rv.id})}`}
+else if(kind==='agent'&&agent){title=agent.project+' · '+agent.title;subtitle=agent.description;body=`<div class="detail-section"><div class="detail-kicker">Agent status</div><div class="evidence">${icon('activity')}<span>${esc(agent.activity)}</span><span class="status ${state.scenario==='blocked'?'danger':'live'}">${state.scenario==='blocked'?'Blocked':'Running'}</span></div><div class="evidence">${icon('work')}<span>Runtime</span><small>Pi · ${esc(agent.model)}</small></div><div class="evidence">${icon('git')}<span>Host</span><small>ANON-PC</small></div></div><div class="detail-section"><div class="detail-kicker">Subagents</div><div class="secondary-panel"><strong>Reviewer controls · Implementer</strong><p>${state.scenario==='blocked'?'Not running · waiting for recovery':'Working on interaction and keyboard behavior · child of primary agent'}</p></div></div><div class="secondary-panel"><strong>Session controls</strong><p>Inspect opens the existing session. Stop and Resume belong to that agent surface, not the Home dashboard.</p></div>`;actions=`${button('Open saved workspace','resume',{cls:'primary',ico:'arrow'})}`}
+else if(kind==='queue'&&q){title=q.title;subtitle=q.project+' · Global Shiori queue';body=`<div class="detail-section"><div class="detail-kicker">Queue position · 01</div><div class="evidence">${icon('clock')}<span>Eligibility</span><span class="status ${q.status==='Ready'?'ready':'warn'}">${q.status}</span></div><p class="detail-text">${esc(q.description)}</p></div><div class="detail-section"><div class="detail-kicker">Execution steps</div><ol class="step-list"><li><span class="n">1</span>Recheck Task document and required focused checks</li><li><span class="n">2</span>Check dependencies and Git source freshness</li><li><span class="n">3</span>Admit through the existing Shiori runner when authorized</li></ol></div><div class="secondary-panel"><strong>Queue ≠ authorization</strong><p>A ready Task does not automatically become unattended work. Starting this mock only updates its local fixture.</p></div>`;actions=q.status==='Ready'?`${button('Start in mock','startQueue',{cls:'primary',id:q.id})}`:close}
+else if(kind==='outcome'&&out){title=out.project+' · '+out.title;subtitle='Verified outcome';body=`<div class="detail-section"><div class="detail-kicker">Recorded result</div><p class="detail-text">${esc(out.description)}</p></div><div class="secondary-panel"><strong>Evidence attached</strong><p>Inspect the corresponding Task and Git evidence to verify actual completion. This mock does not reproduce a real repository diff.</p></div>`;actions=close}
+else if(kind==='captureLegacy'||kind==='addLegacy'){title=kind==='capture'?'Capture':'Add work';subtitle='Choose an action';body=`<div class="actionsheet"><button class="sheet-option" data-action="mockAction" data-id="note">${icon('bookmark')}<span><strong>Capture an idea or note</strong><small>Keep context and select a project later</small></span></button><button class="sheet-option" data-action="mockAction" data-id="task">${icon('file')}<span><strong>Draft a Shiori Task</strong><small>Review its specification before queueing</small></span></button><button class="sheet-option" data-action="mockAction" data-id="agent">${icon('chat')}<span><strong>New agent</strong><small>Start unattached, choose host and model</small></span></button><button class="sheet-option" data-action="mockAction" data-id="terminal">${icon('terminal')}<span><strong>New terminal</strong><small>Starts in host home directory</small></span></button></div>`;actions=close}
+else if(kind==='project'){
+ const p=id||'SEICHO',reviews=state.data.reviews.filter(r=>r.project===p),queues=state.data.queue.filter(q=>q.project===p),notes=state.notes.filter(n=>n.project===p),drafts=state.taskDrafts.filter(t=>t.project===p);
+ title=p;subtitle='Project · mock context';body=`<div class="detail-section"><div class="detail-kicker">Needs attention</div>${reviews.length?reviews.map(r=>`<button class="sheet-option" data-action="review" data-id="${esc(r.id)}"><span><strong>${esc(r.title)}</strong><small>Review</small></span>${icon('arrow')}</button>`).join(''):'<p class="detail-text">No reviews waiting.</p>'}</div><div class="detail-section"><div class="detail-kicker">Work and drafts</div>${[...queues.map(q=>({id:q.id,title:q.title,type:'queue'})),...drafts.map(d=>({id:d.id,title:d.title,type:'draft'}))].map(item=>`<button class="sheet-option" data-action="${item.type}" data-id="${esc(item.id)}"><span><strong>${esc(item.title)}</strong><small>${item.type==='draft'?(drafts.find(x=>x.id===item.id)?.approved?'Approved in mock · not queued':'Draft only'):'In Shiori queue'}</small></span>${icon('arrow')}</button>`).join('')||'<p class="detail-text">No pending work.</p>'}</div><div class="detail-section"><div class="detail-kicker">Notes saved in this mock</div>${notes.map(n=>`<div class="evidence">${icon('bookmark')}<span>${esc(n.text)}</span></div>`).join('')||'<p class="detail-text">No captured notes yet.</p>'}</div>`;actions=`${button('Add to project','projectCapture',{id:p})}${close}`;
+}
+else if(kind==='sidechat'){
+ const c=sidechats.find(x=>x.id===id);
+ if(c){title=c.project+' · '+c.name;subtitle=c.subtitle;body=`<div class="chat-preview-messages">${c.messages.map(([speaker,message])=>`<div class="chat-preview-message ${speaker==='Agent'?'from-agent':''}"><span class="who">${esc(speaker)}</span><p>${esc(message)}</p></div>`).join('')}</div><p class="chat-preview-note">Example conversation. In the real application, selection would open this side chat with its real history. No messages are sent from this mock.</p>`;actions=`${button('Switch conversation','chatToggle')}${close}`;}
+ }
+ else if(kind==='quickSession'){
+ title=id==='agent'?'New agent':'New terminal';subtitle='Shortcut preview';body=`<div class="secondary-panel"><strong>${id==='agent'?'New native agent session':'New native terminal'}</strong><p>${id==='agent'?'In the real Paseo this should open the normal native agent creation flow, with model and host selection.':'In the real Paseo this should open native terminal creation, using the chosen host and directory.'}</p><p>No process or session is started by this HTML prototype.</p></div>`;actions=`${button('Back to quick actions','add',{cls:'primary'})}${close}`;
+}
+else if(kind==='allQueue'){title='Shiori queue';subtitle='Accepted tasks awaiting execution';body=state.data.queue.length?`<div class="actionsheet">${state.data.queue.map(q=>`<button class="sheet-option" data-action="queue" data-id="${esc(q.id)}">${icon('work')}<span><strong>${esc(q.title)}</strong><small>${esc(q.project)} · ${esc(q.status)}</small></span>${icon('chevron')}</button>`).join('')}</div>`:'<div class="empty">Nothing queued.</div>';actions=close}
+else if(kind==='activity'){title='Completed work';subtitle='Recent recorded results';body=state.data.outcomes.length?`<div class="actionsheet">${state.data.outcomes.map((o,i)=>`<button class="sheet-option" data-action="outcome" data-id="${i}">${icon('check')}<span><strong>${esc(o.title)}</strong><small>${esc(o.project)} · ${esc(o.description)}</small></span>${icon('chevron')}</button>`).join('')}</div>`:'<div class="empty">No recorded outcomes.</div>';actions=close}
+else if(kind==='recent'){title='Recent workspaces';subtitle='Restore a saved layout without changing Focus';const recent=[{title:state.data.resume,subtitle:state.data.lastContext,id:'current'},{title:'SEICHO · Recipe import reliability',subtitle:'Browser preview + agent · ANON-PC',id:'seicho'},{title:'food-core · URL importer',subtitle:'Agent + terminal · anon3',id:'food'}];body=`<div class="actionsheet">${recent.map(w=>`<button class="sheet-option" data-action="selectRecent" data-id="${w.id}">${icon('work')}<span><strong>${esc(w.title)}</strong><small>${esc(w.subtitle)}</small></span>${icon('chevron')}</button>`).join('')}</div>`;actions=close}
+else if(kind==='changeFocus'){title='Choose Focus';subtitle='One explicit task · independent of your last workspace';const choices=[{id:'seicho',title:'SEICHO · Recipe import reliability',extra:'Needs visual and language acceptance'},{id:'shiori',title:'Shiori · Reviewer results presentation',extra:'Review pending'},{id:'food',title:'food-core · Normalize Norwegian ingredient terms',extra:'Ready to start'},{id:'clear',title:'No active focus',extra:'Remove current focus without changing your workspace'}];body=`<div class="actionsheet">${choices.map(x=>`<button class="sheet-option" data-action="setFocus" data-id="${x.id}">${icon('bookmark')}<span><strong>${esc(x.title)}</strong><small>${esc(x.extra)}</small></span>${icon('chevron')}</button>`).join('')}</div>`;actions=close}
+else if(kind==='focus'){title='Current Focus';subtitle='Explicitly selected task · not the last visited workspace';body=`<div class="detail-section"><div class="detail-kicker">Selected task</div><div class="secondary-panel"><strong>${esc(state.data.focus||'No active focus')}</strong><p>Open the Task without replacing or creating an agent session.</p></div></div>`;actions=`${button('Change focus','changeFocus')}${button('Go to task','openFocusTask',{cls:'primary'})}`}
+else if(kind==='search'){title='Search';subtitle='Across projects, agents and tasks';body=`<input class="text-input" style="min-height:40px" placeholder="Search project, Task, session…" id="searchInput"><p class="muted-note">Search has no live index in this standalone mock.</p>`;actions=close}
+else if(kind==='info'){title=state.drawerId==='tools'?'Tools & configuration':state.drawerId==='recent'?'Activity':state.drawerId==='projects'?'Projects':state.drawerId==='work'?'Workspaces':state.drawerId==='changeFocus'?'Choose Focus':state.drawerId==='settings'?'Settings':state.drawerId==='chat'?'Side chat':'Paseo';subtitle='Outside Home review scope';body=`<div class="secondary-panel"><strong>This is a Home-only mock</strong><p>This control remains visible for layout and discoverability review. The destination will be evaluated when its own screen is designed.</p></div>`;actions=close}
+else{title='Home';subtitle='Preview only';body='';actions=close}
+return `<div class="overlay" id="overlay" role="presentation"><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="drawer-header"><div><span class="eyebrow">PASEO · ${kind==='review'?'REVIEW':kind==='queue'?'QUEUE':'WORKSPACE'}</span><div class="drawer-title">${esc(title)}</div><div class="subtle" style="font-size:11px">${esc(subtitle)}</div></div><button class="close" data-action="close" aria-label="Close panel">${icon('close')}</button></div><div class="drawer-body">${body}</div><div class="drawer-footer">${actions}</div></aside></div>`}
+function draw(){document.getElementById('app').innerHTML=`<div class="app">${sidebar()}<div class="content">${topbar()}${main()}</div></div>${foot()}${drawerMarkup()}${quickMarkup()}`;if(state.quickOpen){document.body.style.overflow='hidden';if(state.quickStep==='capture')document.getElementById('quickText')?.focus({preventScroll:true})}else if(state.drawer){document.body.style.overflow='hidden';document.querySelector('.drawer .close')?.focus({preventScroll:true})}else document.body.style.overflow=''}
+function toast(text){document.querySelector('.toast')?.remove();const el=document.createElement('div');el.className='toast';el.textContent=text;document.body.appendChild(el);clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>el.remove(),3200)}
+function open(kind,id){state.chatPickerOpen=false;state.drawer=kind;state.drawerId=id||null;state.comment='';draw()}
+function close(){state.drawer=null;state.drawerId=null;state.comment='';draw()}
+function reset(keepFixture=false){const wasOpen=state.fixtureOpen;const p=cases[state.scenario].patch;state.data={...clone(initialFixture),...clone(p)};state.drawer=null;state.drawerId=null;state.fixtureOpen=keepFixture&&wasOpen;state.showAllSuggestions=false;state.quickOpen=false;state.chatPickerOpen=false;state.taskDrafts=[];state.notes=[];state.editingDraft=null;draw()}
+function act(btn){const a=btn.dataset.action,id=btn.dataset.id;
+if(a==='chatToggle'){state.chatPickerOpen=!state.chatPickerOpen;draw();if(!state.chatPickerOpen)document.getElementById('chatSwitch')?.classList.add('chat-suppressed');if(state.chatPickerOpen)document.querySelector('.chat-choice')?.focus({preventScroll:true});else document.getElementById('chatTrigger')?.focus({preventScroll:true});return}
+if(a==='chatSelect'){open('sidechat',id);return}
+if(a==='quickClose'){closeQuick();return}
+if(a==='quickSave'){quickSave();return}
+if(a==='quickApprove'){quickSave(true);return}
+if(a==='quickBack'){state.quickStep='capture';state.editingDraft=null;draw();document.getElementById('quickText')?.focus();return}
+if(a==='quickModeTask'||a==='quickModeNote'){state.quickMode=a==='quickModeTask'?'task':'note';state.quickStep='capture';draw();document.getElementById('quickText')?.focus();return}
+if(a==='quickCommand'){openShortcut(id);return}
+if(a==='quickExample'){state.quickText=id==='task'?'seicho task: Fix Inbox scroll position':'I want Pivolution to automatically suggest improvements to me on a weekly basis';state.quickProject='';state.quickMode='auto';draw();document.getElementById('quickText')?.focus();return}
+if(a==='draft'){quickEdit(id);return}
+if(a==='projectCapture'){openQuick();state.quickProject=id;draw();document.getElementById('quickText')?.focus();return}
+
+if(a==='close'){close();return}if(a==='home'){close();return}
+if(a==='add'||a==='capture'){openQuick();return}
+if(a==='review'||a==='agent'||a==='queue'||a==='outcome'||a==='resume'||a==='catchup'||a==='focus'||a==='search'||a==='proposal'||a==='schedule'){open(a,id);return}
+if(a==='showSuggestions'){state.showAllSuggestions=!state.showAllSuggestions;draw();return}
+if(a==='dismissSuggestion'){state.data.suggestions=state.data.suggestions.filter(p=>p.id!==id);close();toast('Suggestion dismissed in preview');return}
+if(a==='acceptSuggestion'){state.data.suggestions=state.data.suggestions.filter(p=>p.id!==id);close();toast('Task draft staged in preview · Requires review before queueing');return}
+if(a==='approve'){let rv=state.data.reviews.find(r=>r.id===id);if(!rv)return;state.data.reviews=state.data.reviews.filter(r=>r.id!==id);close();toast('Review accepted in preview; Git finalization remains unverified');return}
+if(a==='request'){const val=document.getElementById('changeComment')?.value.trim();if(!val){toast('Describe the changes you want first');return}let r=state.data.reviews.find(r=>r.id===id);if(r){r.description='Changes requested · '+val.slice(0,85)}close();toast('Changes requested in simulated Home state');return}
+if(a==='startQueue'){let q=state.data.queue.find(r=>r.id===id);if(q){state.data.queue=state.data.queue.filter(r=>r.id!==id);state.data.agents.push({id:'queued',project:q.project,title:q.title,description:'Simulated agent run · local preview only',model:'Pi · provider not selected',activity:'Executing accepted Task through runner (simulated)'})}close();toast('Task started in preview only');return}
+if(a==='mockAction'){close();toast(''+(id==='agent'?'New agent':id==='terminal'?'New terminal':id==='task'?'Draft Task':'Capture')+' is outside this Home-only mock');return}
+if(a==='toggleFixture'){state.fixtureOpen=!state.fixtureOpen;draw();return}
+if(a==='recent'||a==='changeFocus'){open(a);return}
+if(a==='selectRecent'){if(id==='seicho'){state.data.resume='SEICHO · Recipe import reliability';state.data.lastContext='Browser preview + agent · ANON-PC';state.data.resumeState='Workspace saved · session idle';state.data.resumeContext={...state.data.resumeContext,why:'Improve reliable recipe importing.',leftOff:'Reviewing the import results and source mappings.',next:'Inspect the latest checks and decide whether the implementation is ready.',changes:'Latest checks were recorded.',source:'Recipe import workspace · example'}}else if(id==='food'){state.data.resume='food-core · URL importer';state.data.lastContext='Agent + terminal · anon3';state.data.resumeState='Verified run · session idle';state.data.resumeContext={...state.data.resumeContext,why:'Make URL recipe imports reliable.',leftOff:'Implementation finished and evidence was recorded.',next:'Review the saved result or choose another task.',changes:'Verified work was recorded for this workspace.',source:'food-core Task · example'}}close();toast('Last workspace changed; Focus unchanged');return}
+if(a==='setFocus'){const opts={seicho:'SEICHO · Recipe import reliability',shiori:'Shiori · Reviewer results presentation',food:'food-core · Normalize Norwegian ingredient terms',clear:null};state.data.focus=opts[id]??null;close();toast('Focus updated; last workspace unchanged');return}
+if(a==='openFocusTask'){const value=state.data.focus||'';if(value.startsWith('SEICHO'))open('review','seicho');else if(value.startsWith('Shiori'))open('review','shiori');else if(value.startsWith('food-core'))open('queue','q24');else close();return}
+if(a==='queueAll'){open('allQueue');return}if(a==='activity'){open('activity');return}
+if(a==='reset'){reset();toast('Fixture reset');return}
+if(a==='project'){open('project',id);return}
+if(a==='projects'||a==='work'||a==='tools'||a==='settings'||a==='split'){open('info',a);return}
+}
+document.addEventListener('pointerout',ev=>{const sw=ev.target.closest?.('#chatSwitch');if(sw&&!sw.contains(ev.relatedTarget))sw.classList.remove('chat-suppressed')});
+document.addEventListener('click',ev=>{const btn=ev.target.closest('[data-action]');if(btn){ev.preventDefault();act(btn)}else if(ev.target.id==='overlay')close();else if(ev.target.id==='quickBackdrop')closeQuick();else if(state.chatPickerOpen&&!ev.target.closest('#chatSwitch')){state.chatPickerOpen=false;draw()}});
+document.addEventListener('change',ev=>{
+ if(ev.target.id==='scenario'){state.scenario=ev.target.value;reset(true)}
+ if(ev.target.id==='quickKind'){state.quickMode=ev.target.value;updateQuickDynamic()}
+ if(ev.target.id==='quickProject'){state.quickProject=ev.target.value;updateQuickDynamic()}
+});
+document.addEventListener('input',ev=>{
+ if(ev.target.id==='changeComment')state.comment=ev.target.value;
+ if(ev.target.id==='quickText'){state.quickText=ev.target.value;updateQuickDynamic()}
+ if(ev.target.id==='quickTitle')state.quickTitle=ev.target.value;
+ if(ev.target.id==='quickSummary')state.quickSummary=ev.target.value;
+ if(ev.target.id==='quickAcceptance')state.quickAcceptance=ev.target.value;
+});
+document.addEventListener('keydown',ev=>{
+ const editing=ev.target instanceof HTMLElement && (ev.target.matches('input,textarea,select')||ev.target.isContentEditable);
+ const chatHotkey=ev.shiftKey&&!ev.altKey&&!ev.ctrlKey&&!ev.metaKey&&ev.code==='KeyE';
+ if(chatHotkey&&!editing&&!state.quickOpen){ev.preventDefault();state.chatPickerOpen=!state.chatPickerOpen;draw();if(state.chatPickerOpen)document.querySelector('.chat-choice')?.focus({preventScroll:true});else document.getElementById('chatTrigger')?.focus({preventScroll:true});return}
+ if(state.chatPickerOpen&&!state.quickOpen){
+  if(ev.key==='Escape'){ev.preventDefault();state.chatPickerOpen=false;draw();document.getElementById('chatTrigger')?.focus({preventScroll:true});return}
+  if(ev.altKey&&!ev.ctrlKey&&!ev.metaKey&&/^[1-4]$/.test(ev.key)){ev.preventDefault();open('sidechat',sidechats[Number(ev.key)-1].id);return}
+  if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){const options=[...document.querySelectorAll('.chat-choice')];const idx=options.indexOf(document.activeElement);if(idx!==-1){ev.preventDefault();options[(idx+(ev.key==='ArrowDown'?1:-1)+options.length)%options.length]?.focus();return}}
+ }
+ const hotkey=(ev.ctrlKey||ev.metaKey)&&ev.shiftKey&&ev.code==='KeyK';
+ if(hotkey){ev.preventDefault();if(state.quickOpen){document.getElementById('quickText')?.focus()}else openQuick();return}
+ if(state.quickOpen){
+  if(ev.key==='Escape'){ev.preventDefault();closeQuick();return}
+  if(ev.altKey&&!ev.ctrlKey&&!ev.metaKey){const k=ev.key.toLowerCase();if(k==='a'||k==='t'){ev.preventDefault();openShortcut(k==='a'?'agent':'terminal');return}if(k==='n'||k==='k'){ev.preventDefault();state.quickMode=k==='n'?'note':'task';state.quickStep='capture';draw();document.getElementById('quickText')?.focus();return}}
+  if(ev.key==='Enter'&&!ev.shiftKey&&document.activeElement?.id==='quickText'){ev.preventDefault();quickSave();return}
+  if(ev.key==='Enter'&&(ev.ctrlKey||ev.metaKey)&&state.quickStep==='review'){ev.preventDefault();quickSave();return}
+  if(ev.key==='Tab'){const f=[...document.querySelectorAll('.qa-modal button:not([disabled]),.qa-modal input:not([disabled]),.qa-modal textarea:not([disabled]),.qa-modal select:not([disabled])')];const i=f.indexOf(document.activeElement);if(ev.shiftKey&&i===0){ev.preventDefault();f.at(-1)?.focus()}else if(!ev.shiftKey&&i===f.length-1){ev.preventDefault();f[0]?.focus()}}
+  return;
+ }
+ if(ev.key==='Escape'&&state.drawer)close();
+});
+reset();
+</script>
+</body>
+</html>

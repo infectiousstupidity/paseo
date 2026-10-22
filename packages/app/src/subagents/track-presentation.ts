@@ -6,6 +6,79 @@ import type { SubagentRow } from "./select";
 import { isFinishedSubagent } from "./archive-finished";
 import { providerSubagentLifecycleStatus } from "./provider-store";
 
+/**
+ * The lifecycle state a row names in words. `completed` reads "Finished", never a success claim:
+ * a finished reviewer may have reported defects, and only explicit child evidence earns more.
+ * Null means nothing to name yet: a managed child that is still initializing carries the app's
+ * own inactive mark and has no state to word, so the word stays absent rather than invented.
+ */
+export type SubagentStateWord = "running" | "finished" | "failed" | "canceled";
+
+/** Visibility hint only. Every click is independently authorized by the daemon and native Pi. */
+export function canControlPiSubagent(row: SubagentRow): boolean {
+  return row.kind === "provider" && row.provider === "pi" &&
+    row.status === "running" && row.controlEligible === true;
+}
+
+export function resolveSubagentState(row: SubagentRow): SubagentStateWord | null {
+  if (row.kind === "provider") {
+    switch (row.status) {
+      case "running":
+        return "running";
+      case "failed":
+        return "failed";
+      case "canceled":
+        return "canceled";
+      default:
+        return "finished";
+    }
+  }
+  if (row.turn.phase === "open" || row.status === "running") return "running";
+  if (row.status === "error") return "failed";
+  if (row.status === "initializing") return null;
+  return "finished";
+}
+
+/**
+ * What needs a look first: running, failed, and attention children ahead of terminal ones
+ * (completed, canceled). Each group keeps its stable creation order, and a row only moves when
+ * it crosses the active/finished boundary — never on an event inside one group. This is
+ * attention ordering, not archiving: a failed child still sorts as finished for the archive row.
+ */
+/** Three stable visual groups. A failed child needs attention, not an invented review verdict. */
+export interface SubagentSections {
+  attention: SubagentRow[];
+  working: SubagentRow[];
+  recent: SubagentRow[];
+}
+
+export function groupSubagentRows(rows: readonly SubagentRow[]): SubagentSections {
+  const groups: SubagentSections = { attention: [], working: [], recent: [] };
+  for (const row of rows) {
+    const state = resolveSubagentState(row);
+    if (state === "failed" || row.requiresAttention) groups.attention.push(row);
+    else if (state === "running") groups.working.push(row);
+    else groups.recent.push(row);
+  }
+  return groups;
+}
+
+export function orderSubagentRows(rows: readonly SubagentRow[]): SubagentRow[] {
+  const active: SubagentRow[] = [];
+  const finished: SubagentRow[] = [];
+  for (const row of rows) {
+    (isOrderingActive(row) ? active : finished).push(row);
+  }
+  return [...active, ...finished];
+}
+
+function isOrderingActive(row: SubagentRow): boolean {
+  if (row.kind === "provider") {
+    return row.status === "running" || row.status === "failed";
+  }
+  return row.turn.phase === "open" || row.status === "running" || row.status === "error";
+}
+
 function presentationStatus(row: SubagentRow) {
   if (row.kind === "paseo") {
     if (row.turn.phase === "open") return "running";
@@ -23,12 +96,39 @@ export interface SubagentRowPresentationData {
   statusBucket: SidebarStateBucket | null;
 }
 
+/**
+ * Display only, not a task rewrite: skip standalone repo/HEAD boilerplate lines while retaining
+ * the exact source description for the expanded pane. Do not infer a task from a filename/hash.
+ */
+export function compactSubagentTask(raw: string): string {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const content = lines.find((line) =>
+    !/^(?:(?:repository|repo|cwd|workspace|working directory|head|commit|branch)\s*[:=]|task\s*:?$)/i.test(line),
+  ) ?? lines[0] ?? raw;
+  const normalized = content.replace(/^[-*]\s+/, "").trim();
+  // Deterministic ID/role extraction from the user's actual worker prompt, not an LLM summary.
+  const worker = normalized.match(/^You are (.+?) worker (W\d+[a-z0-9-]*)\b/i);
+  if (worker) {
+    const review = normalized.match(/\b(?:review|fix) round\s+\d+/i)?.[0];
+    return [worker[2], worker[1], review].filter(Boolean).join(" · ");
+  }
+  return normalized.length > 120 ? normalized.slice(0, 119).trimEnd() + "…" : normalized;
+}
+
+/** Provider-owned model/effort is shown only when the child's descriptor actually carries it. */
+export function subagentRuntimeLabel(row: SubagentRow): string | null {
+  if (row.kind !== "provider") return null;
+  const model = row.model?.trim();
+  const effort = row.thinkingOptionId?.trim();
+  return [model, effort].filter(Boolean).join(" · ") || null;
+}
+
 export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowPresentationData {
   // The task distinguishes siblings in a fan-out, so it names the row when present. Providers
   // own the compact secondary context because model, effort, and usage semantics differ.
   const description = resolveRowLabel(row.description);
   const title = resolveRowLabel(row.title);
-  const label = description ?? title;
+  const label = description ? compactSubagentTask(description) : title;
   const providerSubtitle = row.kind === "provider" ? resolveRowLabel(row.subtitle) : null;
   const subtitle = providerSubtitle ?? (description ? title : null);
   const status = presentationStatus(row);

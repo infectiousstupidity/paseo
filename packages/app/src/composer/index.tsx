@@ -118,6 +118,11 @@ import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
 import type { MessageInputKeyboardActionKind } from "@/keyboard/actions";
 import { submitAgentInput } from "@/composer/submit";
+import {
+  getPromptHistory,
+  navigatePromptHistory,
+  type PromptHistoryCursor,
+} from "@/composer/prompt-history";
 import { createMessageSubmissionWriter } from "@/composer/submission/writer";
 import { ComposerKeyboardScopeProvider, useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useAppSettings } from "@/hooks/use-settings";
@@ -1362,6 +1367,7 @@ function ComposerContentImpl({
   );
   useEffect(() => () => cursorPublication.cancel(), [cursorPublication]);
   const autocompleteRef = useRef<ComposerAutocompleteHandle>(null);
+  const promptHistoryRef = useRef<{ sessionKey: string; cursor: PromptHistoryCursor } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFileAttachment[]>([]);
   const nextPendingFileId = useRef(0);
@@ -1700,6 +1706,7 @@ function ComposerContentImpl({
 
   const handleSubmit = useCallback(
     (payload: MessagePayload) => {
+      promptHistoryRef.current = null;
       const outgoingAttachments = buildOutgoingAttachments(attachments);
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
@@ -1953,6 +1960,7 @@ function ComposerContentImpl({
 
   const handleQueue = useCallback(
     (payload: MessagePayload) => {
+      promptHistoryRef.current = null;
       const outgoingAttachments = buildOutgoingAttachments(attachments);
       const clientSlashCommand = resolveClientSlashCommand({
         text: payload.text,
@@ -1981,10 +1989,50 @@ function ComposerContentImpl({
 
   const hasSendableContent = hasText || selectedAttachments.length > 0;
 
-  // Handle keyboard navigation for command autocomplete.
+  // Command autocomplete owns its arrow keys while open; otherwise Up/Down
+  // browse submitted prompts in this agent, without touching other panes or drafts.
   const handleCommandKeyPress = useCallback(
-    (event: ComposerKeyPressEvent) => autocompleteRef.current?.onKeyPress(event) ?? false,
-    [],
+    (event: ComposerKeyPressEvent) => {
+      if (autocompleteRef.current?.onKeyPress(event)) return true;
+      if (
+        !hasAgent ||
+        inputMode !== "chat" ||
+        isComposerLocked ||
+        readOnly ||
+        (event.key !== "ArrowUp" && event.key !== "ArrowDown") ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return false;
+      }
+
+      const session = useSessionStore.getState().sessions[serverId];
+      const history = getPromptHistory(
+        session?.agentStreamTail.get(agentId) ?? [],
+        session?.agentStreamHead.get(agentId) ?? [],
+      );
+      const sessionKey = `${serverId}:${agentId}`;
+      const result = navigatePromptHistory({
+        direction: event.key,
+        history,
+        text: event.input.text,
+        selection: event.input.selection,
+        cursor:
+          promptHistoryRef.current?.sessionKey === sessionKey
+            ? promptHistoryRef.current.cursor
+            : null,
+      });
+      if (!result) return false;
+
+      event.preventDefault();
+      promptHistoryRef.current = result.cursor ? { sessionKey, cursor: result.cursor } : null;
+      const end = result.text.length;
+      replaceUserInput(result.text, { start: end, end });
+      return true;
+    },
+    [agentId, hasAgent, inputMode, isComposerLocked, readOnly, replaceUserInput, serverId],
   );
 
   const cancelButtonStyle = useMemo(

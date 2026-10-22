@@ -13,6 +13,8 @@ import { OWNER_PERMISSIONS } from "../../authorization/index.js";
 import type { ConnectedHosts } from "../../connected-hosts/index.js";
 import { resolveRequiredProviderModel } from "../mcp-shared.js";
 import { selectAgentListItems } from "../agent-projections.js";
+import { selectItemsByProjectedLimit } from "../timeline-projection.js";
+import { curateAgentActivity } from "../activity-curator.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
 import { expandUserPath } from "../../path-utils.js";
 import type { PaseoToolExecutionContext, PaseoToolResult } from "../tools/types.js";
@@ -26,8 +28,7 @@ export interface HostOperations {
   createWorkspace: HostOperation;
   listWorkspaces: HostOperation;
   sendPrompt: HostOperation;
-  getStatus: HostOperation;
-  getActivity: HostOperation;
+  inspectAgent: HostOperation;
   listAgents: HostOperation;
   wait(agentId: string, signal: AbortSignal): Promise<WaitForFinishResult>;
   observe(
@@ -234,21 +235,20 @@ export function createHostResolver(input: {
                   : "Dispatch acknowledged. Observe completion using get_agent_status/get_agent_activity or SDK/RPC subscriptions and wait APIs.",
             });
           },
-          async getStatus(args) {
-            const agent = (await client.fetchAgent(args.agentId as string))?.agent;
-            if (!agent) throw new Error(`Agent ${args.agentId} not found`);
-            return result({ status: agent.status, snapshot: agent });
-          },
-          async getActivity(args) {
+          async inspectAgent(args) {
             const agentId = args.agentId as string;
+            const agent = (await client.fetchAgent(agentId))?.agent;
+            if (!agent) throw new Error(`Agent ${agentId} not found`);
+            if (args.includeActivity !== true)
+              return result({ status: agent.status, snapshot: agent });
             const limit = args.limit as number | undefined;
             const timeline = await client.fetchAgentTimeline(agentId, {
               direction: "tail",
               limit: limit ?? 0,
             });
-            const agent = (await client.fetchAgent(agentId))?.agent;
-            if (!agent) throw new Error(`Agent ${agentId} not found`);
             return result({
+              status: agent.status,
+              snapshot: agent,
               agentId,
               ...summarizeAgentActivity(
                 timeline.entries.map((entry) => entry.item),
@@ -260,21 +260,41 @@ export function createHostResolver(input: {
           async listAgents(args) {
             const { entries } = await client.fetchAgents({
               includeBackground: args.includeBackground === true,
-              filter: { includeArchived: args.includeArchived === true },
+              filter: {
+                includeArchived:
+                  args.includeArchived === true || (Array.isArray(args.ids) && args.ids.length > 0),
+              },
             });
-            return result({
-              agents: selectAgentListItems(
-                entries.map((entry) => entry.agent),
-                {
-                  cwd: (args.cwd as string | undefined)?.trim()
-                    ? expandUserPath(args.cwd as string)
-                    : undefined,
-                  statuses: args.statuses as AgentSnapshotPayload["status"][] | undefined,
-                  sinceHours: args.sinceHours as number | undefined,
-                  limit: args.limit as number | undefined,
-                },
-              ),
-            });
+            const agents = selectAgentListItems(
+              entries.map((entry) => entry.agent),
+              {
+                cwd: (args.cwd as string | undefined)?.trim()
+                  ? expandUserPath(args.cwd as string)
+                  : undefined,
+                ids: args.ids as string[] | undefined,
+                statuses: args.statuses as AgentSnapshotPayload["status"][] | undefined,
+                sinceHours: args.sinceHours as number | undefined,
+                limit: args.limit as number | undefined,
+              },
+            );
+            const activity =
+              args.includeActivity === true
+                ? await Promise.all(
+                    agents.map(async (agent) => {
+                      const timeline = await client.fetchAgentTimeline(agent.id, {
+                        direction: "tail",
+                        limit: 5,
+                      });
+                      const selection = selectItemsByProjectedLimit({
+                        items: timeline.entries.map((entry) => entry.item),
+                        direction: "tail",
+                        limit: 5,
+                      });
+                      return { agentId: agent.id, content: curateAgentActivity(selection.items) };
+                    }),
+                  )
+                : undefined;
+            return result({ agents, ...(activity ? { activity } : {}) });
           },
           async listWorkspaces(args) {
             const { entries } = await client.fetchWorkspaces({

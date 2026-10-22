@@ -1,0 +1,70 @@
+[
+  {
+    "name": "initial native baseline",
+    "pass": true
+  },
+  {
+    "name": "mode A/B native workspace retained",
+    "pass": true
+  },
+  {
+    "name": "home and shared review",
+    "pass": true
+  },
+  {
+    "name": "approve resolves single review",
+    "pass": true
+  },
+  {
+    "name": "project overview plan knowledge runs",
+    "pass": true
+  },
+  {
+    "name": "queue reorder and blocked",
+    "pass": true
+  },
+  {
+    "name": "authorization flow",
+    "pass": true
+  },
+  {
+    "name": "diff anchored context and bundled comment",
+    "pass": true
+  },
+  {
+    "name": "standalone terminal",
+    "pass": true
+  },
+  {
+    "name": "close terminal confirmation",
+    "pass": true
+  },
+  {
+    "name": "project captures",
+    "pass": true
+  },
+  {
+    "name": "prototype annotation acceptance",
+    "pass": true
+  },
+  {
+    "name": "import resolves conflict",
+    "pass": true
+  },
+  {
+    "name": "schedules and condition",
+    "pass": true
+  },
+  {
+    "name": "tools and review",
+    "pass": true
+  },
+  {
+    "name": "history usage hosts settings",
+    "pass": true
+  },
+  {
+    "name": "current preserves context",
+    "pass": true
+  }
+]

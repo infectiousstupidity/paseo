@@ -283,6 +283,12 @@ export function createPluginWorker(options: {
     const contributedCleanup = contribute({
       handle: (contract, handler) =>
         register(contract, (input, context) => handler(contract.input.parse(input), context)),
+      // Supply the live Paseo API to the contribution so a plugin can seed its
+      // own state at daemon start, before any RPC or lifecycle event arrives.
+      context: () => {
+        if (paseo === null) throw new Error("Paseo API is not ready");
+        return { paseo };
+      },
       registerProvider,
       registerUsageSource,
       registerSettings,
@@ -548,8 +554,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const handlers = new Set<(message: PluginProcessRequest) => void>();
   const channel: PluginWorkerChannel = {
     send(message, callback) {
-      if (callback) process.send?.(message, () => callback());
-      else process.send?.(message);
+      // Hooks and RPCs can finish after shutdown has disconnected the parent.
+      if (!process.connected) {
+        callback?.();
+        return;
+      }
+      // Always consume send errors: IPC may close between the check and send.
+      process.send?.(message, () => callback?.());
     },
     onMessage(handler) {
       handlers.add(handler);
@@ -558,7 +569,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       };
     },
     disconnect() {
-      process.disconnect();
+      if (process.connected) process.disconnect();
     },
   };
   process.on("message", (raw) => {

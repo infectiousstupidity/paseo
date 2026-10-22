@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { PASEO_AGENT_TOOL_COMPAT_ALIASES } from "../agent-tools.js";
 import {
   buildAgentMessageDisplay,
   buildPaseoToolDisplay,
@@ -26,7 +27,14 @@ describe("Paseo tool display", () => {
     ],
     ["create_agent", { title: "Reviewer", initialPrompt: "Review it" }, "Create agent", "Reviewer"],
     ["create_agent", { initialPrompt: "Review it" }, "Create agent", "Review it"],
+    ["inspect_agent", { agentId: "agt_1" }, "Inspect agent", "agt_1"],
     ["get_agent_status", { agentId: "agt_1" }, "Check agent", "agt_1"],
+    [
+      "terminate_agent",
+      { agentId: "agt_1", mode: "kill", reason: "done" },
+      "Terminate agent",
+      "agt_1",
+    ],
     ["update_agent", { agentId: "agt_1", name: "Renamed" }, "Update agent", "Renamed"],
     ["create_workspace", { path: "/tmp/repo/feature-x" }, "Create workspace", "feature-x"],
     ["create_workspace", { title: "Docs", branchName: "docs" }, "Create workspace", "Docs"],
@@ -104,6 +112,12 @@ describe("Paseo tool display", () => {
   it("catalogs tool names as lowercase leaf names", () => {
     for (const name of PASEO_TOOL_NAMES) {
       expect(name).toMatch(/^[a-z_]+$/);
+    }
+  });
+
+  it("keeps presentation entries for every retired agents tool name", () => {
+    for (const name of Object.keys(PASEO_AGENT_TOOL_COMPAT_ALIASES)) {
+      expect(PASEO_TOOL_NAMES).toContain(name);
     }
   });
 });

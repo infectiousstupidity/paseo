@@ -13,7 +13,7 @@ import type {
 } from "./agent-sdk-types.js";
 import type { AgentManager, ManagedAgent } from "./agent-manager.js";
 import type { AgentStorage } from "./agent-storage.js";
-import { ensureAgentLoaded } from "./agent-loading.js";
+import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import { isStaleProviderSessionError } from "./stale-provider-session-error.js";
 import {
   getParentAgentIdFromLabels,
@@ -315,8 +315,8 @@ async function resolvePromptSource(
  * chat mentions, notify-on-finish) MUST go through this so behavior can never
  * drift between them.
  *
- * When `unarchive` is false and the agent is archived, the call is a silent
- * no-op (returns the normal turn-start disposition) — the agent is not run.
+ * When `unarchive` is false, an archived agent is rejected instead of
+ * silently reviving it. This preserves cancellation intent for automation.
  */
 export async function sendPromptToAgent(
   params: SendPromptToAgentParams,
@@ -342,7 +342,7 @@ export async function sendPreparedPromptToAgent(
   let archivedAtToRestore: string | null = null;
   if (record?.archivedAt) {
     if (!unarchive) {
-      return { disposition: "turn_started" };
+      throw new Error(`Agent is archived: ${params.agentId}`);
     }
     if (await unarchiveAgentState(params.agentStorage, params.agentManager, params.agentId)) {
       archivedAtToRestore = record.archivedAt;
@@ -350,7 +350,8 @@ export async function sendPreparedPromptToAgent(
   }
 
   try {
-    await ensureAgentLoaded(params.agentId, {
+    const loader = unarchive ? ensureAgentLoaded : ensureUnarchivedAgentLoaded;
+    await loader(params.agentId, {
       agentManager: params.agentManager,
       agentStorage: params.agentStorage,
       logger: params.logger,
@@ -373,7 +374,10 @@ export async function sendPreparedPromptToAgent(
     onDispatch: params.onDispatch,
     activeTurnBehavior: params.activeTurnBehavior,
     clearPendingPermissions: params.clearPendingPermissions,
-    runOptions: params.runOptions,
+    runOptions: {
+      ...params.runOptions,
+      ...(unarchive ? {} : { nonReactivating: true }),
+    },
   });
 }
 
@@ -478,7 +482,7 @@ function formatFinishNotificationBody(params: FinishNotificationBodyInput): stri
   if (lastAssistantMessage) {
     if (lastAssistantMessage.length > FINISH_NOTIFICATION_MESSAGE_LIMIT) {
       const omitted = lastAssistantMessage.length - FINISH_NOTIFICATION_MESSAGE_LIMIT;
-      lastAssistantMessage = `${lastAssistantMessage.slice(0, FINISH_NOTIFICATION_MESSAGE_LIMIT)}\n[truncated ${omitted} chars; use get_agent_activity for the full response]`;
+      lastAssistantMessage = `${lastAssistantMessage.slice(0, FINISH_NOTIFICATION_MESSAGE_LIMIT)}\n[truncated ${omitted} chars; use inspect_agent for the full response]`;
     }
     sections.push(`<agent-response>\n${lastAssistantMessage}\n</agent-response>`);
   }

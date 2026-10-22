@@ -438,6 +438,7 @@ export interface SendMessageOptions {
   sourceAgentServerId?: string;
   sessionMode?: string;
   messageId?: string;
+  unarchive?: boolean;
   /** What happens when the agent is mid-turn. The daemon interrupts the turn when omitted. */
   activeTurnBehavior?: ActiveTurnBehavior;
   images?: Array<{ data: string; mimeType: string }>;
@@ -705,6 +706,10 @@ export type AgentTimelinePromptIndexPayload = Extract<
 export type ProviderSubagentListPayload = Extract<
   SessionOutboundMessage,
   { type: "agent.provider_subagents.list.response" }
+>["payload"];
+export type ProviderSubagentControlPayload = Extract<
+  SessionOutboundMessage,
+  { type: "agent.provider_subagents.control.response" }
 >["payload"];
 export type ProviderSubagentTimelinePayload = Extract<
   SessionOutboundMessage,
@@ -3635,6 +3640,35 @@ export class DaemonClient {
     return payload;
   }
 
+  /**
+   * On-demand, single-child control. No native IDs on the wire, no retries for stop.
+   * The daemon rechecks live native ownership and upstream status before any mutation.
+   */
+  async controlProviderSubagent(input: {
+    parentAgentId: string;
+    subagentId: string;
+    action: "status" | "stop" | "steer";
+    message?: string;
+  }): Promise<ProviderSubagentControlPayload> {
+    if (this.lastServerInfoMessage?.features?.providerSubagentControls !== true) {
+      throw new Error("This Paseo daemon does not support direct Pi subagent controls.");
+    }
+    if (input.action === "steer") {
+      if (!input.message?.trim() || new TextEncoder().encode(input.message.trim()).length > 360) {
+        throw new Error("Steer requires a nonempty instruction of at most 360 UTF-8 bytes.");
+      }
+    } else if (input.message !== undefined) {
+      throw new Error("Only steer may carry a message.");
+    }
+    return this.sendNamespacedCorrelatedSessionRequest<"agent.provider_subagents.control.response">(
+      {
+        message: { type: "agent.provider_subagents.control.request", ...input },
+        // Includes separate ping, status, and action command deadlines.
+        timeout: 35_000,
+      },
+    );
+  }
+
   async fetchProviderSubagentTimeline(
     parentAgentId: string,
     subagentId: string,
@@ -3759,6 +3793,7 @@ export class DaemonClient {
       sourceAgentServerId: options.sourceAgentServerId,
       sessionMode: options.sessionMode,
       ...(messageId ? { messageId } : {}),
+      ...(options.unarchive !== undefined ? { unarchive: options.unarchive } : {}),
       activeTurnBehavior: options.activeTurnBehavior,
       images: options.images,
       attachments: options.attachments,

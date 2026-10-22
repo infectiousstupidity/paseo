@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Paseo · Import session — UX mock</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#eeeef1;background:#090a0d;font-synthesis:none}
+    *{box-sizing:border-box} button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #b4adf5;outline-offset:2px}
+    .app-shell{position:fixed;inset:0;background:#090b0e;color:#888b96;user-select:none;pointer-events:none}
+    .app-bar{height:37px;border-bottom:1px solid #22242d;display:flex;align-items:center;gap:12px;padding:0 20px;font-size:12px;color:#8a8d98}
+    .app-bar .logo{color:#dbdde1;font-weight:650;letter-spacing:-.035em;font-size:13px}.app-bar .divider{height:17px;width:1px;background:#3a3c42}.app-bar .branch{font-size:11px;color:#868996}.app-bar .spacer{flex:1}
+    .app-tabs{height:39px;border-bottom:1px solid #22242d;display:flex;gap:0;align-items:end;padding-left:20px;font-size:12px}.app-tab{border-right:1px solid #272a31;padding:12px 19px 11px 2px;color:#999eaa}.app-tab + .app-tab{padding-left:18px}.app-tab.active{color:#dedde7}
+    .app-center{position:absolute;bottom:78px;left:50%;transform:translateX(-50%);width:min(620px,65vw)}.composer{height:91px;border:1px solid #292b35;border-radius:13px;background:#161820;color:#555968;padding:14px;font-size:12px}.composer-footer{display:flex;gap:15px;align-items:center;margin-top:39px;color:#888b96}
+    .scrim{position:fixed;inset:0;background:rgba(1,2,5,.73);backdrop-filter:blur(1.4px)}
+    .modal-position{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:34px 18px;pointer-events:none}
+    .dialog{pointer-events:auto;display:flex;flex-direction:column;width:min(836px,100%);max-height:min(820px,calc(100dvh - 66px));min-height:min(645px,calc(100dvh - 66px));background:#1b1d27;border:1px solid #32343f;border-radius:13px;overflow:hidden;box-shadow:0 32px 110px #000a,0 1px 2px #0005}
+    .head{padding:19px 24px 14px;background:#1b1d27;flex-shrink:0}.head-main{display:flex;justify-content:space-between;align-items:start;gap:16px}.head h1{font-size:17px;line-height:1.2;letter-spacing:-.02em;margin:0 0 7px;font-weight:670;color:#f5f3fa}.scope{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12px;color:#9fa1b1}.scope strong{color:#c9c7d8;font-weight:500}.scope button{border:0;background:none;padding:0;color:#b6aef5;font-size:12px}.scope button:hover{text-decoration:underline}.head-actions{display:flex;align-items:center;gap:6px}
+    .icon-btn{border:0;background:transparent;color:#9e9eaf;width:32px;height:32px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center}.icon-btn:hover{background:#2b2d3a;color:#fff}.icon{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.spin .icon{animation:rotate .6s linear infinite}@keyframes rotate{to{transform:rotate(360deg)}}
+    .search-row{margin-top:17px;display:flex;align-items:center;gap:10px;background:#151720;border:1px solid #393b49;border-radius:8px;height:39px;padding:0 13px;color:#a0a0b1}.search-row:focus-within{border-color:#79759e}.search-row input{background:transparent;border:0;outline:0;color:#f2f1f6;flex:1;min-width:0;font-size:13px}.search-row input::placeholder{color:#9293a1}.search-row kbd{border:1px solid #424451;border-radius:4px;padding:2px 5px;font-family:inherit;font-size:10px;color:#828495}.search-row .search-clear{background:none;border:0;color:#9b9cad;padding:2px;display:none}.search-row .search-clear.visible{display:block}
+    .result-meta{height:44px;flex-shrink:0;display:flex;justify-content:space-between;align-items:center;padding:0 24px;border-bottom:1px solid #30323d;color:#9294a5;font-size:12px}.result-meta strong{font-weight:550;color:#cccbd5}.meta-aux{display:flex;align-items:center;gap:9px}.meta-dot{width:3px;height:3px;background:#6c6d7b;border-radius:50%}
+    .session-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#494b5a transparent;background:#1b1d27}
+    .session-list{padding:0;margin:0;list-style:none}.session-item{border-bottom:1px solid #2b2e39}.session-item:hover{background:#20232e}.session-item:has(.detail-panel){background:#22242f}
+    .session-row{display:flex;align-items:stretch;gap:0;min-height:92px;padding-left:23px;padding-right:15px}.provider-wrap{width:26px;flex-shrink:0;padding-top:20px}.pi-symbol{display:inline-flex;width:19px;height:20px;align-items:center;justify-content:center;border-radius:5px;border:1px solid #4c4e60;color:#bdb8db;font-size:12px;font-weight:650;font-family:ui-serif,Georgia,serif}
+    .session-main{background:none;border:0;text-align:left;color:inherit;flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:14px 8px 14px 0;border-radius:5px}
+    .session-top{display:flex;align-items:center;gap:9px;min-height:20px}.session-title{color:#f0eff6;letter-spacing:-.012em;font-weight:600;font-size:13.5px}.session-title.muted-title{font-weight:570}.role-text{font-size:11px;letter-spacing:.015em;color:#b3abdb;border:1px solid #4f4a69;background:#2a293a;padding:2px 7px;border-radius:4px}.session-preview{font-size:12.5px;line-height:1.5;color:#b7b9c5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}.session-last{font-size:11.5px;color:#9397a6;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.session-last span{color:#747786;margin-right:5px}
+    .row-actions{display:flex;align-items:start;gap:9px;margin-left:10px;padding-top:17px}.time{color:#9295a6;font-size:11.5px;white-space:nowrap;padding-top:5px;min-width:57px;text-align:right}.details-btn{display:flex;align-items:center;gap:5px;background:none;border:1px solid transparent;color:#a8a5bf;border-radius:6px;padding:5px 7px;font-size:11.5px}.details-btn:hover,.details-btn[aria-expanded="true"]{border-color:#45465b;color:#e0def2;background:#2c2d3b}.details-btn .icon{width:14px;height:14px;transition:transform .15s}.details-btn[aria-expanded="true"] .icon{transform:rotate(180deg)}
+    .detail-panel{margin:0 24px 15px 49px;padding:15px 18px 16px;background:#191b25;border:1px solid #3a3b49;border-radius:8px}.detail-title{font-size:12px;color:#eeeef2;font-weight:650;margin:0 0 13px}.details-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.87fr);gap:15px 22px}.detail-section{min-width:0}.detail-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#8e90a3;margin-bottom:6px}.detail-value{font-size:12px;line-height:1.6;color:#c4c6d2;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.detail-block{padding-bottom:12px;border-bottom:1px solid #313440}.detail-block:last-child{padding-bottom:0;border:0}.detail-side{display:flex;flex-direction:column;gap:12px}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:#a4a6b7}.small-copy{font-size:11px;color:#9093a1;line-height:1.5}.detail-footer{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid #323441;padding-top:14px;margin-top:15px}.import-btn{background:#e3deff;color:#21202d;font-size:12px;font-weight:675;border:1px solid #e5e1fa;border-radius:7px;padding:9px 14px;white-space:nowrap}.import-btn:hover{background:#fff}.import-btn:focus-visible{outline-color:#eee}
+    .footer{padding:12px 24px;flex-shrink:0;border-top:1px solid #30323d;display:flex;align-items:center;justify-content:space-between;gap:20px;background:#1b1d27}.footer-text{font-size:11px;color:#9799aa;line-height:1.5}.footer strong{font-weight:570;color:#c4c4d2}.footer .demo{color:#858899;font-size:10.5px;text-align:right;white-space:nowrap}
+    .empty{height:230px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;color:#9094a5;font-size:13px}.empty strong{color:#dedee6;font-size:14px;font-weight:580}.toast{position:fixed;z-index:10;bottom:32px;left:50%;transform:translate(-50%,16px);opacity:0;pointer-events:none;transition:transform .16s,opacity .16s;border:1px solid #52526a;background:#292b39;border-radius:8px;color:#e7e6f0;font-size:12px;padding:12px 16px;box-shadow:0 12px 36px #0009;max-width:min(550px,calc(100vw - 30px))}.toast.show{opacity:1;transform:translate(-50%,0)}
+    @media(max-width:700px){.modal-position{padding:0;align-items:stretch}.dialog{width:100%;max-height:none;min-height:0;height:100dvh;border-radius:0;border-left:0;border-right:0}.head{padding:18px 16px 13px}.result-meta{padding:0 16px}.session-row{padding-left:15px;padding-right:9px;min-height:99px}.provider-wrap{width:24px}.row-actions{margin-left:3px;gap:1px}.time{font-size:10px;min-width:47px}.details-btn{padding:4px;gap:0;font-size:0}.details-btn .icon{height:18px;width:18px}.detail-panel{margin-left:15px;margin-right:15px}.details-grid{grid-template-columns:1fr;gap:14px}.detail-footer{flex-wrap:wrap}.footer{padding:12px 16px}.footer .demo{display:none}.session-preview{font-size:12px}.search-row kbd{display:none}.app-shell{display:none}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+  <div class="app-shell" aria-hidden="true">
+    <div class="app-bar"><span class="logo">◫</span><span class="branch">main</span><span class="divider"></span><span class="logo">shiori</span><span class="spacer"></span><span>◈ Sh 97% · w 23%</span><span class="divider"></span><span>Push ⌄</span></div>
+    <div class="app-tabs"><span class="app-tab">＋ New Agent</span><span class="app-tab active">Shiori workspace</span><span class="app-tab">＋</span></div>
+    <div class="app-center"><div class="composer">Message the agent, tag @files, or use /commands and /skills<div class="composer-footer"><span>＋</span><span>Pi · Qwen 3.8 27B</span><span>◇ Extra high</span></div></div></div>
+  </div>
+  <div class="scrim"></div>
+  <div class="modal-position">
+    <main class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <header class="head">
+        <div class="head-main">
+          <div><h1 id="dialog-title">Import session</h1><div class="scope"><strong id="scope-name">This workspace</strong><span>·</span><span id="scope-project">shiori</span><button type="button" id="scope-toggle">Show all workspaces</button></div></div>
+          <div class="head-actions">
+            <button type="button" class="icon-btn" id="refresh" aria-label="Refresh sessions" title="Refresh sessions"><svg class="icon" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6l2 1M4 17l2 1a7 7 0 0 0 12.2-3"/></svg></button>
+            <button type="button" class="icon-btn" id="close" aria-label="Close mock" title="Close mock"><svg class="icon" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+          </div>
+        </div>
+        <div class="search-row">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+          <input id="search" autocomplete="off" spellcheck="false" placeholder="Search session names, prompts, folders…" aria-label="Search sessions"/>
+          <button type="button" id="search-clear" class="search-clear" aria-label="Clear search">×</button>
+          <kbd id="search-shortcut">Ctrl K</kbd>
+        </div>
+      </header>
+      <div class="result-meta"><span><strong id="result-count">0 sessions</strong> <span id="result-suffix">available to import</span></span><div class="meta-aux"><span>Pi</span><span class="meta-dot"></span><span>Newest activity first</span></div></div>
+      <div class="session-scroll" id="session-scroll" tabindex="0" aria-label="Importable sessions"><ul id="list" class="session-list"></ul><div id="empty" class="empty" hidden><strong>No matching sessions</strong><span>Try a different search or show all workspaces.</span></div></div>
+      <footer class="footer"><div class="footer-text"><strong>Select a row</strong> to import immediately. Use <strong>Details</strong> to inspect first.</div><div class="demo">Interactive mock · Illustrative sessions</div></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    // Demo-only data. The mock uses the same kinds of fields exposed by Paseo's import descriptor.
+    // All prompts below are illustrative; no real Pi session transcript is accessed here.
+    const now=Date.now();
+    const hrs=h=>new Date(now-h*3600000).toISOString();
+    const sessions=[
+      {id:'a1',title:'subagent-reviewer-448b79f2d-64c5-47fb-9d82-324cb9db5fff-1',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(18),first:'Task: Review the committed UI fix in the Shiori Paseo plugin. Check session picker keyboard focus, dismissal behavior, and the latest import interaction changes. You are a fresh read-only reviewer working on branch main.',last:'Task: Check whether pressing Enter in a session row imports once, and whether expanding Details triggers any import or unexpected focus change.'},
+      {id:'a2',title:'subagent-worker-448bdc51-1db2-43a7-9fbd-2b9620b2585c-1',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(18.3),first:'Task: Fix the import dialog layout regression identified by the reviewer. Adjust the desktop width, text hierarchy, and long title truncation without changing the import action.',last:'Follow-up: Ensure the compact-width layout does not overflow and preserve the direct row-click behavior.'},
+      {id:'a3',title:'Shiori · Import session usability review',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(18.5),first:'Review the session import dialog. I cannot reliably identify the right Pi subagent from the opaque IDs and truncated prompts. Keep the solution simple and fast.',last:'Investigate the session name fallback and document which metadata is actually available at listing time.'},
+      {id:'a4',title:'subagent-reviewer-05d63b8f-0b33-4265-b68c-43c7a0608c1f-1',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(19),first:'Task: Review one committed UI fix in the Shiori Paseo plugin on branch main. Focus on the session row hover state, accessible labels, and contrast against the dark dialog background.',last:'Review request: Verify the expanded details button remains keyboard-focusable independently of the import row.'},
+      {id:'a5',title:'subagent-worker-3daa60e5-a758-4c0d-a577-2d31cd160bf4-1',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(19.3),first:'Task: Fix the visual issues reported during the Shiori Paseo delegation interface audit. Keep changes scoped to the existing modal component and maintain keyboard operation.',last:'Follow-up: The reviewer found a layout overflow at narrow widths; fix that issue without another component abstraction.'},
+      {id:'a6',title:'subagent-reviewer-80426756-3ccb-46c0-9fe0-e4e5b9e8f46-1',cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(19.5),first:'Task: You are a fresh read-only reviewer for one committed UI fix in the Shiori Paseo plugin at D:\\DEVELOPMENT\\shiori (branch main). Verify the row interaction.',last:'Task: Review interaction changes made to the import-session list. The row imports, whereas the disclosure control must only expand details.'},
+      {id:'a7',title:null,cwd:'D:\\DEVELOPMENT\\shiori',updated:hrs(20.2),first:'Subagent updates above',last:'Subagent updates above'},
+      {id:'a8',title:'Seicho · Inbox intake review',cwd:'D:\\DEVELOPMENT\\seicho',updated:hrs(21),first:'Review the inbox capture flow for saved bookmarks. Find missing metadata and any unnecessary intermediate states.',last:'Prepare a small implementation plan based on the existing code and the current design specification.'},
+      {id:'a9',title:'Food-core · Mealie adapter verification',cwd:'D:\\DEVELOPMENT\\food-core',updated:hrs(23),first:'Check schema-v2 recipe write and read-back behavior in the Mealie adapter. Focus on semantic parity rather than coverage.',last:'Report any fields that fail to round-trip and the smallest reproducible case.'}
+    ];
+    const $=id=>document.getElementById(id);
+    const state={all:false,query:'',expanded:null};
+    const UUID='[a-f0-9]{8,12}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{10,14}';
+    const childPattern=new RegExp(`^subagent-([a-z][a-z0-9-]*?)-${UUID}(?:-\\d+)?$`,'i');
+    const esc=s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    const clean=s=>String(s??'').replace(/\s+/g,' ').trim();
+    function identity(s){
+      const t=clean(s.title); const match=t.match(childPattern);
+      if(match){let role=match[1].replace(/-/g,' ');return {title:role.charAt(0).toUpperCase()+role.slice(1),role:'Subagent',machine:true};}
+      return {title:t||clean(s.first).slice(0,78)||'Untitled session',role:null,machine:false};
+    }
+    function age(iso){const h=Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/3600000));return h<1?'Just now':h<24?`${h}h ago`:`${Math.floor(h/24)}d ago`;}
+    function absolute(iso){return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+    function mainPreview(s){const first=clean(s.first),last=clean(s.last);return (last&&last!==first)?last:first;}
+    function basename(path){return path.split(/[\\/]/).pop();}
+    let toastTimer;
+    function toast(message){const el=$('toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200);}
+    function importMock(s){toast(`Mock only — would import ${identity(s).title} from ${basename(s.cwd)}. Nothing was changed.`);}
+    function detailsHTML(s){
+      const first=clean(s.first),last=clean(s.last),different=last&&last!==first;
+      return `<div class="detail-panel" id="detail-${s.id}"><div class="detail-title">Session details</div><div class="details-grid">
+        <section class="detail-section"><div class="detail-block"><div class="detail-label">First prompt · excerpt</div><p class="detail-value">${esc(first||'Not available')}</p></div>
+        ${different?`<div class="detail-block" style="margin-top:12px"><div class="detail-label">Last prompt · excerpt</div><p class="detail-value">${esc(last)}</p></div>`:''}</section>
+        <section class="detail-side"><div><div class="detail-label">Last activity</div><div class="detail-value">${esc(absolute(s.updated))}</div></div>
+        <div><div class="detail-label">Working directory</div><div class="detail-value mono">${esc(s.cwd)}</div></div>
+        <div><div class="detail-label">Saved session name</div><div class="detail-value mono">${esc(s.title||'Untitled')}</div></div>
+        <div><div class="detail-label">Provider</div><div class="detail-value">Pi</div></div></section>
+      </div><div class="detail-footer"><span class="small-copy">Excerpts only; no full transcript loaded.</span><button class="import-btn" type="button" data-import="${s.id}">Import this session ↗</button></div></div>`;
+    }
+    function itemHTML(s){const id=identity(s),expanded=state.expanded===s.id,preview=mainPreview(s),first=clean(s.first),other=preview!==first?first:null;
+      return `<li class="session-item"><div class="session-row"><div class="provider-wrap"><span class="pi-symbol" aria-hidden="true">π</span></div>
+          <button class="session-main" type="button" data-import="${s.id}" aria-label="Import ${esc(id.title)} from ${esc(basename(s.cwd))}">
+          <span class="session-top"><span class="session-title ${id.machine?'muted-title':''}">${esc(id.title)}</span>${id.role?`<span class="role-text">${id.role}</span>`:''}</span>
+          <span class="session-preview">${esc(preview||'No prompt available')}</span>
+          ${other?`<span class="session-last"><span>First</span>${esc(other)}</span>`:''}
+          ${state.all?`<span class="session-last"><span>Folder</span>${esc(basename(s.cwd))}</span>`:''}
+          </button><div class="row-actions"><span class="time" title="${esc(absolute(s.updated))}">${age(s.updated)}</span>
+          <button class="details-btn" type="button" data-details="${s.id}" aria-expanded="${expanded}" aria-controls="detail-${s.id}" aria-label="${expanded?'Hide':'Show'} details for ${esc(id.title)}"><span>Details</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div></div>${expanded?detailsHTML(s):''}</li>`;
+    }
+    function render(){const q=state.query.toLowerCase().trim();let results=sessions.filter(s=>(state.all||basename(s.cwd).toLowerCase()==='shiori')&&(!q||[s.title,s.first,s.last,s.cwd,identity(s).title].some(v=>clean(v).toLowerCase().includes(q))));results.sort((a,b)=>new Date(b.updated)-new Date(a.updated));$('list').innerHTML=results.map(itemHTML).join('');$('empty').hidden=results.length!==0;$('result-count').textContent=`${results.length} ${results.length===1?'session':'sessions'}`;$('scope-name').textContent=state.all?'All workspaces':'This workspace';$('scope-project').textContent=state.all?'Local host':'shiori';$('scope-toggle').textContent=state.all?'Only this workspace':'Show all workspaces';$('search-clear').classList.toggle('visible',Boolean(state.query));$('search-shortcut').hidden=Boolean(state.query);}
+    $('list').addEventListener('click',e=>{const toggle=e.target.closest('[data-details]');if(toggle){state.expanded=state.expanded===toggle.dataset.details?null:toggle.dataset.details;const y=$('session-scroll').scrollTop;render();$('session-scroll').scrollTop=y;return;}const importer=e.target.closest('[data-import]');if(importer){const s=sessions.find(s=>s.id===importer.dataset.import);if(s)importMock(s);}});
+    $('search').addEventListener('input',e=>{state.query=e.target.value;state.expanded=null;render();});
+    $('search-clear').addEventListener('click',()=>{$('search').value='';state.query='';render();$('search').focus();});
+    $('scope-toggle').addEventListener('click',()=>{state.all=!state.all;state.expanded=null;render();});
+    $('refresh').addEventListener('click',()=>{toast('Mock only — refresh would re-fetch Pi sessions here.');});
+    $('close').addEventListener('click',()=>toast('Mock only — close would dismiss this dialog.'));
+    document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('search').focus();}if(e.key==='Escape'&&state.query){state.query='';$('search').value='';render();$('search').blur();}});
+    render();
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ProjectCheckoutLitePayload } from "@getpaseo/protocol/messages";
@@ -168,6 +168,7 @@ class ObservedPlacements {
   private readonly checkoutByCwd = new Map<string, ProjectCheckoutLitePayload>();
   private readonly rootByProjectId = new Map<string, string>();
   private readonly failedWatchRoots = new Set<string>();
+  private readonly createGitMarkerDuringWatchRoots = new Set<string>();
   private readonly projectEvents: ProjectUpdate[] = [];
   private readonly workspaceEvents: string[][] = [];
   private readonly workspaceEventWaiters: Array<() => void> = [];
@@ -186,6 +187,9 @@ class ObservedPlacements {
     );
     const watchProjectRoot: ProjectRootWatch = (rootPath, _options, onChange, onError) => {
       if (this.failedWatchRoots.delete(rootPath)) throw new Error("root unavailable");
+      if (this.createGitMarkerDuringWatchRoots.delete(rootPath)) {
+        mkdirSync(path.join(rootPath, ".git"), { recursive: true });
+      }
       const watch = { rootPath, onChange, onError, closed: false };
       this.watches.push(watch);
       this.lifecycleEvents.push(`watch installed:${path.relative(this.home, rootPath)}`);
@@ -240,6 +244,10 @@ class ObservedPlacements {
     this.failedWatchRoots.add(this.absolute(root));
   }
 
+  createGitMarkerDuringNextWatch(root: string): void {
+    this.createGitMarkerDuringWatchRoots.add(this.absolute(root));
+  }
+
   watcherFailed(root: string): void {
     this.activeWatch(root)?.onError(new Error("watch failed"));
   }
@@ -248,9 +256,22 @@ class ObservedPlacements {
     this.activeWatch(root)?.onChange("rename", filename);
   }
 
+  createGitMarker(root: string): void {
+    mkdirSync(path.join(this.absolute(root), ".git"), { recursive: true });
+  }
+
+  createGitFileMarker(root: string): void {
+    writeFileSync(path.join(this.absolute(root), ".git"), "gitdir: ../.git/worktrees/example\n");
+  }
+
+  removeGitMarker(root: string): void {
+    rmSync(path.join(this.absolute(root), ".git"), { recursive: true, force: true });
+  }
+
   makeProjectGit(projectId: string, branch = "main"): void {
     const rootPath = this.rootByProjectId.get(projectId);
     if (!rootPath) throw new Error(`Unknown project: ${projectId}`);
+    mkdirSync(path.join(rootPath, ".git"), { recursive: true });
     this.checkoutByCwd.set(rootPath, {
       cwd: rootPath,
       isGit: true,
@@ -419,6 +440,17 @@ describe("observed workspace placement", () => {
     observed.dispose();
   });
 
+  test("reconciles when .git appears during root watch installation", async () => {
+    const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
+    observed.createGitMarkerDuringNextWatch("repo");
+
+    await observed.start();
+    await observed.advanceBy(DEBOUNCE_MS);
+
+    expect(observed.gitReads).toBe(1);
+    observed.dispose();
+  });
+
   test("deduplicates active root watches and tears them down on archive and remove", async () => {
     const observed = new ObservedPlacements([
       { id: "project-one", root: "repo" },
@@ -446,7 +478,25 @@ describe("observed workspace placement", () => {
     observed.dispose();
   });
 
-  test("filters unrelated files and coalesces Git change bursts", async () => {
+  test("treats a worktree-style .git file as a Git marker", async () => {
+    const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
+    await observed.start();
+
+    observed.createGitFileMarker("repo");
+    observed.change("repo", ".git");
+    await observed.advanceBy(DEBOUNCE_MS);
+
+    expect(observed.gitReads).toBe(1);
+
+    observed.change("repo", ".git");
+    observed.change("repo", null);
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(1);
+
+    observed.dispose();
+  });
+
+  test("reconciles Git marker transitions but ignores ordinary .git churn", async () => {
     const observed = new ObservedPlacements([{ id: "project-one", root: "repo" }]);
     await observed.start();
 
@@ -454,11 +504,23 @@ describe("observed workspace placement", () => {
     await observed.advanceBy(DEBOUNCE_MS);
     expect(observed.gitReads).toBe(0);
 
+    observed.makeProjectGit("project-one");
     observed.change("repo", ".git");
     observed.change("repo", ".git");
     observed.change("repo", null);
     await observed.advanceBy(DEBOUNCE_MS);
     expect(observed.gitReads).toBe(1);
+
+    observed.change("repo", ".git");
+    observed.change("repo", null);
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(1);
+
+    observed.removeGitMarker("repo");
+    observed.change("repo", ".git");
+    await observed.advanceBy(DEBOUNCE_MS);
+    expect(observed.gitReads).toBe(2);
+
     observed.dispose();
   });
 
@@ -508,6 +570,10 @@ describe("observed workspace placement", () => {
     ]);
     await observed.start();
     const metadataRead = observed.holdNextReconciliation();
+    // The optimized root watcher only reconciles when the .git marker actually
+    // appears/disappears. Model that transition explicitly so this test still
+    // exercises a periodic full pass queued behind an in-flight metadata pass.
+    observed.createGitMarker("repo");
     observed.change("repo", ".git");
     const metadataPass = observed.advanceBy(DEBOUNCE_MS);
     await metadataRead.started;

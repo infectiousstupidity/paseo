@@ -38,6 +38,11 @@ export interface PluginServerContext extends PluginLifecycleRegistration {
       context: PluginHandlerContext,
     ) => ZodInput<OutputSchema> | Promise<ZodInput<OutputSchema>>,
   ): void;
+  // Returns the live Paseo API for this plugin process. Available from
+  // contribution time onward, so a plugin can seed daemon-timer state without
+  // waiting for its first RPC or lifecycle event. Optional so older hosts and
+  // test fixtures that do not supply it keep compiling.
+  context?(): PluginHandlerContext;
   registerProvider(provider: ProviderRegistration): void;
   registerUsageSource(source: UsageSourceRegistration): void;
 }

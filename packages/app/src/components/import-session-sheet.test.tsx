@@ -618,6 +618,131 @@ describe("ImportSessionSheet", () => {
     expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
   });
 
+  it("inspects session details without importing and keeps row import identity", async () => {
+    const entry = createProviderSessionEntry({
+      providerId: "pi",
+      providerLabel: "Pi",
+      providerHandleId: "pi-handle-123",
+      cwd: "/repo/paseo-with-a-long-path/worker-session",
+      title: "Saved Pi session title",
+      firstPromptPreview: "First user prompt excerpt",
+      lastPromptPreview: "Last user prompt excerpt",
+    });
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "recent-pi-sessions",
+      entries: [entry],
+    }));
+    const importAgent = vi.fn(async () => createImportedAgentSnapshot("agent-imported"));
+
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, importAgent), {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+
+    const row = await screen.findByTestId("import-session-session-pi-pi-handle-123");
+    const details = screen.getByTestId("import-session-details-pi-pi-handle-123");
+    expect(details.parentElement).toBe(row.parentElement);
+    expect(details.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(details);
+
+    expect(details.getAttribute("aria-expanded")).toBe("true");
+    screen.getByText("Saved title");
+    expect(screen.getAllByText("Saved Pi session title")).toHaveLength(2);
+    screen.getByText("Pi");
+    screen.getByText(entry.cwd);
+    screen.getAllByText("First user prompt excerpt");
+    screen.getAllByText("Last user prompt excerpt");
+    expect(importAgent).not.toHaveBeenCalled();
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(row);
+    await waitFor(() => {
+      expect(importAgent).toHaveBeenCalledTimes(1);
+      expect(importAgent).toHaveBeenCalledWith({
+        providerId: "pi",
+        providerHandleId: "pi-handle-123",
+        cwd: entry.cwd,
+      });
+    });
+  });
+
+  it("keeps exactly one of two similar sessions expanded without fetching or importing", async () => {
+    const entries = [
+      createProviderSessionEntry({
+        providerId: "pi",
+        providerLabel: "Pi",
+        providerHandleId: "reviewer-1",
+        title: "Reviewer",
+        cwd: "/repo/paseo/first-session",
+        firstPromptPreview: "Review the first task",
+        lastPromptPreview: "First task update",
+      }),
+      createProviderSessionEntry({
+        providerId: "pi",
+        providerLabel: "Pi",
+        providerHandleId: "reviewer-2",
+        title: "Reviewer",
+        cwd: "/repo/paseo/second-session",
+        firstPromptPreview: "Review the second task",
+        lastPromptPreview: "Second task update",
+      }),
+    ];
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "two-pi-sessions",
+      entries,
+    }));
+    const importAgent = vi.fn();
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, importAgent), {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+
+    const first = await screen.findByTestId("import-session-details-pi-reviewer-1");
+    const second = screen.getByTestId("import-session-details-pi-reviewer-2");
+    fireEvent.click(first);
+    expect(first.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("/repo/paseo/first-session")).toBeTruthy();
+
+    fireEvent.click(second);
+    expect(first.getAttribute("aria-expanded")).toBe("false");
+    expect(second.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByText("/repo/paseo/first-session")).toBeNull();
+    expect(screen.getByText("/repo/paseo/second-session")).toBeTruthy();
+
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("/repo/paseo/second-session")).toBeNull();
+    expect(importAgent).not.toHaveBeenCalled();
+    expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows unavailable dates and deduplicates equivalent user-prompt excerpts", async () => {
+    const fetchRecentProviderSessions = vi.fn(async () => ({
+      requestId: "pi-invalid-metadata",
+      entries: [
+        createProviderSessionEntry({
+          providerId: "pi",
+          providerLabel: "Pi",
+          providerHandleId: "missing-date",
+          title: null,
+          lastActivityAt: "invalid-date",
+          firstPromptPreview: "Same   user prompt",
+          lastPromptPreview: "Same user prompt",
+        }),
+      ],
+    }));
+    const importAgent = vi.fn();
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, importAgent), {
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+    const details = await screen.findByTestId("import-session-details-pi-missing-date");
+    fireEvent.click(details);
+
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("First user prompt")).toBeNull();
+    expect(screen.getByText("Last user prompt")).toBeTruthy();
+    expect(importAgent).not.toHaveBeenCalled();
+  });
+
   it("shows an import error state without closing when selected session import fails", async () => {
     const fetchRecentProviderSessions = vi.fn(async () => ({
       requestId: "recent-provider-sessions",
@@ -801,6 +926,105 @@ describe("ImportSessionSheet", () => {
 
     screen.getByText("Session claude");
     screen.getByText("Session codex");
+  });
+
+  it("only requests the selected provider after changing the search", async () => {
+    const fetchRecentProviderSessions = vi.fn(
+      async (options: { providers?: string[] } | undefined) => {
+        const provider = options?.providers?.[0] ?? "claude";
+        return {
+          requestId: `recent-${provider}`,
+          entries: [
+            createProviderSessionEntry({
+              providerId: provider,
+              providerHandleId: `${provider}-session`,
+              title: `Session ${provider}`,
+            }),
+          ],
+        };
+      },
+    );
+    renderSheet(createRecentSessionsClient(fetchRecentProviderSessions, vi.fn()), {
+      snapshot: {
+        supportsSnapshot: true,
+        entries: [createSnapshotEntry("pi"), createSnapshotEntry("claude")],
+      },
+    });
+    await screen.findByText("Session pi");
+    await screen.findByText("Session claude");
+
+    fireEvent.click(screen.getByTestId("import-session-filter-trigger"));
+    fireEvent.click(screen.getByTestId("import-session-filter-pi"));
+    fetchRecentProviderSessions.mockClear();
+    fireEvent.change(screen.getByTestId("import-session-search"), {
+      target: { value: "new search" },
+    });
+
+    await waitFor(() =>
+      expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
+        cwd: "/repo/paseo",
+        providers: ["pi"],
+        limit: 15,
+        query: "new search",
+      }),
+    );
+    expect(
+      fetchRecentProviderSessions.mock.calls.every(([request]) =>
+        request?.providers?.includes("pi"),
+      ),
+    ).toBe(true);
+    expect(screen.queryByText("Session claude")).toBeNull();
+
+    fetchRecentProviderSessions.mockClear();
+    fireEvent.click(screen.getByTestId("import-session-filter-trigger"));
+    fireEvent.click(screen.getByTestId("import-session-filter-all"));
+    await waitFor(() =>
+      expect(fetchRecentProviderSessions).toHaveBeenCalledWith({
+        cwd: "/repo/paseo",
+        providers: ["claude"],
+        limit: 15,
+        query: "new search",
+      }),
+    );
+    screen.getByText("Session claude");
+  });
+
+  it("keeps session queries and refreshes isolated per daemon host", async () => {
+    applyHostMocks({
+      snapshot: { supportsSnapshot: true, entries: [createSnapshotEntry("pi")] },
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const fetchHostOne = vi.fn(async () => ({
+      requestId: "host-one",
+      entries: [createProviderSessionEntry({ providerId: "pi", title: "Host one session" })],
+    }));
+    const fetchHostTwo = vi.fn(async () => ({
+      requestId: "host-two",
+      entries: [createProviderSessionEntry({ providerId: "pi", title: "Host two session" })],
+    }));
+    const importAgent = vi.fn();
+    const sheet = (serverId: string, fetchSessions: typeof fetchHostOne) => (
+      <QueryClientProvider client={queryClient}>
+        <ImportSessionSheet
+          visible
+          serverId={serverId}
+          client={createRecentSessionsClient(fetchSessions, importAgent)}
+          cwd="/repo/paseo"
+          onClose={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+
+    const view = render(sheet("host-one", fetchHostOne));
+    await screen.findByText("Host one session");
+    view.rerender(sheet("host-two", fetchHostTwo));
+    await screen.findByText("Host two session");
+    expect(fetchHostTwo).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Host one session")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("import-session-refresh"));
+    await waitFor(() => expect(fetchHostTwo).toHaveBeenCalledTimes(2));
+    expect(fetchHostOne).toHaveBeenCalledTimes(1);
   });
 
   it("does not render filter badges when only one importable provider is enabled", async () => {

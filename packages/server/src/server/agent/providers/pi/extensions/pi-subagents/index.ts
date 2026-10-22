@@ -2,6 +2,7 @@ import { z } from "zod";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractTextFromToolResult } from "../../tool-call-mapper.js";
+import type { ProviderSubagentStatus, ProviderSubagentControlTarget } from "../../../../provider-subagents/store.js";
 import type { PiExtension, PiExtensionToolCall, PiExtensionToolMapping } from "../contract.js";
 
 const Args = z
@@ -37,10 +38,15 @@ const Details = z
 const AsyncStatus = z
   .object({
     state: z.string(),
+    sessionId: z.string().optional(),
+    runId: z.string().optional(),
     steps: z.array(
       z
         .object({
           agent: z.string().trim().min(1),
+          childId: z.string().optional(),
+          workflowKey: z.string().optional(),
+          runId: z.string().optional(),
           status: z.string().optional(),
           sessionFile: z.string().trim().min(1).optional(),
         })
@@ -49,11 +55,45 @@ const AsyncStatus = z
   })
   .passthrough();
 
-function asyncChildStatus(runState: string, stepStatus?: string) {
-  if (!["complete", "failed", "stopped"].includes(runState)) return "running";
-  if (runState === "stopped" || stepStatus === "stopped") return "canceled";
-  if (runState === "failed" || stepStatus === "failed" || stepStatus === "error") return "failed";
-  return "completed";
+/** Run states from which an async run never advances on its own. */
+const TERMINAL_RUN_STATES = new Set(["complete", "failed", "partial", "rejected", "stopped"]);
+
+function runStateStatus(runState: string): ProviderSubagentStatus {
+  switch (runState) {
+    case "complete":
+      return "completed";
+    case "stopped":
+      return "canceled";
+    case "failed":
+    case "partial":
+    case "rejected":
+      return "failed";
+    default:
+      // queued, running, paused, and unknown states keep the child alive.
+      return "running";
+  }
+}
+
+/** A step's own terminal state wins; non-terminal or missing step states fall back to the run. */
+function stepStatusStatus(stepStatus: string | undefined): ProviderSubagentStatus | undefined {
+  switch (stepStatus) {
+    case "complete":
+    case "completed":
+      return "completed";
+    case "stopped":
+      return "canceled";
+    case "failed":
+    case "error":
+    case "rejected":
+    case "partial":
+      return "failed";
+    default:
+      return undefined;
+  }
+}
+
+function asyncChildStatus(runState: string, stepStatus?: string): ProviderSubagentStatus {
+  return stepStatusStatus(stepStatus) ?? runStateStatus(runState);
 }
 
 /** The `subagent-notify` header; a grouped notice reports every run as completed. */
@@ -72,10 +112,13 @@ export const piSubagents: PiExtension = {
     const callsByRun = new Map<string, string>();
     const readSessions = new Set<string>();
     /** Keyed by async directory, which both status.json and the completion notice carry. */
-    const asyncRuns = new Map<string, { owner: string; polling: boolean }>();
+    const asyncRuns = new Map<
+      string,
+      { owner: string; runId: string; polling: boolean; last: Map<string, { status: string; title: string; target: string }> }
+    >();
     const rememberAsyncRun = (details: z.infer<typeof Details>, call: PiExtensionToolCall) => {
-      if (details.asyncDir && call.status !== "failed") {
-        asyncRuns.set(details.asyncDir, { owner: call.callId, polling: true });
+      if (details.asyncDir && details.runId && call.status !== "failed") {
+        asyncRuns.set(details.asyncDir, { owner: call.callId, runId: details.runId, polling: true, last: new Map() });
       }
     };
     const collectRows = (
@@ -94,8 +137,12 @@ export const piSubagents: PiExtension = {
           title: row.agent,
           description,
           toolCallId: owner,
+          // Missing both `success` and `exitCode` is an unjudged finish, not a failure: the
+          // pi-subagents producer records `success: false` and/or a nonzero `exitCode` on failure.
           status:
-            failed || row.success === false || (row.success !== true && row.exitCode !== 0)
+            failed ||
+            row.success === false ||
+            (row.success === undefined && row.exitCode !== undefined && row.exitCode !== 0)
               ? "failed"
               : "completed",
         });
@@ -125,32 +172,39 @@ export const piSubagents: PiExtension = {
     };
     const mapSpawn = (call: PiExtensionToolCall) => {
       const args = Args.safeParse(call.args);
-      if (!args.success || args.data.action !== undefined || !args.data.agent || !args.data.task)
-        return undefined;
+      if (!args.success || args.data.action !== undefined) return undefined;
+      const nativeDetails = Details.safeParse(
+        typeof call.result === "object" ? call.result?.details : null,
+      );
+      // Workflow / parallel / chain launches may not have a top-level agent or task.
+      // Recognize those only from a native subagent result, never the display-row name.
+      const nativeLaunch = nativeDetails.success && nativeDetails.data.mode !== "management" &&
+        Boolean(nativeDetails.data.runId);
+      if ((!args.data.agent || !args.data.task) && !nativeLaunch) return undefined;
+      const displayAgent = args.data.agent ?? (nativeDetails.success ? nativeDetails.data.mode : "subagent");
+      const description = args.data.task ?? "";
       const detail = {
         type: "sub_agent" as const,
-        subAgentType: args.data.agent,
-        description: args.data.task,
+        subAgentType: displayAgent,
+        description,
         log: extractTextFromToolResult(call.result)?.trim() ?? "",
       };
       const base = {
         type: "upsert" as const,
         id: call.callId,
-        title: args.data.agent,
-        description: args.data.task,
+        title: displayAgent,
+        description,
         toolCallId: call.callId,
       };
       if (call.status === "running")
         return { detail, subagents: [{ ...base, status: "running" as const }] };
-      const details = Details.safeParse(
-        typeof call.result === "object" ? call.result?.details : null,
-      );
+      const details = nativeDetails;
       if (!details.success || details.data.mode === "management")
         return call.status === "failed"
           ? { detail, subagents: [{ ...base, status: "failed" as const }] }
           : { detail };
       if (details.data.runId) callsByRun.set(details.data.runId, call.callId);
-      if (details.data.results.length === 0 && (details.data.asyncId || args.data.async)) {
+      if (details.data.asyncDir && (details.data.asyncId || args.data.async)) {
         rememberAsyncRun(details.data, call);
         return {
           detail,
@@ -166,7 +220,7 @@ export const piSubagents: PiExtension = {
         return { detail, subagents: [{ ...base, status: "failed" as const }] };
       return {
         detail,
-        ...collectRows(call.callId, details.data.results, args.data.task, call.status === "failed"),
+        ...collectRows(call.callId, details.data.results, description, call.status === "failed"),
       };
     };
     return {
@@ -215,27 +269,67 @@ export const piSubagents: PiExtension = {
           try {
             raw = JSON.parse(readFileSync(join(dir, "status.json"), "utf8"));
           } catch {
+            // Missing or partial status files are not evidence of failure; keep the prior state.
             continue;
           }
           const parsed = AsyncStatus.safeParse(raw);
           if (!parsed.success) continue;
-          const terminal = ["complete", "failed", "stopped"].includes(parsed.data.state);
-          for (const [index, step] of parsed.data.steps.entries()) {
-            const id = parsed.data.steps.length === 1 ? run.owner : `${run.owner}:${index}`;
-            const status = asyncChildStatus(parsed.data.state, step.status);
-            subagents.push({ type: "upsert", id, title: step.agent, status });
-            if (step.sessionFile && !readSessions.has(step.sessionFile)) {
-              readSessions.add(step.sessionFile);
-              childSessions.push({ id, file: step.sessionFile });
+          const runState = parsed.data.state;
+          const steps = parsed.data.steps;
+          // Do not invent step:index identities. Native child IDs are required for control.
+          // Multiple status rows can share aliases; only a uniquely resolved native ID is safe.
+          const identities = steps.map((step) => step.childId || step.workflowKey || step.runId);
+          // Upstream resolver accepts all native aliases plus step:index. Detect collisions
+          // against *every* alias, not just the preferred display/native identity.
+          const candidates = steps.map((step, index) =>
+            [step.childId, step.workflowKey, step.runId, `step:${index}`].filter(
+              (value): value is string => typeof value === "string" && value.length > 0,
+            ),
+          );
+          for (const [index, step] of steps.entries()) {
+            const id = steps.length === 1 ? run.owner : `${run.owner}:${index}`;
+            const status = asyncChildStatus(runState, step.status);
+            const nativeId = identities[index];
+            const controlTarget: ProviderSubagentControlTarget | null =
+              status === "running" && (step.status === "running" || step.status === "pending") &&
+              parsed.data.runId === run.runId &&
+              typeof parsed.data.sessionId === "string" && parsed.data.sessionId.length > 0 &&
+              typeof nativeId === "string" && nativeId.length > 0 &&
+              candidates.filter((aliases) => aliases.includes(nativeId)).length === 1
+                ? {
+                    runId: run.runId,
+                    childId: nativeId,
+                    // The upstream snapshot intentionally projects workflowKey/runId before
+                    // step:index; that projection ID is distinct from stop's canonical childId.
+                    snapshotId: step.workflowKey || step.runId || nativeId,
+                    index,
+                    sessionId: parsed.data.sessionId,
+                  }
+                : null;
+            const targetKey = controlTarget ? JSON.stringify(controlTarget) : "";
+            const file =
+              step.sessionFile && !readSessions.has(step.sessionFile)
+                ? step.sessionFile
+                : undefined;
+            const last = run.last.get(id);
+            // Emit only on first observation or a material change (lifecycle, agent title,
+            // newly attached session file), so an unchanged running status stays quiet.
+            if (!last || last.status !== status || last.title !== step.agent || last.target !== targetKey || file) {
+              run.last.set(id, { status, title: step.agent, target: targetKey });
+              subagents.push({ type: "upsert", id, title: step.agent, status, controlTarget });
+            }
+            if (file) {
+              readSessions.add(file);
+              childSessions.push({ id, file });
             }
           }
-          if (terminal) {
-            if (parsed.data.steps.length === 0) {
-              subagents.push({
-                type: "upsert",
-                id: run.owner,
-                status: parsed.data.state === "complete" ? "completed" : "failed",
-              });
+          if (TERMINAL_RUN_STATES.has(runState)) {
+            if (steps.length === 0) {
+              const status = runStateStatus(runState);
+              if (run.last.get(run.owner)?.status !== status) {
+                run.last.set(run.owner, { status, title: "", target: "" });
+                subagents.push({ type: "upsert", id: run.owner, status });
+              }
             }
             run.polling = false;
           }

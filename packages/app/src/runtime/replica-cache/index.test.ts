@@ -216,6 +216,10 @@ function timeline(text = "Cached") {
   };
 }
 
+function timelineFor(agentId: string, text = "Cached") {
+  return { ...timeline(text), agentId };
+}
+
 function commitDirectory(
   cache: ReplicaCache,
   serverId: string,
@@ -550,7 +554,7 @@ describe("ReplicaCache", () => {
     expect((await cache.readDirectory(SERVER_ID)).projects.size).toBe(0);
   });
 
-  it("does not return an accepted agent that storage rejected", async () => {
+  it("returns an accepted agent from memory when storage rejects its write", async () => {
     const storage = new MemoryStorage();
     const cache = createCache(storage);
     storage.persistentWriteFailure = new Error("disk unavailable");
@@ -560,19 +564,24 @@ describe("ReplicaCache", () => {
     const result = await cache.readAgent(SERVER_ID, "agent-1");
 
     expect(storage.rows.size).toBe(0);
-    expect(result).toBeUndefined();
+    expect(result?.id).toBe("agent-1");
+    expect(storage.reads).toHaveLength(1);
   });
 
-  it("fails closed when an accepted deletion cannot be persisted before a read", async () => {
+  it("overlays an accepted deletion without persisting it during a read", async () => {
     const storage = new MemoryStorage();
     const cache = createCache(storage);
     commitDirectory(cache, SERVER_ID, directory());
     await cache.flush();
     storage.nextWriteFailure = new Error("disk busy");
+    storage.reads.length = 0;
+    storage.writes = 0;
 
     deleteDirectory(cache, SERVER_ID);
 
     expect(await cache.readWorkspace(SERVER_ID, "workspace-1")).toBeUndefined();
+    expect(storage.reads).toHaveLength(1);
+    expect(storage.writes).toBe(0);
   });
 
   it("gives up a read instead of retrying while the store keeps rejecting writes", async () => {
@@ -640,7 +649,7 @@ describe("ReplicaCache", () => {
     expect(await reading).toBeUndefined();
   });
 
-  it("retries a timeline read when that same timeline changes in flight", async () => {
+  it("overlays a same-row change accepted while storage is reading", async () => {
     const storage = new MemoryStorage();
     const cache = createCache(storage);
     cache.commitTimeline(SERVER_ID, "agent-1", timeline("Old"));
@@ -651,7 +660,7 @@ describe("ReplicaCache", () => {
     };
 
     expect((await cache.readTimeline(SERVER_ID, "agent-1"))?.items).toEqual([timelineItem("New")]);
-    expect(storage.reads).toHaveLength(2);
+    expect(storage.reads).toHaveLength(1);
   });
 
   it("discards a requested row removed by a directory baseline replacement in flight", async () => {
@@ -668,6 +677,72 @@ describe("ReplicaCache", () => {
 
     expect(await cache.readAgent(SERVER_ID, "agent-1")).toBeUndefined();
     expect(storage.reads).toHaveLength(2);
+  });
+
+  it("reads once without persisting an unrelated pending change", async () => {
+    const storage = new MemoryStorage();
+    const cache = createCache(storage);
+    commitDirectory(cache, SERVER_ID, directory());
+    await cache.flush();
+    storage.reads.length = 0;
+    storage.writes = 0;
+    storage.readLimit = 1;
+    const unrelated = timelineFor("agent-2", "Unrelated");
+    let textReads = 0;
+    Object.defineProperty(unrelated.items[0], "text", {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        textReads += 1;
+        return "Unrelated";
+      },
+    });
+    storage.onRead = () => {
+      storage.onRead = null;
+      cache.commitTimeline(SERVER_ID, "agent-2", unrelated);
+    };
+
+    expect((await cache.readAgent(SERVER_ID, "agent-1"))?.id).toBe("agent-1");
+    expect(storage.reads).toHaveLength(1);
+    expect(storage.writes).toBe(0);
+    expect(textReads).toBe(0);
+  });
+
+  it("overlays a pending upsert without persisting it during a read", async () => {
+    const storage = new MemoryStorage();
+    const cache = createCache(storage);
+    commitDirectory(cache, SERVER_ID, directory());
+    await cache.flush();
+    storage.reads.length = 0;
+    storage.writes = 0;
+
+    const changed = { ...agent(), title: "New title" };
+    cache.commitDirectoryMutations(SERVER_ID, [
+      { kind: "agent", type: "upsert", id: changed.id, value: changed },
+    ]);
+
+    expect((await cache.readAgent(SERVER_ID, changed.id))?.title).toBe("New title");
+    expect(storage.reads).toHaveLength(1);
+    expect(storage.writes).toBe(0);
+  });
+
+  it("reads a pending directory baseline without hiding independent timelines", async () => {
+    const storage = new MemoryStorage();
+    const cache = createCache(storage);
+    commitDirectory(cache, SERVER_ID, directory());
+    cache.commitTimeline(SERVER_ID, "agent-1", timeline("Timeline"));
+    await cache.flush();
+    storage.reads.length = 0;
+    storage.writes = 0;
+
+    const replacement = directory();
+    replacement.agents = new Map([["replacement-agent", agent("replacement-agent")]]);
+    cache.replaceDirectoryBaseline(SERVER_ID, replacement);
+
+    const restoredDirectory = await cache.readDirectory(SERVER_ID);
+    expect([...restoredDirectory.agents.keys()]).toEqual(["replacement-agent"]);
+    expect(await cache.readTimeline(SERVER_ID, "agent-1")).toEqual(timeline("Timeline"));
+    expect(storage.writes).toBe(0);
   });
 
   it("never reads a timeline older than an accepted deferred replacement", async () => {
@@ -1057,7 +1132,7 @@ describe("ReplicaCache", () => {
         const { cache, expectReads } = await streamingCache();
 
         expect((await cache.readWorkspace(SERVER_ID, "workspace-1"))?.workspace.name).toBe("main");
-        expectReads(2, 1);
+        expectReads(2);
         await cache.flush();
       });
 
@@ -1071,7 +1146,7 @@ describe("ReplicaCache", () => {
     },
   );
 
-  it("reads the directory after persisting a pending baseline replacement", async () => {
+  it("reads the directory from a pending baseline replacement without persisting it", async () => {
     const storage = new MemoryStorage();
     const cache = createCache(storage);
     commitDirectory(cache, SERVER_ID, directory());
@@ -1088,7 +1163,7 @@ describe("ReplicaCache", () => {
     expect(read.projects.size).toBe(0);
     expect(read.checkpoint).toEqual({ agents: { generation: "g2", afterSeq: 1 } });
     expect(await cache.readTimeline(SERVER_ID, "agent-1")).toEqual(timeline());
-    expect(storage.writes).toBe(2);
+    expect(storage.writes).toBe(1);
   });
 });
 

@@ -33,6 +33,7 @@ function provider(
     title: id,
     description: null,
     subtitle: null,
+    activity: null,
     status,
     requiresAttention: false,
     createdAt: new Date(),

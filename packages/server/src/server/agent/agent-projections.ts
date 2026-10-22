@@ -331,18 +331,24 @@ export function selectAgentListItems(
   agents: readonly AgentSnapshotPayload[],
   options: {
     cwd?: string;
+    ids?: string[];
     statuses?: AgentSnapshotPayload["status"][];
     sinceHours?: number;
     limit?: number;
   } = {},
 ): AgentListItemPayload[] {
+  const idFilter = options.ids?.length ? new Set(options.ids) : null;
   const statusFilter = options.statuses?.length ? new Set(options.statuses) : null;
   const sinceMs = Date.now() - (options.sinceHours ?? 48) * 60 * 60 * 1000;
   return agents
     .map(toAgentListItemPayload)
+    .filter((agent) => !idFilter || idFilter.has(agent.id))
     .filter((agent) => !options.cwd || isSameOrDescendantPath(options.cwd, agent.cwd))
     .filter((agent) => !statusFilter || statusFilter.has(agent.status))
-    .filter((agent) => !agent.archivedAt || resolveAgentListActivityTime(agent) >= sinceMs)
+    .filter(
+      (agent) =>
+        !agent.archivedAt || idFilter !== null || resolveAgentListActivityTime(agent) >= sinceMs,
+    )
     .sort(compareAgentListItems)
     .slice(0, options.limit ?? 50);
 }

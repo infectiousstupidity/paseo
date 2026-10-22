@@ -383,6 +383,8 @@ export interface PaseoAgentHandle {
    * rejecting.
    */
   commands(options?: PaseoAgentCommandsOptions): Promise<PaseoAgentCommandsResult>;
+  /** Interrupt the active foreground turn. Resolves only when the daemon acknowledges cancellation. */
+  cancel(): Promise<void>;
   archive(): Promise<{ archivedAt: string }>;
   detach(): Promise<void>;
   subscribe(handler: (update: PaseoAgentUpdate) => void): () => void;
@@ -491,6 +493,8 @@ export interface PaseoConfigActions {
 }
 
 export interface PaseoApi {
+  /** This host never reactivates an archived agent for a send with unarchive=false. */
+  readonly supportsNonReactivatingSend?: true;
   readonly hosts: PaseoHostActions;
   dispose(): Promise<void>;
   observeEvents: DaemonClient["observeEvents"];
@@ -715,6 +719,7 @@ export function createPaseoApi(
   }
 
   return {
+    supportsNonReactivatingSend: true,
     dispose,
     hosts: createHostActions(daemonClient, { own, signal: lifetime.signal, api: createPaseoApi }),
     observeEvents,
@@ -1010,6 +1015,7 @@ function createAgentHandleFactory(
         return result;
       },
       commands: (options) => daemonClient.listCommands({ agentId: id, ...options }),
+      cancel: () => daemonClient.cancelAgent(id),
       archive: async () => {
         const result = await daemonClient.archiveAgent(id);
         if (current) {

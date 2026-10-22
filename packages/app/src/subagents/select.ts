@@ -6,6 +6,7 @@ import equal from "fast-deep-equal";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { refreshProviderSubagents, useProviderSubagentStore } from "./provider-store";
+import type { ProviderSubagentActivity } from "@getpaseo/protocol/messages";
 import type { ProviderSubagentDescriptorPayload } from "@getpaseo/protocol/messages";
 
 export interface PaseoSubagentRow {
@@ -35,7 +36,18 @@ export interface ProviderSubagentRow {
   description: string | null;
   /** Compact provider-owned context. The app displays it without interpreting its contents. */
   subtitle: string | null;
+  /** Observed child-local model and reasoning effort; never inherited from the parent. */
+  model?: string | null;
+  thinkingOptionId?: string | null;
+  /**
+   * Bounded current activity observed by the daemon (Task 03). Null when the daemon predates
+   * the field or has not observed anything meaningful yet (the projection then falls back to
+   * the streamed timeline tail).
+   */
+  activity: ProviderSubagentActivity | null;
   status: ProviderSubagentDescriptorPayload["status"];
+  /** Advisory native target presence; server revalidates every control. */
+  controlEligible?: boolean;
   requiresAttention: boolean;
   createdAt: Date;
 }
@@ -159,7 +171,11 @@ export function selectProviderSubagentsForParent(
       title: subagent.title,
       description: subagent.description,
       subtitle: subagent.subtitle ?? null,
+      model: subagent.model ?? null,
+      thinkingOptionId: subagent.thinkingOptionId ?? null,
+      activity: subagent.activity ?? null,
       status: subagent.status,
+      controlEligible: subagent.controlEligible === true,
       requiresAttention: subagent.status === "failed",
       createdAt: new Date(subagent.createdAt),
     });

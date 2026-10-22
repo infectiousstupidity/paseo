@@ -764,6 +764,7 @@ export class WorkspaceGitServiceImpl implements WorkspaceGitService {
       paseoHome: this.paseoHome,
       worktreesRoot: this.worktreesRoot,
       logger: this.logger,
+      runGitCommand: createRunGitCommand("workspace-checkout-read"),
     });
     const cached = this.peekSnapshot(normalizedCwd);
     if (cached && cached.git.isGit !== status.isGit) {

@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { promises as fs } from "node:fs";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
-import { AgentStorage } from "./agent-storage.js";
+import { AUTOMATION_REVOKED_LABEL, AgentStorage } from "./agent-storage.js";
 import { buildConfigOverrides, buildSessionConfig } from "../persistence-hooks.js";
 import type { ManagedAgent } from "./agent-manager.js";
 import type {
@@ -214,6 +214,21 @@ describe("AgentStorage", () => {
     const persisted = await reloaded.get("agent-feature-values");
     expect(persisted?.config?.featureValues).toEqual({ fast_mode: true });
     expect(buildSessionConfig(persisted!).featureValues).toEqual({ fast_mode: true });
+  });
+
+  test("archive revocation survives snapshot updates and restart", async () => {
+    const agentId = "revoked-worker";
+    await storage.applySnapshot(createManagedAgent({ id: agentId }));
+    const previous = await storage.get(agentId);
+    expect(previous).not.toBeNull();
+    await storage.upsert({
+      ...previous!,
+      labels: { ...previous!.labels, [AUTOMATION_REVOKED_LABEL]: "true" },
+    });
+    await storage.applySnapshot(createManagedAgent({ id: agentId, lifecycle: "idle" }));
+
+    const restored = new AgentStorage(storagePath, logger);
+    expect((await restored.get(agentId))?.labels?.[AUTOMATION_REVOKED_LABEL]).toBe("true");
   });
 
   test("applySnapshot keeps featureValues absent when they were never set", async () => {

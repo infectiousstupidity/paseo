@@ -104,6 +104,12 @@ import {
 } from "./workspace-labels/index.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
+import { PiRpcAgentSession } from "./agent/providers/pi/agent.js";
+import {
+  feedbackDispatcher,
+  assertSeichoParent,
+  type FeedbackParent,
+} from "./agent-feedback/dispatcher.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
 import { ProviderSnapshotManager } from "./agent/provider-snapshot-manager.js";
 import type {
@@ -2759,6 +2765,10 @@ export class Session {
         return this.handleProviderSubagentListRequest(msg);
       case "agent.provider_subagents.timeline.get.request":
         return this.handleProviderSubagentTimelineRequest(msg, source);
+      case "agent.provider_subagents.control.request":
+        return this.handleProviderSubagentControlRequest(msg, source);
+      case "agent.feedback.request":
+        return this.handleAgentFeedbackRequest(msg, source);
       case "session.events.set_subscription.request": {
         const owner = this.delivery.begin("events", undefined, async (id) => {
           this.eventSubscriptions.delete(id);
@@ -8026,6 +8036,208 @@ export class Session {
     }
   }
 
+  /** Authenticated session request: no unauthenticated loopback or parent model prompt. */
+  private async handleAgentFeedbackRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.feedback.request" }>,
+    source?: object,
+  ): Promise<void> {
+    try {
+      const parent = this.agentManager.getAgent(msg.parentAgentId);
+      if (
+        !parent ||
+        parent.internal ||
+        parent.provider !== "pi" ||
+        !(parent.session instanceof PiRpcAgentSession) ||
+        !parent.config.cwd
+      ) {
+        throw new Error("An active SEICHO Pi parent is required");
+      }
+      const sessionId = parent.session.getFeedbackSessionId();
+      if (!sessionId) throw new Error("The parent Pi session is closed");
+      const session = parent.session;
+      const target: FeedbackParent = {
+        id: parent.id,
+        provider: "pi",
+        cwd: parent.config.cwd,
+        sessionId,
+        spawn: (params) => session.spawnAnnotationChild(params),
+      };
+      // A session-wide workspace.write grant was checked by authorization.allowsInbound.
+      // Reconfirm here in case callers reach this handler through a future internal route.
+      if (!this.authorization.allowsPermission("workspace.write")) {
+        throw new Error("Feedback dispatch requires workspace.write");
+      }
+      assertSeichoParent(target);
+      let records;
+      let proposal: string | undefined;
+      if (msg.action === "submit") {
+        if (!msg.sourceNamespace || !msg.screen || !msg.annotations)
+          throw new Error("Source namespace, screen and notes required");
+        records = await feedbackDispatcher.submit(
+          target,
+          msg.sourceNamespace,
+          msg.annotations.map((note) => ({
+            sourceApp: "seicho-dev" as const,
+            sourceNamespace: msg.sourceNamespace!,
+            annotationId: note.id,
+            screen: msg.screen!,
+            comment: note.comment,
+          })),
+        );
+      } else if (msg.action === "record_proposal") {
+        if (!msg.recordId || !msg.revision || !msg.proposal)
+          throw new Error("Record, revision and proposal required");
+        records = [feedbackDispatcher.recordProposal(msg.recordId, msg.revision, msg.proposal)];
+      } else if (msg.action === "approve") {
+        if (!msg.recordId || !msg.revision) throw new Error("Record and revision required");
+        records = [feedbackDispatcher.approve(target, msg.recordId, msg.revision)];
+      } else if (msg.action === "record_outcome") {
+        if (!msg.recordId || !msg.revision || !msg.outcome || !msg.evidence)
+          throw new Error("Record, revision, outcome and verification evidence required");
+        records = [
+          feedbackDispatcher.recordOutcome(msg.recordId, msg.revision, msg.outcome, msg.evidence),
+        ];
+      } else if (msg.action === "get") {
+        if (!msg.recordId) throw new Error("Record ID required");
+        const record = feedbackDispatcher.get(msg.recordId);
+        const revision = record.revisions.at(-1)!.digest;
+        const activity = record.events.filter((e) => e.revision === revision);
+        const latest = activity.at(-1);
+        const runId = activity.findLast((e) => e.kind === "spawn_accepted")?.runId;
+        records = [
+          {
+            recordId: record.recordId,
+            revision,
+            state: latest?.kind ?? "submitted",
+            ...(runId ? { runId } : {}),
+          },
+        ];
+        proposal = activity.findLast((e) => e.kind === "proposal_ready")?.proposal;
+      } else {
+        throw new Error("Unsupported feedback action");
+      }
+      this.emitForSource(
+        {
+          type: "agent.feedback.response",
+          payload: {
+            requestId: msg.requestId,
+            success: true,
+            error: null,
+            records,
+            ...(proposal ? { proposal } : {}),
+          },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "agent.feedback.response",
+          payload: {
+            requestId: msg.requestId,
+            success: false,
+            error: (error instanceof Error ? error.message : "Feedback request failed").slice(
+              0,
+              240,
+            ),
+          },
+        },
+        source,
+      );
+    }
+  }
+
+  private async handleProviderSubagentControlRequest(
+    msg: Extract<SessionInboundMessage, { type: "agent.provider_subagents.control.request" }>,
+    source?: object,
+  ): Promise<void> {
+    const response = {
+      requestId: msg.requestId,
+      parentAgentId: msg.parentAgentId,
+      subagentId: msg.subagentId,
+      action: msg.action,
+    };
+    try {
+      // Do not resurrect archived parents or invent control identity during replay.
+      // The daemon's authenticated session supplies server identity; row keys are scoped
+      // to this exact parent. Native IDs remain private to the daemon.
+      const parent = this.agentManager.getAgent(msg.parentAgentId);
+      if (
+        !parent ||
+        parent.internal ||
+        parent.provider !== "pi" ||
+        !(parent.session instanceof PiRpcAgentSession)
+      ) {
+        throw new Error("An active native Pi parent is required.");
+      }
+      const child = this.agentManager.getProviderSubagent(msg.parentAgentId, msg.subagentId);
+      const target = this.agentManager.getProviderSubagentControlTarget(
+        msg.parentAgentId,
+        msg.subagentId,
+      );
+      if (
+        !child ||
+        child.provider !== "pi" ||
+        child.status !== "running" ||
+        child.parentAgentId !== parent.id ||
+        !target
+      ) {
+        throw new Error(
+          "Subagent control target is absent, finished or no longer owned by this parent.",
+        );
+      }
+      if (msg.action !== "steer" && msg.message !== undefined) {
+        throw new Error("Only steer may carry a message.");
+      }
+      if (
+        msg.action === "steer" &&
+        (!msg.message?.trim() || Buffer.byteLength(msg.message.trim(), "utf8") > 360)
+      ) {
+        throw new Error("Steer requires a nonempty instruction of at most 360 UTF-8 bytes.");
+      }
+      const result = await parent.session.controlSubagent({
+        action: msg.action,
+        ...target,
+        ...(msg.action === "steer" ? { message: msg.message!.trim() } : {}),
+      });
+      if (!result.ok) throw new Error(result.message);
+      // A stop receipt is only 'stopping'. No speculative terminal descriptor upsert:
+      // the adapter follows authoritative status.json and child events.
+      this.emitForSource(
+        {
+          type: "agent.provider_subagents.control.response",
+          payload: {
+            ...response,
+            success: true,
+            error: null,
+            ...(typeof result.data.state === "string" ? { state: result.data.state } : {}),
+            ...(typeof result.data.runState === "string" ? { runState: result.data.runState } : {}),
+            ...(result.data.deliveryStatus === "queued" ||
+            result.data.deliveryStatus === "delivered"
+              ? { deliveryStatus: result.data.deliveryStatus }
+              : {}),
+          },
+        },
+        source,
+      );
+    } catch (error) {
+      this.emitForSource(
+        {
+          type: "agent.provider_subagents.control.response",
+          payload: {
+            ...response,
+            success: false,
+            error: (error instanceof Error ? error.message : "Subagent control failed.").slice(
+              0,
+              240,
+            ),
+          },
+        },
+        source,
+      );
+    }
+  }
+
   private async handleProviderSubagentTimelineRequest(
     msg: Extract<SessionInboundMessage, { type: "agent.provider_subagents.timeline.get.request" }>,
     source?: object,
@@ -8246,6 +8458,7 @@ export class Session {
             },
             activeTurnBehavior: msg.activeTurnBehavior ?? "steer",
             sessionMode: msg.sessionMode,
+            unarchive: msg.unarchive,
             clearPendingPermissions: true,
           });
           deliveryStatus = "queued";
@@ -8261,6 +8474,7 @@ export class Session {
           messageId: msg.messageId,
           activeTurnBehavior: msg.activeTurnBehavior ?? "interrupt",
           sessionMode: msg.sessionMode,
+          unarchive: msg.unarchive,
           clearPendingPermissions: true,
           logger: this.sessionLogger,
         });
@@ -8279,6 +8493,7 @@ export class Session {
             request: {
               prompt,
               sourceAgentId: msg.sourceAgentId,
+              unarchive: msg.unarchive,
               sourceAgentServerId: msg.sourceAgentServerId,
               sessionMode: msg.sessionMode,
               activeTurnBehavior:

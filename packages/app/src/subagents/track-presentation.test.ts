@@ -1,11 +1,18 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { i18n } from "@/i18n/i18next";
 import type { PaseoSubagentRow, ProviderSubagentRow, SubagentRow } from "./select";
+import { isFinishedSubagent } from "./archive-finished";
 import {
   buildSubagentPillPresentation,
   buildSubagentRowPresentationData,
+  canControlPiSubagent,
+  compactSubagentTask,
+  subagentRuntimeLabel,
   countFinishedSubagents,
+  groupSubagentRows,
+  orderSubagentRows,
   resolveRowLabel,
+  resolveSubagentState,
 } from "./track-presentation";
 
 function row(
@@ -110,6 +117,7 @@ describe("countFinishedSubagents", () => {
         title: "running",
         description: null,
         subtitle: null,
+        activity: null,
         status: "running",
         requiresAttention: false,
         createdAt: new Date("2026-04-20T00:00:00.000Z"),
@@ -122,6 +130,7 @@ describe("countFinishedSubagents", () => {
         title: "failed",
         description: null,
         subtitle: null,
+        activity: null,
         status: "failed",
         requiresAttention: true,
         createdAt: new Date("2026-04-20T00:00:01.000Z"),
@@ -145,6 +154,106 @@ describe("countFinishedSubagents", () => {
         row({ id: "finished", status: "idle" }),
       ]),
     ).toBe(1);
+  });
+});
+
+describe("compactSubagentTask", () => {
+  it("skips standalone repo/HEAD metadata without rewriting the actual task", () => {
+    expect(
+      compactSubagentTask("Repo: /tmp/private/path\nHEAD: aabbcc\nReview the actual auth changes"),
+    ).toBe("Review the actual auth changes");
+    expect(compactSubagentTask("Fix /src/auth.ts without breaking login")).toBe(
+      "Fix /src/auth.ts without breaking login",
+    );
+  });
+
+  it("extracts only documented worker IDs and review rounds from long prompts", () => {
+    expect(
+      compactSubagentTask(
+        "You are fix-round worker W15 for the Paseo workspace mock. Review round 4 (confirmed).",
+      ),
+    ).toBe("W15 · fix-round · Review round 4");
+    expect(compactSubagentTask("You are implementation worker W1a for a bounded task.")).toBe(
+      "W1a · implementation",
+    );
+  });
+
+  it("bounds the row line but leaves full source available for inspection", () => {
+    const original = "Investigate " + "x".repeat(170);
+    const displayed = compactSubagentTask(original);
+    expect(displayed.length).toBeLessThanOrEqual(120);
+    expect(displayed.endsWith("…")).toBe(true);
+    expect(original).toHaveLength(182);
+  });
+});
+
+describe("child model identity projection", () => {
+  const child: ProviderSubagentRow = {
+    kind: "provider",
+    id: "child",
+    parentAgentId: "parent",
+    provider: "pi",
+    title: "worker",
+    description: "Review",
+    subtitle: null,
+    activity: null,
+    status: "running",
+    requiresAttention: false,
+    createdAt: new Date(),
+  };
+
+  it("omits unavailable values and never borrows the parent model", () => {
+    expect(subagentRuntimeLabel(child)).toBeNull();
+    expect(subagentRuntimeLabel({ ...child, model: "openrouter/qwen3.8-27b" })).toBe(
+      "openrouter/qwen3.8-27b",
+    );
+    expect(
+      subagentRuntimeLabel({
+        ...child,
+        model: "openrouter/qwen3.8-27b",
+        thinkingOptionId: "xhigh",
+      }),
+    ).toBe("openrouter/qwen3.8-27b · xhigh");
+  });
+});
+
+describe("canControlPiSubagent", () => {
+  it("requires live eligible Pi provider ownership and excludes all other rows", () => {
+    const pi = {
+      kind: "provider" as const,
+      id: "child",
+      parentAgentId: "parent",
+      provider: "pi" as const,
+      title: "Reviewer",
+      description: null,
+      subtitle: null,
+      activity: null,
+      status: "running" as const,
+      controlEligible: true,
+      requiresAttention: false,
+      createdAt: new Date("2026-10-13T08:00:00Z"),
+    };
+    expect(canControlPiSubagent(pi)).toBe(true);
+    expect(canControlPiSubagent({ ...pi, controlEligible: false })).toBe(false);
+    expect(canControlPiSubagent({ ...pi, status: "canceled" })).toBe(false);
+    expect(canControlPiSubagent({ ...pi, provider: "claude" })).toBe(false);
+    expect(canControlPiSubagent(row({ id: "managed", status: "running" }))).toBe(false);
+  });
+});
+
+describe("groupSubagentRows", () => {
+  it("groups attention, active and recent rows without inventing success", () => {
+    const rows = [
+      row({ id: "done" }),
+      row({ id: "run-1", status: "running" }),
+      row({ id: "failed", status: "error" }),
+      row({ id: "review", requiresAttention: true }),
+      row({ id: "run-2", status: "running" }),
+    ];
+    const groups = groupSubagentRows(rows);
+    expect(groups.attention.map((r) => r.id)).toEqual(["failed", "review"]);
+    expect(groups.working.map((r) => r.id)).toEqual(["run-1", "run-2"]);
+    expect(groups.recent.map((r) => r.id)).toEqual(["done"]);
   });
 });
 
@@ -217,6 +326,7 @@ describe("buildSubagentRowPresentationData for provider rows", () => {
       title: "title" in overrides ? (overrides.title ?? null) : "general-purpose",
       description: overrides.description ?? null,
       subtitle: overrides.subtitle ?? null,
+      activity: overrides.activity ?? null,
       status: overrides.status ?? "running",
       requiresAttention: false,
       createdAt: overrides.createdAt ?? new Date("2026-07-26T00:00:00.000Z"),
@@ -271,6 +381,7 @@ describe("provider-owned row subtitles", () => {
       title: "general-purpose",
       description: "Reply with banana",
       subtitle: null,
+      activity: null,
       status: "running",
       requiresAttention: false,
       createdAt: new Date("2026-07-26T00:00:00.000Z"),
@@ -296,5 +407,143 @@ describe("provider-owned row subtitles", () => {
         providerRow({ description: null, subtitle: null, title: "general-purpose" }),
       ).subtitle,
     ).toBe("");
+  });
+});
+
+describe("resolveSubagentState", () => {
+  function providerRow(overrides: Partial<ProviderSubagentRow> & { id: string }): SubagentRow {
+    return {
+      kind: "provider",
+      id: overrides.id,
+      parentAgentId: "parent",
+      provider: "claude",
+      title: "general-purpose",
+      description: null,
+      subtitle: null,
+      activity: null,
+      status: overrides.status ?? "running",
+      requiresAttention: false,
+      createdAt: new Date("2026-07-26T00:00:00.000Z"),
+    };
+  }
+
+  it("maps provider statuses to neutral lifecycle words", () => {
+    expect(resolveSubagentState(providerRow({ id: "a", status: "running" }))).toBe("running");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "completed" }))).toBe("finished");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "failed" }))).toBe("failed");
+    expect(resolveSubagentState(providerRow({ id: "a", status: "canceled" }))).toBe("canceled");
+  });
+
+  it("never calls a completed child anything other than finished", () => {
+    expect(
+      resolveSubagentState(
+        providerRow({ id: "a", status: "completed", description: "Review the change" }),
+      ),
+    ).toBe("finished");
+  });
+
+  it("derives managed children from their turn and status", () => {
+    expect(resolveSubagentState(row({ id: "a", status: "running" }))).toBe("running");
+    expect(resolveSubagentState(row({ id: "a", status: "error" }))).toBe("failed");
+    expect(resolveSubagentState(row({ id: "a" }))).toBe("finished");
+    // Still starting up: nothing to name yet, so the word stays absent.
+    expect(resolveSubagentState(row({ id: "a", status: "initializing" }))).toBeNull();
+  });
+});
+
+describe("orderSubagentRows", () => {
+  function providerRow(
+    id: string,
+    status: "running" | "completed" | "failed" | "canceled",
+  ): ProviderSubagentRow {
+    return {
+      kind: "provider",
+      id,
+      parentAgentId: "parent",
+      provider: "claude",
+      title: null,
+      description: null,
+      subtitle: null,
+      activity: null,
+      status,
+      requiresAttention: false,
+      createdAt: new Date("2026-07-26T00:00:00.000Z"),
+    };
+  }
+
+  it("keeps running and failed children ahead of terminal ones", () => {
+    const rows = [
+      providerRow("f1", "completed"),
+      providerRow("r1", "running"),
+      providerRow("f2", "completed"),
+      providerRow("x1", "failed"),
+      providerRow("c1", "canceled"),
+      providerRow("f3", "completed"),
+    ];
+    expect(orderSubagentRows(rows).map((r) => r.id)).toEqual(["r1", "x1", "f1", "f2", "c1", "f3"]);
+  });
+
+  it("orders by attention, not archiving: a failed child sorts first but still counts as finished", () => {
+    const failed = providerRow("x1", "failed");
+    const done = providerRow("f1", "completed");
+    expect(orderSubagentRows([done, failed]).map((r) => r.id)).toEqual(["x1", "f1"]);
+    expect(isFinishedSubagent(failed)).toBe(true);
+  });
+
+  it("preserves creation order inside each group", () => {
+    const base = Date.parse("2026-07-26T00:00:00.000Z");
+    const at = (minutes: number) => new Date(base + minutes * 60_000);
+    const oldDone: SubagentRow = { ...providerRow("old-done", "completed"), createdAt: at(1) };
+    const oldRun: SubagentRow = { ...providerRow("old-run", "running"), createdAt: at(2) };
+    const newDone: SubagentRow = { ...providerRow("new-done", "completed"), createdAt: at(3) };
+    const newRun: SubagentRow = { ...providerRow("new-run", "running"), createdAt: at(4) };
+    expect(orderSubagentRows([oldDone, oldRun, newDone, newRun]).map((r) => r.id)).toEqual([
+      "old-run",
+      "new-run",
+      "old-done",
+      "new-done",
+    ]);
+  });
+
+  it("moves a row only when it crosses the finished boundary", () => {
+    const a = providerRow("a", "running");
+    const b = providerRow("b", "completed");
+    const c = providerRow("c", "running");
+    const before = orderSubagentRows([a, b, c]);
+    const finishedA: ProviderSubagentRow = { ...a, status: "completed" };
+    const after = orderSubagentRows([finishedA, b, c]);
+    expect(before.map((r) => r.id)).toEqual(["a", "c", "b"]);
+    expect(after.map((r) => r.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("mixes provider and managed children in one fan-out without inventing groupings", () => {
+    const base = Date.parse("2026-07-26T00:00:00.000Z");
+    const at = (minutes: number) => new Date(base + minutes * 60_000);
+    // A realistic fan-out: one running provider child, two finished siblings of the same type,
+    // a failed provider child, a canceled one, a running managed child, and a finished managed
+    // child.
+    const rows: SubagentRow[] = [
+      { ...providerRow("p-done-1", "completed"), createdAt: at(1), title: "reviewer" },
+      { ...providerRow("p-run", "running"), createdAt: at(2), title: "reviewer" },
+      { ...providerRow("p-done-2", "completed"), createdAt: at(3), title: "reviewer" },
+      { ...providerRow("p-failed", "failed"), createdAt: at(4), title: "fixer" },
+      { ...providerRow("p-canceled", "canceled"), createdAt: at(5), title: "explorer" },
+      { ...row({ id: "m-run", status: "running" }), createdAt: at(6) },
+      { ...row({ id: "m-done" }), createdAt: at(7) },
+    ];
+    const ordered = orderSubagentRows(rows);
+    // Working and failed children first (in creation order), terminal ones after.
+    expect(ordered.map((r) => r.id)).toEqual([
+      "p-run",
+      "p-failed",
+      "m-run",
+      "p-done-1",
+      "p-done-2",
+      "p-canceled",
+      "m-done",
+    ]);
+    // The repeated agent type does not create a group; siblings keep creation order.
+    const reviewers = ordered.filter((r) => r.kind === "provider" && r.title === "reviewer");
+    expect(reviewers.map((r) => r.id)).toEqual(["p-run", "p-done-1", "p-done-2"]);
   });
 });

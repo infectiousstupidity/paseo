@@ -38,7 +38,13 @@ export interface PaseoToolDefinition extends PaseoToolConfig {
 }
 
 export interface PaseoToolCatalog {
+  /** Advertised tools: MCP tools/list, provider injection, and plugin manifests read this. */
   tools: ReadonlyMap<string, PaseoToolDefinition>;
+  /**
+   * COMPAT names that stay callable through getTool/executeTool but are never advertised,
+   * so a consolidated family costs no prompt tokens for its retired spellings.
+   */
+  compatAliases: ReadonlyMap<string, PaseoToolDefinition>;
   getTool(name: string): PaseoToolDefinition | undefined;
   executeTool(
     name: string,
