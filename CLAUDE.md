@@ -38,6 +38,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [mobile-panels](docs/mobile-panels.md)                       | Compact panel ownership, worklet motion, Fabric               |
 | [explorer-sidebar](docs/explorer-sidebar.md)                 | Sidebar, side-pane, compact sheet host contracts              |
 | [expo-router](docs/expo-router.md)                           | Route ownership, startup restore, blank screens               |
+| [notifications](docs/notifications.md)                       | Notification tap ownership, native replay, startup handoff    |
 | [forms](docs/forms.md)                                       | Non-React form model, form kit, load-state gating             |
 | [file-icons](docs/file-icons.md)                             | Material icon theme in the file explorer                      |
 | [markdown-renderer](docs/markdown-renderer.md)               | Shared Markdown engine, native selection                      |
@@ -47,14 +48,18 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [custom-providers](docs/custom-providers.md)                 | Z.AI, Qwen, ACP, profiles, custom binaries                    |
 | [plugins](docs/plugins.md)                                   | Plugin manifest, RPCs, native surfaces, attachments           |
 | [website-i18n](docs/website-i18n.md)                         | Website languages, locale URLs, translated Markdown, anchors  |
+| [i18n](docs/i18n.md)                                         | App translation resources, namespaces, adding a locale        |
 | [service-proxy](docs/service-proxy.md)                       | Workspace scripts at public URLs, reverse proxy               |
 | [rpc-namespacing](docs/rpc-namespacing.md)                   | Dotted RPC names, `.request`/`.response` pairs                |
 | [protocol-compatibility](docs/protocol-compatibility.md)     | Version drift, capability gating, COMPAT tags                 |
 | [protocol-validation](docs/protocol-validation.md)           | zod-aot inbound validation, schema-purity rules               |
 | [connected-hosts](docs/connected-hosts.md)                   | Daemon-owned hosts, routed SDK scopes, identity and authority |
 | [permissions](docs/permissions.md)                           | Principals, credentials, pairing, Hub authority               |
+| [hub](docs/hub.md)                                           | Opt-in daemon-to-Hub connection, trust boundary               |
+| [relay-endpoint-security](docs/relay-endpoint-security.md)   | Relay E2EE: Noise NK, record framing, enforcement flag        |
 | [terminal-performance](docs/terminal-performance.md)         | Latency pipeline, coalescing/backpressure invariants          |
 | [agent-stream-performance](docs/agent-stream-performance.md) | Assistant text pipeline, paced reveal                         |
+| [timeline-sync](docs/timeline-sync.md)                       | Agent chat delivery paths, replay and reconciliation          |
 | [terminal-activity](docs/terminal-activity.md)               | Activity indicators, agent hook reporting                     |
 | [file-observation](docs/file-observation.md)                 | Watcher ownership, Linux limits, teardown                     |
 | [development](docs/development.md)                           | Dev server, build sync gotchas, CLI reference                 |
@@ -67,9 +72,9 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docker](docs/docker.md)                                     | Daemon and web UI in Docker, volumes, security                |
 | [release](docs/release.md)                                   | Release playbook, draft releases, checklist                   |
 | [visual-mock-workflow](docs/visual-mock-workflow.md)         | Planned Git-backed live mock iteration                        |
+| [upstream-sync-policy](docs/upstream-sync-policy.md)         | How to merge upstream/main into this fork                     |
 | [writing-docs](docs/writing-docs.md)                         | Doc contract, layers, voice rules                             |
 | [SECURITY.md](SECURITY.md)                                   | Relay threat model, E2E encryption, agent auth                |
-| [hub security](public-docs/hub/security.md)                  | Public Hub guide — trust boundaries, output authority         |
 
 Deep archives, linked from the docs that own them: `docs/plans/`, `docs/tasks/`, `docs/specs/`, `docs/references/`, `docs/evaluations/`, `docs/qa-evidence/`, `docs/refactors/`, `docs/design/`, `docs/mockups/`, [Update Paseo on Apple Silicon](docs/update-macos.md), [OpenCode global event baseline](docs/opencode-global-event-baseline.md).
 
