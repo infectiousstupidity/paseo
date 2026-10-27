@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_IMAGE=node:22-bookworm-slim
+ARG NODE_IMAGE=node:26.12.1-bookworm-slim
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS source-pack
 
 ARG PASEO_VERSION

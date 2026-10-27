@@ -4,12 +4,12 @@ Use this on an M1/M2/M3/M4 Mac to build and replace Paseo locally, without a pai
 
 ## First-time setup
 
-Install Git, Xcode Command Line Tools, and Node.js 22 or newer. For example, with Homebrew:
+Install Git, Xcode Command Line Tools, and Node.js 26.12.1 or newer. For example, with Homebrew:
 
 ```bash
 xcode-select --install  # only if the Command Line Tools are not installed
-brew install node@22
-export PATH="$(brew --prefix node@22)/bin:$PATH"
+brew install node
+export PATH="$(brew --prefix node)/bin:$PATH"
 git clone https://github.com/infectiousstupidity/paseo.git
 cd paseo
 bash scripts/update-macos.sh
@@ -24,7 +24,7 @@ cd ~/paseo
 bash scripts/update-macos.sh
 ```
 
-The script requires an ARM64 Mac, a clean `main` checkout and Node.js 22+. It fast-forward pulls `origin/main`, runs `npm ci`, builds an unpacked ARM64 `Paseo.app` with ad-hoc signing, and copies it to the install location. It then asks a running Paseo to quit, replaces the bundle, and reopens the application. The old app is restored if the file replacement or launch command fails.
+The script requires an ARM64 Mac, a clean `main` checkout and Node.js 26.12.1+. It fast-forward pulls `origin/main`, runs `npm ci`, builds an unpacked ARM64 `Paseo.app` with ad-hoc signing, and copies it to the install location. It then asks a running Paseo to quit, replaces the bundle, and reopens the application. The old app is restored if the file replacement or launch command fails.
 
 It updates `/Applications/Paseo.app` if present; otherwise `~/Applications/Paseo.app` if present; otherwise it creates the latter. Updating `/Applications` may request an administrator password **only for the installation step**, not for npm or the build.
 

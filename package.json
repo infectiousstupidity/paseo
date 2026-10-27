@@ -153,5 +153,8 @@
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",
     "react-native-worklets": "0.10.1"
+  },
+  "engines": {
+    "node": ">=26.12.1"
   }
 }
