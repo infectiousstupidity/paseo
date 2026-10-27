@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # The npm workspace tree resolves through the root lockfile.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Newly published versions can be malicious or broken; wait a week.
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Covers docker/base/Dockerfile, which pins node:26.12.1-bookworm-slim.
+  - package-ecosystem: docker
+    directories:
+      - /docker/base
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  # Keeps actions/* tags current, including the mutable v4/v5 refs.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
