@@ -454,6 +454,11 @@ export interface PaseoDaemonConfig {
   downloadTokenTtlMs?: number;
   agentProviderSettings?: AgentProviderRuntimeSettingsMap;
   providerCatalogRefreshTimeoutMs?: number;
+  /**
+   * How long a live agent runtime must be quiescent before the daemon suspends it and keeps only
+   * retained state. 0 disables auto-suspend; undefined uses the daemon default. Read at startup.
+   */
+  agentIdleTimeoutMs?: number;
   metadataGeneration?: {
     providers?: Array<{
       provider: string;
@@ -569,6 +574,9 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
     app: { baseUrl: config.appBaseUrl ?? "https://app.paseo.sh" },
     ...(config.providerCatalogRefreshTimeoutMs !== undefined
       ? { catalogRefreshTimeoutMs: config.providerCatalogRefreshTimeoutMs }
+      : {}),
+    ...(config.agentIdleTimeoutMs !== undefined
+      ? { idleTimeoutMs: config.agentIdleTimeoutMs }
       : {}),
     browserTools: { enabled: config.browserToolsEnabled ?? false },
     providers,
@@ -962,6 +970,9 @@ export async function createPaseoDaemon(
   const providerSnapshotManager = agentProviderRuntime.snapshotManager;
   daemonConfigStore.onFieldChange("catalogRefreshTimeoutMs", (value) => {
     providerSnapshotManager.setRefreshTimeoutMs(typeof value === "number" ? value : undefined);
+  });
+  daemonConfigStore.onFieldChange("idleTimeoutMs", (value) => {
+    agentManager.setIdleTimeoutMs(typeof value === "number" ? value : undefined);
   });
   daemonConfigStore.onFieldChange("git.maxProcessesPerSecond", () => {
     const git = daemonConfigStore.get().git;

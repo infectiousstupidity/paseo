@@ -54,6 +54,14 @@ import {
   type ImportableProviderSession,
   type ListImportableSessionsOptions,
 } from "./agent-sdk-types.js";
+import type { ProviderSuspensionResult } from "./agent-sdk-types.js";
+import {
+  createAgentRuntimeActivityLedger,
+  DEFAULT_AGENT_IDLE_TIMEOUT_MS,
+  idleSweepIntervalMs,
+  type AgentRuntimeActivityLedger,
+} from "./agent-runtime-activity.js";
+import type { AgentMessageDelivery } from "./agent-messages/delivery.js";
 import { buildArchivedAgentRecord, type ArchivedStoredAgentRecord } from "./agent-archive.js";
 import { toStoredAgentRecord } from "./agent-projections.js";
 import {
@@ -348,6 +356,14 @@ export interface AgentManagerOptions {
     agentId: string;
     expectedTurnId: string;
   }) => Promise<void>;
+  /** Runtime idle suspension timeout; undefined = default, 0 = disabled. */
+  idleTimeoutMs?: number;
+  /** Lazy factory for the delivery layer; consulted for undelivered frames at suspend commit. */
+  agentMessages?: () => AgentMessageDelivery | undefined;
+  /** Test seam: sweep period override. */
+  idleSweepIntervalMs?: number;
+  /** Test seam: clock for the activity ledger. */
+  nowMs?: () => number;
   logger: Logger;
 }
 
@@ -783,6 +799,13 @@ export class AgentManager {
   private readonly rescueTimeouts: Required<AgentManagerRescueTimeouts>;
   private readonly beforeSteerUnavailableFallback?: AgentManagerOptions["beforeSteerUnavailableFallback"];
   private acceptingAgentRegistrations = true;
+  private idleNow!: () => number;
+  private idleActivity!: AgentRuntimeActivityLedger;
+  private agentMessagesFactory?: () => AgentMessageDelivery | undefined;
+  private idleSweepIntervalOverride!: number | null;
+  private idleTimeoutMs!: number;
+  private idleSweepTimer: NodeJS.Timeout | null = null;
+  private idleSweepInFlight = false;
 
   constructor(options: AgentManagerOptions) {
     this.pluginLifecycle = options.pluginLifecycle;
@@ -817,6 +840,16 @@ export class AgentManager {
       providerDefinitions: options.providerDefinitions ?? {},
       clients: options.clients ?? {},
     });
+    this.initIdleSuspension(options);
+  }
+
+  private initIdleSuspension(options: AgentManagerOptions): void {
+    this.idleNow = options.nowMs ?? Date.now;
+    this.idleActivity = createAgentRuntimeActivityLedger(this.idleNow);
+    this.agentMessagesFactory = options.agentMessages;
+    this.idleSweepIntervalOverride = options.idleSweepIntervalMs ?? null;
+    this.idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_AGENT_IDLE_TIMEOUT_MS;
+    this.armIdleSweep();
   }
 
   private configurePaseoTools(options: AgentManagerOptions): void {
@@ -876,6 +909,157 @@ export class AgentManager {
 
   setMcpBaseUrl(url: string | null): void {
     this.mcpBaseUrl = url;
+  }
+
+  /** Apply the resolved idle timeout. 0 disables; re-enabling starts fresh observation windows. */
+  setIdleTimeoutMs(timeoutMs: number | undefined): void {
+    const next = timeoutMs ?? DEFAULT_AGENT_IDLE_TIMEOUT_MS;
+    const wasDisabled = this.idleTimeoutMs <= 0;
+    this.idleTimeoutMs = next;
+    if (wasDisabled && next > 0) {
+      this.idleActivity.resetAll();
+    }
+    // A timeout change applies to the current quiet interval; only the timer is re-armed.
+    this.armIdleSweep();
+  }
+
+  private armIdleSweep(): void {
+    this.clearIdleSweepTimer();
+    if (this.idleTimeoutMs <= 0) {
+      return;
+    }
+    const period = this.idleSweepIntervalOverride ?? idleSweepIntervalMs(this.idleTimeoutMs);
+    this.idleSweepTimer = setInterval(() => {
+      void this.runIdleSweep();
+    }, period);
+    this.idleSweepTimer.unref?.();
+  }
+
+  private clearIdleSweepTimer(): void {
+    if (this.idleSweepTimer) {
+      clearInterval(this.idleSweepTimer);
+      this.idleSweepTimer = null;
+    }
+  }
+
+  /** Activity quiescence: ledger view, provider view, delivery view — all must be quiet. */
+  private idleActivityBlocker(agent: LiveManagedAgent, agentId: string): string | null {
+    const ledger = this.idleActivity.snapshot(agentId);
+    if (!ledger || ledger.hasOutstandingWork || ledger.quietMs < this.idleTimeoutMs) {
+      return "ledger busy";
+    }
+    const providerSnapshot = agent.session.runtimeActivitySnapshot?.() ?? null;
+    if (
+      providerSnapshot &&
+      (providerSnapshot.hasOutstandingWork || providerSnapshot.quietMs < this.idleTimeoutMs)
+    ) {
+      return "provider busy";
+    }
+    const delivery = this.agentMessagesFactory?.();
+    if (delivery && delivery.hasOutstandingWork(agentId)) {
+      return "undelivered frames";
+    }
+    return null;
+  }
+
+  /** Returns why an agent is NOT eligible for idle suspension, or null when it may proceed. */
+  private idleSuspensionBlocker(agentId: string): string | null {
+    if (this.idleTimeoutMs <= 0) {
+      return "disabled";
+    }
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      return "not live";
+    }
+    if (agent.lifecycle !== "idle") {
+      return "status";
+    }
+    if (this.runs.hasPendingRun(agentId) || this.runs.hasRun(agentId)) {
+      return "run in flight";
+    }
+    if (agent.pendingPermissions.size > 0 || agent.inFlightPermissionResponses.size > 0) {
+      return "permission activity";
+    }
+    if (agent.foregroundTurnWaiters.size > 0) {
+      return "turn waiter";
+    }
+    if (this.steerEventBarriers.has(agentId) || agent.pendingReplacement) {
+      return "barrier or replacement pending";
+    }
+    for (const record of this.subscribers) {
+      if (record.agentId === agentId) {
+        return "subscribed";
+      }
+    }
+    for (const child of this.agents.values()) {
+      if (child.id !== agentId && getParentAgentIdFromLabels(child.labels) === agentId) {
+        return "has live children";
+      }
+    }
+    for (const subagent of this.providerSubagents.list(agentId)) {
+      if (subagent.status === "running") {
+        return "provider subagent running";
+      }
+    }
+    if (!agent.persistence || !agent.session.capabilities.supportsSessionPersistence) {
+      return "no persistence";
+    }
+    return this.idleActivityBlocker(agent, agentId);
+  }
+
+  private async runIdleSweep(): Promise<void> {
+    if (this.idleSweepInFlight || this.idleTimeoutMs <= 0) {
+      return;
+    }
+    this.idleSweepInFlight = true;
+    try {
+      const sweepCandidates = Array.from(this.agents.keys());
+      for (const agentId of sweepCandidates) {
+        if (this.idleSuspensionBlocker(agentId) === null) {
+          await this.suspendIdleAgent(agentId);
+        }
+      }
+    } finally {
+      this.idleSweepInFlight = false;
+    }
+  }
+
+  private async suspendIdleAgent(agentId: string): Promise<void> {
+    await this.runLifecycleMutation(agentId, async () => {
+      // Reservations land inside the lane: re-check eligibility at commit.
+      if (this.idleSuspensionBlocker(agentId) !== null) {
+        return;
+      }
+      // Drain already-admitted events before committing (no new ones can be admitted).
+      await this.drainSessionEvents(agentId);
+      if (this.idleSuspensionBlocker(agentId) !== null) {
+        return;
+      }
+      const agent = this.agents.get(agentId);
+      if (!agent) {
+        return;
+      }
+      try {
+        // Persist before the provider commits: a failure aborts and the runtime stays open.
+        await this.persistSnapshot(agent);
+      } catch (error) {
+        this.logger.warn(
+          { err: error, agentId },
+          "Idle suspension: snapshot persist failed; runtime stays open",
+        );
+        return;
+      }
+      const result: ProviderSuspensionResult | undefined = await agent.session.suspendIfIdle?.({
+        idleForMs: this.idleTimeoutMs,
+      });
+      if (result !== "suspended") {
+        return;
+      }
+      // Shared finalize with the close path: subagents quiescent, barriers dropped,
+      // runtime entry removed; the registry row was persisted before the commit.
+      this.idleActivity.forget(agentId);
+      this.prepareAgentForClosure(agent, "idle suspension");
+    });
   }
 
   prepareForShutdown(): void {
@@ -3139,6 +3323,7 @@ export class AgentManager {
 
     try {
       const result = await agent.session.respondToPermission(requestId, response);
+      this.idleActivity.noteActivity(agentId);
       agent.pendingPermissions.delete(requestId);
 
       try {
@@ -3654,6 +3839,7 @@ export class AgentManager {
 
       this.assertAcceptingAgentRegistrations();
       this.agents.set(resolvedAgentId, managed);
+      this.idleActivity.noteRuntimeStart(resolvedAgentId);
       registered = true;
       // Initialize previousStatus to track transitions
       this.previousStatuses.set(resolvedAgentId, managed.lifecycle);
@@ -3975,6 +4161,10 @@ export class AgentManager {
    * manager state so call order remains authoritative.
    */
   private async drainSessionEvents(agentId: string): Promise<void> {
+    if (this.agents.has(agentId)) {
+      // Delivered session events are real work: any event resets the quiet interval.
+      this.idleActivity.noteActivity(agentId);
+    }
     while (true) {
       const tail = this.sessionEventTails.get(agentId);
       if (!tail) {

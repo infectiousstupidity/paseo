@@ -47,6 +47,8 @@ export interface AgentMessageDelivery {
   close(): Promise<void>;
   /** Existing completion waits include agent messages admitted before the wait. */
   waitForDispatch(recipientId: string, signal: AbortSignal): Promise<void>;
+  /** True while the recipient has messages admitted but unresolved, dispatches in flight, or retries pending. */
+  hasOutstandingWork(recipientId: string): boolean;
 }
 
 /** Recipient-owned agent delivery. Human prompts never enter this module. */
@@ -158,6 +160,9 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
       entry.cancel = schedule(2000, () => flush(message.recipientId));
       pending.set(message.recipientId, entry);
       return receipt;
+    },
+    hasOutstandingWork(recipientId) {
+      return pending.has(recipientId) || dispatching.has(recipientId);
     },
     async waitForDispatch(recipientId, signal) {
       signal.throwIfAborted();

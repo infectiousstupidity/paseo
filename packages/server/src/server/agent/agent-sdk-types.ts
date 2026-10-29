@@ -666,6 +666,21 @@ export interface AgentUsageSession {
   sessionKey: string;
 }
 
+/**
+ * Provider-owned runtime activity, as seen by the provider itself. Providers that can observe
+ * their complete runtime-owned activity (tasks, subprocesses, approvals, queued input) expose
+ * this as a named read-only view; providers that cannot observe all of it expose nothing and are
+ * never automatically suspended.
+ */
+export interface ProviderRuntimeActivitySnapshot {
+  /** Continuous quiescence of all provider-observed activity, in milliseconds. */
+  quietMs: number;
+  /** True when anything provider-owned is still open: running work, queued input, approvals, children. */
+  hasOutstandingWork: boolean;
+}
+
+export type ProviderSuspensionResult = "suspended" | "busy" | "unsupported";
+
 export interface AgentSession {
   usageSession?(): AgentUsageSession | null;
   readonly provider: AgentProvider;
@@ -698,6 +713,21 @@ export interface AgentSession {
   interrupt(): Promise<void>;
   /** Release live runtime resources without archiving or deleting the durable native session. */
   close(): Promise<void>;
+  /**
+   * Named read-only view of provider-observed runtime activity; null when this provider cannot
+   * observe all of it. Silence during a long turn is not quiescence, and viewing history, reading
+   * status or heartbeats must not move the window.
+   */
+  runtimeActivitySnapshot?(): ProviderRuntimeActivitySnapshot | null;
+  /**
+   * Opt-in idle suspension. Check the provider's complete activity state; when it has been quiet
+   * for at least `idleForMs` and nothing provider-owned is outstanding, release the runtime
+   * through the same cleanup as close(). "suspended" means verified release, not merely that a
+   * signal was sent — a kill timeout must not report success. The check and the commitment are one
+   * operation with no gap: once committed, no new provider work may start, or the call reports
+   * failure. Adapters that cannot establish quiescence safely omit this member.
+   */
+  suspendIfIdle?(input: { idleForMs: number }): Promise<ProviderSuspensionResult>;
   listCommands?(): Promise<AgentSlashCommand[]>;
   setModel?(modelId: string | null): Promise<void>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;

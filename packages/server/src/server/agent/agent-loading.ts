@@ -41,6 +41,8 @@ export interface EnsureAgentLoadedDeps {
   agentStorage: AgentStorage;
   validProviders?: Iterable<AgentProvider>;
   broadcastTimeline?: boolean;
+  /** Per-manager in-flight loads shared with the loader so both dedupe together. */
+  pendingLoads?: Map<string, PendingAgentInitialization>;
   logger: Logger;
 }
 
@@ -73,7 +75,9 @@ export async function ensureAgentLoaded(
 ): Promise<ManagedAgent> {
   await deps.agentManager.waitForAgentClose?.(agentId);
 
-  const inflight = pendingAgentInitializations.get(agentId);
+  const pendingLoads = deps.pendingLoads ?? pendingAgentInitializations;
+
+  const inflight = pendingLoads.get(agentId);
   if (inflight) {
     inflight.options.broadcastTimeline ||= deps.broadcastTimeline === true;
     return inflight.promise;
@@ -89,7 +93,7 @@ export async function ensureAgentLoaded(
   // before storage-backed resume begins.
   await deps.agentManager.waitForAgentClose?.(agentId);
 
-  const laterInflight = pendingAgentInitializations.get(agentId);
+  const laterInflight = pendingLoads.get(agentId);
   if (laterInflight) {
     laterInflight.options.broadcastTimeline ||= deps.broadcastTimeline === true;
     return laterInflight.promise;
@@ -151,9 +155,9 @@ export async function ensureAgentLoaded(
   try {
     return await initPromise;
   } finally {
-    const current = pendingAgentInitializations.get(agentId);
+    const current = pendingLoads.get(agentId);
     if (current === pending) {
-      pendingAgentInitializations.delete(agentId);
+      pendingLoads.delete(agentId);
     }
   }
 }

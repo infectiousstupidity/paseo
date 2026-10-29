@@ -340,6 +340,13 @@ export const PersistedConfigSchema = z
       .object({
         providers: z.preprocess(normalizeAgentProviders, ProviderOverridesSchema).optional(),
         catalogRefreshTimeoutMs: z.number().int().positive().max(2_147_483_647).optional(),
+        /**
+         * How long a live agent runtime must be quiescent before the daemon suspends it and keeps
+         * only retained state: timeline, subagents, policies, working secrets. 0 disables
+         * auto-suspend; omitted uses the daemon default. Read at daemon startup; changing it
+         * through config mutation updates the live sweep without restarting agents.
+         */
+        idleTimeoutMs: z.number().int().min(0).max(2_147_483_647).optional(),
         metadataGeneration: AgentMetadataGenerationSchema.optional(),
         skills: z.object({ selection: AgentSkillSelectionSchema.optional() }).strict().optional(),
       })
