@@ -1,4 +1,4 @@
-import { describe, expect, onTestFinished, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,6 +38,25 @@ const ABORTED_TERMINAL_RESPONSE: OmpAgentMessage = {
   stopReason: "aborted",
   errorMessage: "Interrupted by user",
 };
+
+test("OMP cleanup retries a rejected runtime close despite closed admission", async () => {
+  const runtime = new FakeOmp();
+  const client = new OmpAgentClient({ logger: createTestLogger(), runtime });
+  const session = await client.createSession({ provider: "omp", cwd: process.cwd() });
+  const close = vi
+    .spyOn(runtime.latestSession(), "close")
+    .mockRejectedValueOnce(new Error("kill-timeout"));
+  try {
+    await expect(session.close()).rejects.toThrow("kill-timeout");
+    await expect(session.close()).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(2);
+    await session.close();
+    expect(close).toHaveBeenCalledTimes(2);
+  } finally {
+    close.mockRestore();
+    await session.close();
+  }
+});
 
 test("an idle follow-up is submitted as a prompt so OMP can start a turn", async () => {
   const runtime = new FakeOmp();

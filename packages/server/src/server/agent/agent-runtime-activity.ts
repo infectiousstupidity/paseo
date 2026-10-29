@@ -33,7 +33,7 @@ export interface AgentRuntimeActivityLedger {
   noteQuiescent(agentId: string): void;
   /** Add an open-work entry keyed so double-add and double-remove cannot drift the count. */
   addOpenWork(agentId: string, key: string): void;
-  removeOpenWork(agentId: string, key: string): void;
+  removeOpenWork(agentId: string, key: string, options?: { resetQuiet: boolean }): void;
   snapshot(agentId: string): RuntimeActivitySnapshot | null;
   forget(agentId: string): void;
   /** Restart every agent's observation window (used when the timeout is re-enabled). */
@@ -81,8 +81,11 @@ export function createAgentRuntimeActivityLedger(
       entryFor(agentId).openWork.add(key);
     },
 
-    removeOpenWork(agentId, key) {
-      entries.get(agentId)?.openWork.delete(key);
+    removeOpenWork(agentId, key, options) {
+      const entry = entries.get(agentId);
+      if (entry?.openWork.delete(key) && options?.resetQuiet !== false) {
+        entry.quietSinceMs = nowMs();
+      }
     },
 
     snapshot(agentId) {

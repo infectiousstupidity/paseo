@@ -23,6 +23,7 @@ function reloadableConfig(
     mcp: { enabled: true, injectIntoAgents: false },
     browserTools: { enabled: daemon.browserTools?.enabled ?? false },
     providers: (agents.providers ?? {}) as MutableDaemonConfig["providers"],
+    idleTimeoutMs: agents.idleTimeoutMs,
     metadataGeneration: { providers: agents.metadataGeneration?.providers ?? [] },
     autoArchiveAfterMerge: daemon.autoArchiveAfterMerge ?? false,
     enableTerminalAgentHooks: daemon.enableTerminalAgentHooks ?? false,
@@ -96,6 +97,33 @@ describe("DaemonConfigStore", () => {
     for (const dir of tempDirs) {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("idle timeout patches persist zero and emit changes, and reload can remove the override", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-idle-config-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, reloadableConfig({}), undefined, {
+      reloadSource: {
+        resolve: (persisted) => ({
+          mutable: reloadableConfig(persisted),
+          overrideControlledPaths: [],
+        }),
+      },
+    });
+    const changes: unknown[] = [];
+    store.onFieldChange("idleTimeoutMs", (value) => changes.push(value));
+    store.patch({ idleTimeoutMs: 1234 });
+    expect(loadPersistedConfig(paseoHome).agents?.idleTimeoutMs).toBe(1234);
+    store.patch({ idleTimeoutMs: 0 });
+    expect(loadPersistedConfig(paseoHome).agents?.idleTimeoutMs).toBe(0);
+    expect(store.get().idleTimeoutMs).toBe(0);
+    writeFileSync(path.join(paseoHome, "config.json"), JSON.stringify({ agents: {} }));
+    store.reload();
+    expect(store.get().idleTimeoutMs).toBeUndefined();
+    expect(changes).toEqual([1234, 0, undefined]);
+    expect(() => store.patch({ idleTimeoutMs: -1 })).toThrow();
+    expect(() => store.patch({ idleTimeoutMs: 1.5 })).toThrow();
+    expect(() => store.patch({ idleTimeoutMs: 2_147_483_648 })).toThrow();
   });
 
   test("patch persists relay state and emits its field change", () => {
@@ -723,6 +751,7 @@ describe("DaemonConfigStore", () => {
         providers: {},
         metadataGeneration: { providers: [] },
         autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
         appendSystemPrompt: "",
       },
       undefined,

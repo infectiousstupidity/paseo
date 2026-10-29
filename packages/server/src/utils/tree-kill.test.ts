@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { terminateWithTreeKill } from "./tree-kill.js";
+import { captureProcessTree, terminateWithTreeKill } from "./tree-kill.js";
 
 const pollIntervalMs = 50;
 
@@ -65,6 +65,7 @@ function killIfRunning(pid: number | null | undefined): void {
 function spawnOwnerWithDescendant(options: {
   childPidPath: string;
   detachedDescendant: boolean;
+  grandchildPidPath?: string;
 }): ChildProcess {
   const descendantOptions = options.detachedDescendant
     ? '{ detached: true, stdio: "ignore" }'
@@ -84,6 +85,7 @@ function spawnOwnerWithDescendant(options: {
             const fs = require("node:fs");
             process.on("SIGTERM", () => {});
             fs.writeFileSync(${JSON.stringify(options.childPidPath)}, String(process.pid));
+            ${options.grandchildPidPath ? `require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(`require("node:fs").writeFileSync(${JSON.stringify(options.grandchildPidPath)}, String(process.pid)); process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);`)}], { stdio: "ignore", detached: true }).unref();` : ""}
             setInterval(() => {}, 1000);
           `)}
         ], ${descendantOptions});
@@ -131,6 +133,79 @@ afterEach(async () => {
 });
 
 describe("terminateWithTreeKill", () => {
+  test.runIf(process.platform !== "win32")(
+    "verifies retained children and grandchildren after the SDK kills their root",
+    async () => {
+      tempDir = await mkdtemp(join(tmpdir(), "paseo-orphan-tree-"));
+      const childPidPath = join(tempDir, "child.pid");
+      const grandchildPidPath = join(tempDir, "grandchild.pid");
+      ownerProcess = spawnOwnerWithDescendant({
+        childPidPath,
+        grandchildPidPath,
+        detachedDescendant: true,
+      });
+      await waitForFixtureReady(childPidPath);
+      let grandchildPid: number | null = null;
+      await waitFor(
+        async () => {
+          grandchildPid = await readPidFileNumber(grandchildPidPath);
+          return grandchildPid !== null;
+        },
+        5000,
+        "grandchild did not start",
+      );
+      try {
+        const snapshot = await captureProcessTree(ownerProcess.pid!);
+        expect(snapshot?.descendants.map((entry) => entry.pid)).toEqual(
+          expect.arrayContaining([descendantPid, grandchildPid]),
+        );
+        if (!snapshot) throw new Error("missing owned process snapshot");
+        const exit = new Promise<void>((resolve) => ownerProcess!.once("exit", () => resolve()));
+        ownerProcess.kill("SIGKILL");
+        await exit;
+        expect(
+          await terminateWithTreeKill(ownerProcess, {
+            gracefulTimeoutMs: 50,
+            forceTimeoutMs: 2000,
+            trackedProcesses: [snapshot],
+          }),
+        ).toBe("already-exited");
+        for (const identity of snapshot.descendants) {
+          expect((await captureProcessTree(identity.pid))?.startedAt).not.toBe(identity.startedAt);
+        }
+      } finally {
+        killIfRunning(grandchildPid);
+      }
+    },
+  );
+
+  test.runIf(process.platform !== "win32")(
+    "never signals an unrelated process whose PID does not match the captured generation",
+    async () => {
+      const unrelated = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+        stdio: "ignore",
+      });
+      await new Promise<void>((resolve) => unrelated.once("spawn", resolve));
+      try {
+        const snapshot = await captureProcessTree(unrelated.pid!);
+        if (!snapshot) throw new Error("missing unrelated process snapshot");
+        const target = { exitCode: 0, kill: () => false };
+        expect(
+          await terminateWithTreeKill(target, {
+            gracefulTimeoutMs: 0,
+            forceTimeoutMs: 0,
+            trackedProcesses: [{ ...snapshot, startedAt: "different-generation", descendants: [] }],
+          }),
+        ).toBe("already-exited");
+        expect(isProcessRunning(unrelated.pid!)).toBe(true);
+      } finally {
+        const exit = new Promise<void>((resolve) => unrelated.once("exit", () => resolve()));
+        unrelated.kill("SIGKILL");
+        await exit;
+      }
+    },
+  );
+
   test.runIf(process.platform === "win32")(
     "kills Windows descendants through taskkill tree cleanup",
     async () => {

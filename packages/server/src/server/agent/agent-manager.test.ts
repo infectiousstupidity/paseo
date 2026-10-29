@@ -16,15 +16,18 @@ import {
   AgentManagerShuttingDownError,
   commandMayHaveChangedExternalState,
   type AgentManagerEvent,
+  type AgentManagerOptions,
   type ManagedAgent,
 } from "./agent-manager.js";
-import { AgentStorage } from "./agent-storage.js";
+import { AgentStorage, AUTOMATION_REVOKED_LABEL } from "./agent-storage.js";
 import { InMemoryAgentTimelineStore } from "./agent-timeline-store.js";
 import { toAgentPayload } from "./agent-projections.js";
 import { projectTimelineRows } from "./timeline-projection.js";
 import { getOpenAgentTabLabel, PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import { startAgentRun } from "./agent-prompt.js";
 import { StaleProviderSessionError } from "./stale-provider-session-error.js";
+import { createAgentMessageDelivery } from "./agent-messages/delivery.js";
+import type { AgentMessageDelivery } from "./agent-messages/delivery.js";
 import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent-loading.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type {
@@ -34,6 +37,7 @@ import type {
   AgentTimelineStore,
 } from "./agent-timeline-store-types.js";
 import type {
+  AgentCapabilityFlags,
   AgentClient,
   AgentCreateSessionOptions,
   AgentFeature,
@@ -445,7 +449,7 @@ class EnvProbeAgentClient extends TestAgentClient {
 
 class TestAgentSession implements AgentSession {
   readonly provider = "codex" as const;
-  readonly capabilities = TEST_CAPABILITIES;
+  readonly capabilities: AgentCapabilityFlags = TEST_CAPABILITIES;
   readonly id = randomUUID();
   private runtimeModel: string | null = null;
   private subscribers = new Set<(event: AgentStreamEvent) => void>();
@@ -665,6 +669,7 @@ async function startAndSteerThroughManager(
     activeTurnBehavior: behavior,
     runOptions: { clientMessageId: "replacement-client" },
   });
+  await manager.waitForAgentRunStart(agent.id);
   return { manager, agentId: agent.id, workdir };
 }
 
@@ -3959,7 +3964,7 @@ test("a prompt after provider replacement reopens the stale session", async () =
     });
     expect(dispatch.disposition).toBe("turn_started");
     await replacement.waitForRetryStart();
-    const result = await manager.waitForAgentEvent(created.id);
+    const result = await manager.waitForAgentEvent(created.id, { waitForActive: true });
     expect(result.status).toBe("idle");
     expect(replacement.resumeOverrides).toHaveLength(1);
     const timeline = manager.getTimeline(created.id);
@@ -4042,7 +4047,7 @@ test("a replacement prompt recovers when the retired session fails to start", as
     });
     expect(dispatch.disposition).toBe("turn_started");
     await replacement.waitForRetryStart();
-    const result = await manager.waitForAgentEvent(created.id);
+    const result = await manager.waitForAgentEvent(created.id, { waitForActive: true });
     expect(result.status).toBe("idle");
     expect(replacement.resumeOverrides).toHaveLength(1);
   } finally {
@@ -8649,7 +8654,11 @@ test("unarchiveSnapshot unarchives native provider storage before clearing archi
   expect(client.archivedAtDuringUnarchive).toEqual(expect.any(String));
   expect(stored?.archivedAt).toBeNull();
   expect(stored?.workspaceId).toBe("ws-restored");
-  expect(stored?.labels).toEqual({ retained: "yes", source: "reimport" });
+  expect(stored?.labels).toEqual({
+    retained: "yes",
+    source: "reimport",
+    [AUTOMATION_REVOKED_LABEL]: "true",
+  });
 });
 
 test("unarchiveSnapshotByHandle unarchives native provider storage for the matched snapshot", async () => {
@@ -10470,7 +10479,8 @@ test("provider close failure retains the runtime for cleanup instead of allowing
 
     await expect(
       ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
-    ).resolves.toMatchObject({ id: created.id, lifecycle: "idle" });
+    ).rejects.toThrow("requires runtime cleanup");
+    expect(manager.getAgent(created.id)?.session).toBe(created.session);
   } finally {
     await manager.closeAgent("00000000-0000-4000-8000-000000000217").catch(() => undefined);
     await storage.flush().catch(() => undefined);
@@ -12069,6 +12079,574 @@ test.each(["live", "history", "accepted"] as const)(
     }
   },
 );
+
+class IdleSuspensionTestSession extends TestAgentSession {
+  override readonly capabilities = { ...TEST_CAPABILITIES, supportsSessionPersistence: true };
+  busy = false;
+  attempts = 0;
+  closeError: Error | null = null;
+  closeGate: Deferred<void> | null = null;
+  durableId = this.id;
+
+  runtimeActivitySnapshot() {
+    return { quietMs: Number.MAX_SAFE_INTEGER, hasOutstandingWork: this.busy };
+  }
+  override describePersistence() {
+    return { provider: this.provider, sessionId: this.durableId };
+  }
+  async suspendIfIdle(): Promise<"suspended" | "busy"> {
+    if (this.busy) return "busy";
+    this.attempts++;
+    await this.close();
+    return "suspended";
+  }
+  override async close(): Promise<void> {
+    if (this.closeGate) await this.closeGate.promise;
+    if (this.closeError) throw this.closeError;
+  }
+}
+
+async function idleSuspensionFixture(options: Partial<AgentManagerOptions> = {}) {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-idle-suspension-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const sessions: IdleSuspensionTestSession[] = [];
+  const resumedHandles: AgentPersistenceHandle[] = [];
+  let now = 0;
+  const client = new TestAgentClient();
+  client.createSession = async (config) => {
+    const session = new IdleSuspensionTestSession(config);
+    sessions.push(session);
+    return session;
+  };
+  client.resumeSession = async (handle, overrides) => {
+    resumedHandles.push(handle);
+    const session = new IdleSuspensionTestSession({
+      provider: "codex",
+      cwd: workdir,
+      ...overrides,
+    });
+    session.durableId = handle.sessionId;
+    sessions.push(session);
+    return session;
+  };
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+    idleTimeoutMs: 100,
+    idleSweepIntervalMs: 30_000,
+    nowMs: () => now,
+    ...options,
+  });
+  onTestFinished(async () => {
+    manager.prepareForShutdown();
+    for (const session of sessions) {
+      session.closeGate?.resolve();
+      session.closeError = null;
+    }
+    await manager.flushForShutdown();
+    await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
+    await storage.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  });
+  const agent = await manager.createAgent(
+    { provider: "codex", cwd: workdir, title: "Keep me" },
+    undefined,
+    {
+      workspaceId: "workspace-id",
+      labels: { custom: "value" },
+    },
+  );
+  return {
+    manager,
+    storage,
+    agent,
+    client,
+    sessions,
+    resumedHandles,
+    nowMs: () => now,
+    advance: (ms: number) => {
+      now += ms;
+    },
+  };
+}
+
+test("suspends an open chat only after the full quiet interval and preserves residency-independent history", async () => {
+  const { manager, storage, agent, sessions, advance } = await idleSuspensionFixture();
+  const states: string[] = [];
+  const release = manager.subscribe(
+    (event) => {
+      if (event.type === "agent_state") states.push(event.agent.lifecycle);
+    },
+    { agentId: agent.id },
+  );
+  onTestFinished(release);
+  const timeline = manager.fetchTimeline(agent.id);
+  advance(99);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(0);
+  advance(1);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(1);
+  expect(manager.getAgent(agent.id)).toBeNull();
+  expect(manager.fetchTimeline(agent.id)).toEqual(timeline);
+  expect(manager.listProviderSubagents(agent.id)).toEqual([]);
+  expect(states.at(-1)).toBe("closed");
+  expect(await storage.get(agent.id)).toMatchObject({
+    lastStatus: "closed",
+    title: "Keep me",
+    labels: { custom: "value" },
+    workspaceId: "workspace-id",
+  });
+});
+
+test("repeated suspension/resume preserves the handle and a primed empty timeline", async () => {
+  const { manager, storage, agent, advance, resumedHandles } = await idleSuspensionFixture();
+  const before = manager.fetchTimeline(agent.id);
+  for (let cycle = 0; cycle < 3; cycle++) {
+    advance(100);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    await Promise.all(
+      [0, 1, 2].map(() =>
+        ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger }),
+      ),
+    );
+    expect(manager.fetchTimeline(agent.id)).toEqual(before);
+    expect(manager.getAgent(agent.id)?.persistence?.sessionId).toBe(agent.persistence?.sessionId);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).not.toBeNull();
+  }
+  expect(resumedHandles).toHaveLength(3);
+});
+
+test("disabling cancels attempts, re-enabling starts fresh, and positive timeout edits preserve elapsed quiet", async () => {
+  const { manager, agent, advance } = await idleSuspensionFixture();
+  advance(100);
+  manager.setIdleTimeoutMs(0);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  manager.setIdleTimeoutMs(200);
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  manager.setIdleTimeoutMs(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("admitted operations exclude suspension until a full quiet interval after settlement", async () => {
+  const { manager, agent, advance } = await idleSuspensionFixture();
+  const gate = deferred<void>();
+  const operation = manager.withAgentRuntime(agent.id, () => gate.promise);
+  advance(1000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  gate.resolve();
+  await operation;
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("a request arriving after suspension commits waits and resumes once", async () => {
+  const { manager, storage, agent, sessions, advance, resumedHandles } =
+    await idleSuspensionFixture();
+  const gate = deferred<void>();
+  sessions[0]!.closeGate = gate;
+  const closing = deferred<void>();
+  const close = sessions[0]!.close.bind(sessions[0]);
+  sessions[0]!.close = async () => {
+    closing.resolve();
+    await close();
+  };
+  advance(100);
+  const suspension = manager.suspendAgentIfIdle(agent.id);
+  await closing.promise;
+  const loads = [0, 1].map(() =>
+    manager.withAgentRuntime(agent.id, () =>
+      ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger }),
+    ),
+  );
+  expect(resumedHandles).toHaveLength(0);
+  gate.resolve();
+  await suspension;
+  await Promise.all(loads);
+  expect(resumedHandles).toHaveLength(1);
+});
+
+test("an archive queued behind suspension archives the retained conversation without resuming it", async () => {
+  const { manager, storage, agent, sessions, advance, resumedHandles } =
+    await idleSuspensionFixture();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  onTestFinished(() => release.resolve());
+  sessions[0]!.close = async () => {
+    entered.resolve();
+    await release.promise;
+  };
+  advance(100);
+  const suspension = manager.suspendAgentIfIdle(agent.id);
+  await entered.promise;
+  const archive = manager.archiveAgent(agent.id);
+  release.resolve();
+  const [, result] = await Promise.all([suspension, archive]);
+  expect(await storage.get(agent.id)).toMatchObject({
+    archivedAt: result.archivedAt,
+    lastStatus: "closed",
+  });
+  expect(manager.getAgent(agent.id)).toBeNull();
+  expect(manager.getRetainedAgent(agent.id)).toBeNull();
+  expect(resumedHandles).toEqual([]);
+});
+
+test("a failed suspension retains ownership, blocks work, and explicit cleanup remains retryable", async () => {
+  const { manager, agent, sessions, advance } = await idleSuspensionFixture();
+  sessions[0]!.closeError = new Error("kill-timeout");
+  advance(100);
+  await expect(manager.suspendAgentIfIdle(agent.id)).rejects.toThrow("kill-timeout");
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(1000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(1);
+  await expect(manager.withAgentRuntime(agent.id, async () => undefined)).rejects.toThrow(
+    "runtime cleanup",
+  );
+  sessions[0]!.closeError = null;
+  await manager.closeAgent(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("a failed precommit write never closes the provider", async () => {
+  const { manager, storage, agent, sessions, advance } = await idleSuspensionFixture();
+  const persist = vi.spyOn(storage, "applySnapshot").mockRejectedValueOnce(new Error("disk full"));
+  advance(100);
+  await expect(manager.suspendAgentIfIdle(agent.id)).rejects.toThrow("disk full");
+  persist.mockRestore();
+  expect(sessions[0]!.attempts).toBe(0);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+});
+
+test("the sweep timer suspends eligible runtimes and cannot be rearmed during shutdown", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const { manager, agent, advance } = await idleSuspensionFixture();
+  try {
+    expect(vi.getTimerCount()).toBe(1);
+    advance(100);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await manager.waitForAgentClose(agent.id);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    manager.prepareForShutdown();
+    manager.setIdleTimeoutMs(100);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    manager.prepareForShutdown();
+    vi.useRealTimers();
+  }
+});
+
+test("shutdown awaits a suspension that already committed to physical release", async () => {
+  const { manager, agent, sessions, advance } = await idleSuspensionFixture();
+  const gate = deferred<void>();
+  const entered = deferred<void>();
+  sessions[0]!.close = async () => {
+    entered.resolve();
+    await gate.promise;
+  };
+  advance(100);
+  const suspension = manager.suspendAgentIfIdle(agent.id);
+  await entered.promise;
+  manager.prepareForShutdown();
+  let flushed = false;
+  const flush = manager.flushForShutdown().then(() => {
+    flushed = true;
+    return undefined;
+  });
+  await Promise.resolve();
+  expect(flushed).toBe(false);
+  gate.resolve();
+  await suspension;
+  await flush;
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test.each(["read", "unread"] as const)(
+  "marking %s during suspension preserves the closed state and attention",
+  async (state) => {
+    const { manager, storage, agent, advance } = await idleSuspensionFixture();
+    if (state === "read") await manager.markAgentUnread(agent.id);
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    onTestFinished(() => release.resolve());
+    const applySnapshot = storage.applySnapshot.bind(storage);
+    const persist = vi
+      .spyOn(storage, "applySnapshot")
+      .mockImplementation(async (snapshot, options) => {
+        if (snapshot.lifecycle === "closed") {
+          entered.resolve();
+          await release.promise;
+        }
+        return applySnapshot(snapshot, options);
+      });
+    advance(100);
+    const suspension = manager.suspendAgentIfIdle(agent.id);
+    await entered.promise;
+    const attention =
+      state === "read" ? manager.clearAgentAttention(agent.id) : manager.markAgentUnread(agent.id);
+    await storage.flush();
+    release.resolve();
+    await Promise.all([suspension, attention]);
+    persist.mockRestore();
+    const requiresAttention = state === "unread";
+    const attentionReason = requiresAttention ? "finished" : null;
+    const attentionTimestamp = requiresAttention ? expect.any(String) : null;
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(manager.getRetainedAgent(agent.id)?.attention.requiresAttention).toBe(requiresAttention);
+    expect(await storage.get(agent.id)).toMatchObject({
+      lastStatus: "closed",
+      requiresAttention,
+      attentionReason,
+      attentionTimestamp,
+    });
+  },
+);
+
+test("successful physical release stays closed when the final persistence write fails", async () => {
+  const { manager, storage, agent, sessions, advance } = await idleSuspensionFixture();
+  const original = storage.applySnapshot.bind(storage);
+  const persist = vi
+    .spyOn(storage, "applySnapshot")
+    .mockImplementationOnce(original)
+    .mockRejectedValueOnce(new Error("closed write failed"));
+  advance(100);
+  await expect(manager.suspendAgentIfIdle(agent.id)).rejects.toThrow("closed write failed");
+  persist.mockRestore();
+  expect(sessions[0]!.attempts).toBe(1);
+  expect(manager.getAgent(agent.id)).toBeNull();
+  expect(manager.getRetainedAgent(agent.id)?.runtimeSuspended).toBe(true);
+  expect((await storage.get(agent.id))?.persistence?.sessionId).toBe(agent.persistence?.sessionId);
+  await ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+  expect(manager.getAgent(agent.id)?.persistence?.sessionId).toBe(agent.persistence?.sessionId);
+});
+
+test("failed resume leaves the conversation closed and retryable without creating a fresh session", async () => {
+  const { manager, storage, agent, client, advance } = await idleSuspensionFixture();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  const resume = vi
+    .spyOn(client, "resumeSession")
+    .mockRejectedValueOnce(new Error("resume failed"));
+  await expect(
+    ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger }),
+  ).rejects.toThrow("resume failed");
+  expect(manager.getAgent(agent.id)).toBeNull();
+  expect((await storage.get(agent.id))?.lastStatus).toBe("closed");
+  await ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+  expect(resume).toHaveBeenCalledTimes(2);
+  expect(manager.getAgent(agent.id)?.persistence?.sessionId).toBe(agent.persistence?.sessionId);
+  resume.mockRestore();
+});
+
+test("queued delivery to a stored attached child keeps its parent resident through the delivery quiet interval", async () => {
+  let delivery: AgentMessageDelivery | undefined;
+  const fixture = await idleSuspensionFixture({ agentMessages: () => delivery });
+  const { manager, agent, advance, nowMs } = fixture;
+  delivery = createAgentMessageDelivery({
+    nowMs,
+    dispatch: async () => "steered",
+    onError: (error) => {
+      throw error;
+    },
+  });
+  const child = await manager.createAgent({ provider: "codex", cwd: agent.cwd }, undefined, {
+    workspaceId: agent.workspaceId,
+    labels: { [PARENT_AGENT_ID_LABEL]: agent.id },
+  });
+  await manager.closeAgent(child.id);
+  delivery.enqueue({
+    recipientId: child.id,
+    prompt: "continue",
+    source: { kind: "agent-message", agentId: agent.id },
+  });
+  advance(1000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  await delivery.close();
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test.each(["live", "closed"] as const)(
+  "an attached %s child's admitted work keeps its parent resident until the full quiet interval",
+  async (residency) => {
+    const { manager, agent, advance } = await idleSuspensionFixture();
+    const child = await manager.createAgent({ provider: "codex", cwd: agent.cwd }, undefined, {
+      workspaceId: agent.workspaceId,
+      labels: { [PARENT_AGENT_ID_LABEL]: agent.id },
+    });
+    if (residency === "closed") await manager.closeAgent(child.id);
+    advance(100);
+    const gate = deferred<void>();
+    onTestFinished(() => gate.resolve());
+    const operation = manager.withAgentRuntime(child.id, () => gate.promise);
+    advance(1000);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).not.toBeNull();
+    gate.resolve();
+    await operation;
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).not.toBeNull();
+    advance(99);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).not.toBeNull();
+    advance(1);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).toBeNull();
+  },
+);
+
+test("metadata and command reads do not extend the quiet interval", async () => {
+  const { manager, agent, advance } = await idleSuspensionFixture();
+  advance(100);
+  await manager.listAgentCommands(agent.id);
+  await manager.updateAgentMetadata(agent.id, { title: "Viewed", labels: { viewed: "yes" } });
+  await manager.clearAgentAttention(agent.id);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("unsupported adapters remain resident despite persistence support", async () => {
+  const { manager, agent, sessions, advance } = await idleSuspensionFixture();
+  Object.defineProperty(sessions[0], "suspendIfIdle", { value: undefined });
+  advance(10000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  expect(sessions[0]!.attempts).toBe(0);
+});
+
+test("the omitted timeout requires the full default fifteen-minute quiet interval", async () => {
+  const { manager, agent, advance } = await idleSuspensionFixture({ idleTimeoutMs: undefined });
+  advance(899_999);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(1);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("silent foreground work stays resident past expiry and needs a fresh quiet interval after settling", async () => {
+  const { manager, agent, sessions, advance } = await idleSuspensionFixture();
+  sessions[0]!.startTurn = async () => ({ turnId: "held-turn" });
+  const iterator = manager.streamAgent(agent.id, "A long silent turn");
+  expect((await iterator.next()).value).toMatchObject({ type: "turn_started" });
+  advance(100_000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)?.lifecycle).toBe("running");
+  sessions[0]!.pushEvent({ type: "turn_completed", provider: "codex", turnId: "held-turn" });
+  await drainAsyncGenerator(iterator);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
+test("admitted live settings block suspension and resume the same conversation after release", async () => {
+  const { manager, agent, sessions, advance, resumedHandles } = await idleSuspensionFixture();
+  const gate = deferred<void>();
+  const entered = deferred<void>();
+  sessions[0]!.setMode = async () => {
+    entered.resolve();
+    await gate.promise;
+  };
+  advance(100);
+  const setting = manager.setAgentMode(agent.id, "plan");
+  await entered.promise;
+  advance(1000);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  gate.resolve();
+  await setting;
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+  await manager.setAgentMode(agent.id, "plan");
+  expect(resumedHandles).toHaveLength(1);
+  expect(resumedHandles[0]?.sessionId).toBe(agent.persistence?.sessionId);
+});
+
+test("automatic residency changes produce neither another finish notification nor an agent.closed hook", async () => {
+  const attention = vi.fn();
+  const hooks: string[] = [];
+  const { manager, agent, advance } = await idleSuspensionFixture({
+    onAgentAttention: attention,
+    pluginLifecycle: {
+      before: async (_name, request) => request,
+      emit: (name) => {
+        hooks.push(name);
+      },
+    },
+  });
+  await manager.runAgent(agent.id, "One turn");
+  expect(attention).toHaveBeenCalledTimes(1);
+  const before = hooks.slice();
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).toBeNull();
+  expect(attention).toHaveBeenCalledTimes(1);
+  expect(hooks).toEqual(before);
+  expect(toAgentPayload(manager.getRetainedAgent(agent.id)!)).toMatchObject({
+    status: "closed",
+    runtimeSuspended: true,
+  });
+});
+
+test("suspension preserves nonempty history identities and usage across repeated resumes", async () => {
+  const { manager, storage, agent, sessions, advance } = await idleSuspensionFixture();
+  await manager.appendTimelineItem(agent.id, {
+    type: "user_message",
+    text: "Remember",
+    messageId: "native-user",
+  });
+  await manager.appendTimelineItem(agent.id, {
+    type: "assistant_message",
+    text: "Remembered",
+    messageId: "native-assistant",
+  });
+  sessions[0]!.pushEvent({
+    type: "usage_updated",
+    provider: "codex",
+    usage: { inputTokens: 11, outputTokens: 7 },
+  });
+  await manager.flush();
+  const before = manager.fetchTimeline(agent.id);
+  for (let cycle = 0; cycle < 2; cycle++) {
+    advance(100);
+    await manager.suspendAgentIfIdle(agent.id);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    await ensureAgentLoaded(agent.id, { agentManager: manager, agentStorage: storage, logger });
+    expect(manager.fetchTimeline(agent.id)).toEqual(before);
+    expect(manager.getAgent(agent.id)?.lastUsage).toMatchObject({
+      inputTokens: 11,
+      outputTokens: 7,
+    });
+  }
+});
+
+test("shutdown cancels uncommitted automatic suspension", async () => {
+  const { manager, agent, advance } = await idleSuspensionFixture();
+  advance(100);
+  manager.prepareForShutdown();
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(manager.getAgent(agent.id)).not.toBeNull();
+});
 
 test("reads the last durable assistant response without loading a stored-only child", async () => {
   const store = new RecordingTimelineStore();

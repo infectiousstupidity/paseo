@@ -10,6 +10,8 @@ import {
   WorkspaceSetupSnapshotSchema,
   WorkspaceSetupProgressMessageSchema,
   AgentTimelineEntryPayloadSchema,
+  MutableDaemonConfigSchema,
+  MutableDaemonConfigPatchSchema,
 } from "./messages.js";
 
 test("terminal listings accept older rows and retain new per-terminal directories", () => {
@@ -68,6 +70,44 @@ const LegacyAgentSnapshotPayloadSchema = AgentSnapshotPayloadSchema.extend({
 });
 
 describe("wire schema compatibility", () => {
+  test("idle timeout and runtime residency metadata stay optional for old peers", () => {
+    const config = { relay: { enabled: false }, mcp: { injectIntoAgents: false } };
+    const legacyConfig = MutableDaemonConfigSchema.omit({ idleTimeoutMs: true });
+    expect(MutableDaemonConfigSchema.parse(config).idleTimeoutMs).toBeUndefined();
+    expect(legacyConfig.parse({ ...config, idleTimeoutMs: 0 }).relay?.enabled).toBe(false);
+    expect(MutableDaemonConfigPatchSchema.parse({ idleTimeoutMs: 0 }).idleTimeoutMs).toBe(0);
+    expect(MutableDaemonConfigPatchSchema.parse({}).idleTimeoutMs).toBeUndefined();
+    const snapshot = {
+      id: "agent",
+      provider: "claude",
+      cwd: "/repo",
+      model: null,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+      lastUserMessageAt: null,
+      status: "closed",
+      capabilities: {
+        supportsStreaming: true,
+        supportsSessionPersistence: true,
+        supportsDynamicModes: false,
+        supportsMcpServers: true,
+        supportsReasoningStream: true,
+        supportsToolInvocations: true,
+      },
+      currentModeId: null,
+      availableModes: [],
+      pendingPermissions: [],
+      persistence: null,
+      title: null,
+    };
+    const legacySnapshot = AgentSnapshotPayloadSchema.omit({ runtimeSuspended: true });
+    expect(AgentSnapshotPayloadSchema.parse(snapshot).runtimeSuspended).toBeUndefined();
+    expect(legacySnapshot.parse({ ...snapshot, runtimeSuspended: true }).status).toBe("closed");
+    expect(
+      AgentSnapshotPayloadSchema.parse({ ...snapshot, runtimeSuspended: true }).runtimeSuspended,
+    ).toBe(true);
+  });
+
   test("hello parses with and without the project update capability", () => {
     const legacy = WSHelloMessageSchema.parse({
       type: "hello",

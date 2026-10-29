@@ -16,17 +16,32 @@ Each live agent in `AgentManager` carries a `lastStatus` of `initializing`, `idl
 
 An unarchived agent may be `closed` without being deleted or archived. Closing releases its provider
 processes and subscriptions while retaining its Paseo identity, persistence handle, timeline,
-workspace, labels, title, usage, attention, timestamps, and parent relationship. Opening or prompting
-the agent runs through `ensureAgentLoaded()`, which resumes the durable provider session under the
-same Paseo agent ID. Provider history is not appended again when the canonical timeline is already
-primed.
+workspace, labels, title, usage, attention, timestamps, and parent relationship. Prompts and runtime
+controls run through admission and `ensureAgentLoaded()`, resuming the durable provider session under
+the same Paseo agent ID. Reads use retained history without acquiring a provider; a primed empty
+timeline is still retained history. After daemon restart, or for a never-hydrated import, a provider
+history load may still be needed. Provider transcripts remain the durable conversation authority;
+normal bootstrap does not install a durable timeline store.
 
 Reload releases the old runtime before resuming its durable session: an idle provider process can
 still own an exclusive writer. A close failure retains that runtime for cleanup and blocks the
 replacement. Once closure succeeds, a failed resume leaves the durable agent closed and retryable.
 
-Idle agents remain resident indefinitely. Runtime closure happens only through an explicit lifecycle
-action such as archive, replacement, reload, workspace teardown, or daemon shutdown.
+Eligible public runtimes can close automatically after a continuous quiet interval. See
+[idle-timeout configuration](data-model.md#2-daemon-configuration) and the
+[provider opt-in limits](providers.md#runtime-suspension). Turns, permissions, admitted runtime
+operations, message delivery, and attached children with outstanding or unknown work keep the runtime
+resident. A tab, subscription, history read, heartbeat, usage poll, or metadata edit does not.
+
+Automatic closure leaves the tab and archive state alone, preserves timeline epoch and sequence
+numbers, and does not emit `agent.closed` plugin hooks or another finish checkpoint. Routed finish
+observers use the optional `runtimeSuspended` snapshot marker to distinguish this transition from an
+explicit close. The marker is runtime observation, not durable lifecycle state.
+
+A failed or ambiguous provider release retains cleanup ownership and refuses new work until an
+explicit close succeeds. A successful physical release followed by a failed final storage write stays
+closed in memory; its precommitted handle remains available for retry. Shutdown stops automatic
+scheduling before flushing committed transitions.
 
 A provider runtime can still die on its own — crash, OOM kill, host suspend. Work the agent parked
 inside that process dies with it: Claude Code's background Bash shells, `Monitor` watches, and

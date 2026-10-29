@@ -27,8 +27,12 @@ test("an automated send refuses to reactivate an archived worker", async () => {
   const agentStorage = {
     get: vi.fn(async () => ({ archivedAt: "2026-10-19T00:00:00.000Z" })),
   } as unknown as AgentStorage;
-  const unarchiveSnapshot = vi.fn();
-  const agentManager = { unarchiveSnapshot } as unknown as AgentManager;
+  const agentManager = new AgentManager({
+    clients: {},
+    logger: createTestLogger(),
+    idleTimeoutMs: 0,
+  });
+  const unarchiveSnapshot = vi.spyOn(agentManager, "unarchiveSnapshot");
   await expect(
     sendPromptToAgent({
       agentManager,

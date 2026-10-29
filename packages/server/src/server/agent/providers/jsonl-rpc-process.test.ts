@@ -2,7 +2,8 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import pino from "pino";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import * as processTermination from "../../../utils/tree-kill.js";
 
 import { JsonlRpcProcess, type JsonlRpcExit } from "./jsonl-rpc-process.js";
 
@@ -103,6 +104,22 @@ function startProcess(options: StartProcessOptions = {}): JsonlRpcProcess {
     ...(child ? { spawn: () => child } : {}),
   });
 }
+
+test("a JSONL kill timeout rejects close and cleanup retries even after admission was disposed", async () => {
+  const terminate = vi
+    .spyOn(processTermination, "terminateWithTreeKill")
+    .mockResolvedValueOnce("kill-timeout")
+    .mockResolvedValueOnce("killed");
+  const transport = startProcess({ child: createInMemoryChildProcess() });
+  try {
+    await expect(transport.close()).rejects.toThrow("process tree did not exit");
+    await expect(transport.request({ type: "echo" })).rejects.toThrow("closed");
+    await expect(transport.close()).resolves.toBeUndefined();
+    expect(terminate).toHaveBeenCalledTimes(2);
+  } finally {
+    terminate.mockRestore();
+  }
+});
 
 function nextExit(transport: JsonlRpcProcess): Promise<JsonlRpcExit> {
   return new Promise((resolve) => {

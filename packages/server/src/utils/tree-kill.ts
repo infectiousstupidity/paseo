@@ -1,13 +1,24 @@
 import treeKill from "tree-kill";
-import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 
 export interface TreeKillTarget {
   pid?: number;
   exitCode?: number | null;
   signalCode?: NodeJS.Signals | null;
   kill(signal?: NodeJS.Signals | number): boolean;
-  once?(event: "exit", listener: () => void): unknown;
+  once?(event: "exit", listener: () => void): void;
+}
+
+export interface ProcessIdentity {
+  pid: number;
+  /** Kernel start time, not just a reusable PID. */
+  startedAt: string;
+}
+
+export interface ProcessTreeSnapshot extends ProcessIdentity {
+  descendants: ProcessIdentity[];
 }
 
 export interface TerminateWithTreeKillOptions {
@@ -16,19 +27,8 @@ export interface TerminateWithTreeKillOptions {
   gracefulTimeoutMs: number;
   forceTimeoutMs?: number;
   onForceSignal?: () => void;
-  /**
-   * Process-tree identity captured while the root was still alive (see `captureProcessTree`). The
-   * SDK may kill the root before close verification runs, and session-owned descendants — MCP
-   * servers, Monitor/background tasks — can outlive their parent. When provided, closure is only
-   * reported successful once every tracked pid is gone; a tracked process that survives reports
-   * "kill-timeout".
-   */
+  /** Capture before an SDK can kill/reparent the root; retain across failed cleanup attempts. */
   trackedProcesses?: readonly ProcessTreeSnapshot[];
-}
-
-export interface ProcessTreeSnapshot {
-  pid: number;
-  childPids: number[];
 }
 
 export type TerminateWithTreeKillResult =
@@ -36,168 +36,164 @@ export type TerminateWithTreeKillResult =
   | "terminated"
   | "killed"
   | "kill-timeout";
-
-// Injection seam: production wires terminateWithTreeKill; tests wire a fake that
-// records which children were terminated as observable state.
 export type ProcessTerminator = (
   child: TreeKillTarget,
   options: TerminateWithTreeKillOptions,
 ) => Promise<TerminateWithTreeKillResult>;
 
+interface ProcessInfo extends ProcessIdentity {
+  parentPid: number;
+  zombie: boolean;
+}
+
+const execFileAsync = promisify(execFile);
+
+async function linuxProcessInfo(pid: number): Promise<ProcessInfo | null> {
+  try {
+    const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    return { pid, parentPid: Number(fields[1]), startedAt: fields[19]!, zombie: fields[0] === "Z" };
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "ENOENT" ||
+      (error as NodeJS.ErrnoException).code === "ESRCH"
+    )
+      return null;
+    throw error;
+  }
+}
+
+async function processTable(): Promise<ProcessInfo[]> {
+  if (process.platform === "linux") {
+    const pids = (await readdir("/proc"))
+      .map(Number)
+      .filter((pid) => Number.isInteger(pid) && pid > 0);
+    const entries = await Promise.all(pids.map(linuxProcessInfo));
+    return entries.filter((entry): entry is ProcessInfo => entry !== null);
+  }
+  if (process.platform === "win32") return [];
+  const { stdout } = await execFileAsync("ps", ["-axo", "pid=,ppid=,stat=,lstart="]);
+  return stdout
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      const [pid, parentPid, state, ...start] = line.trim().split(/\s+/);
+      if (!pid || !parentPid || !state || start.length === 0) return [];
+      return [
+        {
+          pid: Number(pid),
+          parentPid: Number(parentPid),
+          startedAt: start.join(" "),
+          zombie: state.startsWith("Z"),
+        },
+      ];
+    });
+}
+
+/** Capture every generation of session-owned descendants, including separate process groups. */
+export async function captureProcessTree(pid: number): Promise<ProcessTreeSnapshot | null> {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  const table = await processTable();
+  const root = table.find((entry) => entry.pid === pid && !entry.zombie);
+  if (!root) return null;
+  const owned = new Set([pid]);
+  const descendants: ProcessIdentity[] = [];
+  for (let size = -1; size !== owned.size; ) {
+    size = owned.size;
+    for (const entry of table) {
+      if (!owned.has(entry.pid) && owned.has(entry.parentPid)) {
+        owned.add(entry.pid);
+        if (!entry.zombie) descendants.push({ pid: entry.pid, startedAt: entry.startedAt });
+      }
+    }
+  }
+  return { pid, startedAt: root.startedAt, descendants };
+}
+
+async function survivingProcesses(tracked: readonly ProcessIdentity[]): Promise<ProcessIdentity[]> {
+  const table = process.platform === "linux" ? null : await processTable();
+  const surviving: ProcessIdentity[] = [];
+  for (const identity of tracked) {
+    const current = table
+      ? table.find((entry) => entry.pid === identity.pid)
+      : await linuxProcessInfo(identity.pid);
+    if (current && !current.zombie && current.startedAt === identity.startedAt)
+      surviving.push(identity);
+  }
+  return surviving;
+}
+
+async function signalTracked(
+  tracked: readonly ProcessIdentity[],
+  signal: NodeJS.Signals,
+): Promise<void> {
+  for (const identity of await survivingProcesses(tracked)) {
+    try {
+      process.kill(identity.pid, signal);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+    }
+  }
+}
+
+async function waitForTrackedExit(
+  tracked: readonly ProcessIdentity[],
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while ((await survivingProcesses(tracked)).length > 0) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.min(25, Math.max(1, deadline - Date.now()))),
+    );
+  }
+  return true;
+}
+
 export async function terminateWithTreeKill(
   child: TreeKillTarget,
   options: TerminateWithTreeKillOptions,
 ): Promise<TerminateWithTreeKillResult> {
-  if (isProcessExited(child)) {
-    return await verifyTrackedProcesses(null, options);
-  }
-
-  const exitPromise = waitForProcessExit(child);
-  await signalProcessTree(child, options.gracefulSignal ?? "SIGTERM");
-  if (await waitForExitOrTimeout(exitPromise, options.gracefulTimeoutMs)) {
-    return await verifyTrackedProcesses("terminated", options);
-  }
-
-  options.onForceSignal?.();
-  await signalProcessTree(child, options.forceSignal ?? "SIGKILL");
-  if (options.forceTimeoutMs === undefined) {
-    return await verifyTrackedProcesses("killed", options);
-  }
-  if (!(await waitForExitOrTimeout(exitPromise, options.forceTimeoutMs))) {
-    return "kill-timeout";
-  }
-  return await verifyTrackedProcesses("killed", options);
-}
-
-/**
- * Capture the process tree (children one level deep — what the SDK reparents when it kills the
- * root) while the root is alive, so closure verification can still see it afterwards.
- */
-export async function captureProcessTree(pid: number): Promise<ProcessTreeSnapshot | null> {
-  if (!Number.isInteger(pid) || pid <= 0 || isProcessDead(pid)) {
-    return null;
-  }
-  const childPids = await listProcessChildren(pid);
-  return { pid, childPids };
-}
-
-function isProcessDead(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-async function listProcessChildren(pid: number): Promise<number[]> {
-  if (process.platform !== "linux") {
-    return new Promise<number[]>((resolve) => {
-      const proc = spawn("pgrep", ["-P", String(pid)], { stdio: ["ignore", "pipe", "ignore"] });
-      let stdout = "";
-      proc.stdout?.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      proc.on("error", () => resolve([]));
-      proc.on("close", () =>
-        resolve(
-          stdout
-            .split("\n")
-            .map((line) => parseInt(line.trim(), 10))
-            .filter(Number.isInteger),
-        ),
-      );
-    });
-  }
-
-  const entries = await readdir("/proc").catch(() => [] as string[]);
-  const children: number[] = [];
-  for (const entry of entries) {
-    const childPid = Number(entry);
-    if (!Number.isInteger(childPid) || childPid <= 0) {
-      continue;
-    }
-    try {
-      const stat = await readFile(`/proc/${entry}/stat`, "utf8"); // comm is parenthesised and may contain spaces; ppid follows the closing parenthesis.
-      const tail = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-      if (tail[1] === String(pid)) {
-        children.push(childPid);
-      }
-    } catch {
-      // Process vanished mid-scan.
+  const captured =
+    child.pid && !isProcessExited(child) ? await captureProcessTree(child.pid) : null;
+  const snapshots = [...(options.trackedProcesses ?? []), ...(captured ? [captured] : [])];
+  const tracked: ProcessIdentity[] = [];
+  for (const snapshot of snapshots) tracked.push(snapshot, ...snapshot.descendants);
+  let result: TerminateWithTreeKillResult = "already-exited";
+  if (!isProcessExited(child)) {
+    const exitPromise = waitForProcessExit(child);
+    await signalProcessTree(child, options.gracefulSignal ?? "SIGTERM");
+    if (await waitForExitOrTimeout(exitPromise, options.gracefulTimeoutMs)) result = "terminated";
+    else {
+      options.onForceSignal?.();
+      await signalProcessTree(child, options.forceSignal ?? "SIGKILL");
+      if (
+        options.forceTimeoutMs !== undefined &&
+        !(await waitForExitOrTimeout(exitPromise, options.forceTimeoutMs))
+      )
+        return "kill-timeout";
+      result = "killed";
     }
   }
-  return children;
-}
-
-/**
- * A kill that cannot be verified is not a success. With no tracked descendants this preserves the
- * historic results exactly; with them, every tracked pid must be gone before success stands, and
- * tracked processes get the same TERM-then-escalation grace as the tree.
- */
-async function verifyTrackedProcesses(
-  result: TerminateWithTreeKillResult | null,
-  options: TerminateWithTreeKillOptions,
-): Promise<TerminateWithTreeKillResult> {
-  const tracked = (options.trackedProcesses ?? []).filter(
-    (snapshot) =>
-      Number.isInteger(snapshot.pid) && snapshot.pid > 0 && !isProcessDead(snapshot.pid),
-  );
-  if (tracked.length === 0) {
-    return result ?? "already-exited";
-  }
-
-  const gracefulSignal = options.gracefulSignal ?? "SIGTERM";
-  const forceSignal = options.forceSignal ?? "SIGKILL";
-  for (const snapshot of tracked) {
-    try {
-      process.kill(snapshot.pid, gracefulSignal);
-    } catch {
-      // Already gone between check and signal.
-    }
-  }
-  let graceMs = options.gracefulTimeoutMs;
-  while (graceMs > 0) {
-    if (tracked.every((snapshot) => isProcessDead(snapshot.pid))) {
-      return result ?? "already-exited";
-    }
-    await new Promise((resolve) => setTimeout(resolve, Math.min(100, graceMs)));
-    graceMs -= 100;
-  }
-  for (const snapshot of tracked) {
-    try {
-      process.kill(snapshot.pid, forceSignal);
-    } catch {
-      // Already gone.
-    }
-  }
-  let forceGraceMs = options.forceTimeoutMs ?? 2000;
-  while (forceGraceMs > 0) {
-    if (tracked.every((snapshot) => isProcessDead(snapshot.pid))) {
-      return result ?? "already-exited";
-    }
-    await new Promise((resolve) => setTimeout(resolve, Math.min(100, forceGraceMs)));
-    forceGraceMs -= 100;
-  }
-  return "kill-timeout";
+  // The root exiting does not prove its descendants exited. Their identity survives reparenting.
+  await signalTracked(tracked, options.gracefulSignal ?? "SIGTERM");
+  if (await waitForTrackedExit(tracked, options.gracefulTimeoutMs)) return result;
+  await signalTracked(tracked, options.forceSignal ?? "SIGKILL");
+  return (await waitForTrackedExit(tracked, options.forceTimeoutMs ?? 2000))
+    ? result
+    : "kill-timeout";
 }
 
 export function signalProcessTree(child: TreeKillTarget, signal: NodeJS.Signals): Promise<void> {
-  if (isProcessExited(child)) {
-    return Promise.resolve();
-  }
-
+  if (isProcessExited(child)) return Promise.resolve();
   const pid = child.pid;
   if (typeof pid !== "number" || pid <= 0) {
     signalDirectChild(child, signal);
     return Promise.resolve();
   }
-
   return new Promise((resolve) => {
     treeKill(pid, signal, (error) => {
-      if (error) {
-        signalDirectChild(child, signal);
-      }
+      if (error) signalDirectChild(child, signal);
       resolve();
     });
   });
@@ -207,7 +203,7 @@ function signalDirectChild(child: TreeKillTarget, signal: NodeJS.Signals): void 
   try {
     child.kill(signal);
   } catch {
-    // Ignore cleanup races.
+    /* Cleanup race. */
   }
 }
 
@@ -219,13 +215,7 @@ function isProcessExited(child: TreeKillTarget): boolean {
 }
 
 function waitForProcessExit(child: TreeKillTarget): Promise<void> {
-  if (isProcessExited(child)) {
-    return Promise.resolve();
-  }
-  if (!child.once) {
-    return new Promise(() => undefined);
-  }
-
+  if (isProcessExited(child)) return Promise.resolve();
   return new Promise((resolve) => {
     child.once?.("exit", resolve);
   });
@@ -244,8 +234,6 @@ async function waitForExitOrTimeout(
       }),
     ]);
   } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
+    if (timer) clearTimeout(timer);
   }
 }

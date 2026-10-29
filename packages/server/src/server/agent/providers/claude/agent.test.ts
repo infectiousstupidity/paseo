@@ -9,6 +9,7 @@ import type { PermissionResult, SDKMessage, SDKUserMessage } from "@anthropic-ai
 
 import { createTestLogger } from "../../../../test-utils/test-logger.js";
 import * as executableUtils from "../../../../executable-resolution/executable-resolution.js";
+import * as processTermination from "../../../../utils/tree-kill.js";
 import { buildAgentAttentionNotificationPayload } from "@getpaseo/protocol/agent-attention-notification";
 import {
   ClaudeAgentClient,
@@ -2363,6 +2364,7 @@ describe("ClaudeAgentSession context window usage", () => {
   const logger = createTestLogger();
 
   interface QueryFactoryForTurnsOptions {
+    emitInputLifecycle?: boolean;
     getContextUsage?: ReturnType<typeof vi.fn>;
     model?: string;
   }
@@ -2391,6 +2393,145 @@ describe("ClaudeAgentSession context window usage", () => {
       model: options?.model,
     });
   }
+
+  test.each(["local_bash", "local_workflow", "local_agent", "monitor", "unknown_future_task"])(
+    "idle suspension retains all %s work, independently of the subagent UI filter",
+    async (taskType) => {
+      let now = 0;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const session = await createSessionForTurns(
+        [
+          [
+            createInitMessage(),
+            {
+              type: "system",
+              subtype: "task_started",
+              task_id: "owned-task",
+              task_type: taskType,
+              tool_use_id: "tool-1",
+            },
+            {
+              type: "system",
+              subtype: "background_tasks_changed",
+              tasks: [{ task_id: "owned-task", task_type: taskType, description: "owned" }],
+            },
+            createSuccessResult(),
+          ],
+          [
+            createInitMessage(),
+            {
+              type: "system",
+              subtype: "task_notification",
+              task_id: "owned-task",
+              status: "completed",
+              output_file: "",
+              summary: "done",
+            },
+            { type: "system", subtype: "background_tasks_changed", tasks: [] },
+            createSuccessResult(),
+          ],
+        ],
+        { emitInputLifecycle: true },
+      );
+      try {
+        await collectStreamEvents(session);
+        now = 10_000;
+        expect(session.runtimeActivitySnapshot?.()?.hasOutstandingWork).toBe(true);
+        await expect(session.suspendIfIdle?.({ idleForMs: 100 })).resolves.toBe("busy");
+        await collectStreamEvents(session);
+        expect(session.runtimeActivitySnapshot?.()?.hasOutstandingWork).toBe(false);
+        await expect(session.suspendIfIdle?.({ idleForMs: 100 })).resolves.toBe("busy");
+        now += 100;
+        await expect(session.suspendIfIdle?.({ idleForMs: 100 })).resolves.toBe("suspended");
+        await expect(session.startTurn("must not start after suspension")).rejects.toThrow(
+          "closed",
+        );
+      } finally {
+        await session.close();
+      }
+    },
+  );
+
+  test("command discovery reserves provider control without resetting its quiet interval", async () => {
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const session = await createSessionForTurns(
+      [
+        [
+          createInitMessage(),
+          { type: "system", subtype: "background_tasks_changed", tasks: [] },
+          createSuccessResult(),
+        ],
+      ],
+      { emitInputLifecycle: true },
+    );
+    try {
+      await collectStreamEvents(session);
+      now = 100;
+      await session.listCommands?.();
+      expect(session.runtimeActivitySnapshot?.()).toEqual({
+        quietMs: 100,
+        hasOutstandingWork: false,
+      });
+      await expect(session.suspendIfIdle?.({ idleForMs: 100 })).resolves.toBe("suspended");
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("Claude close rejects ambiguous release, shares concurrent cleanup, and retries with the retained tree identity", async () => {
+    const session = await createSessionForTurns([]);
+    const snapshot = { pid: 99999, startedAt: "owned-generation", descendants: [] };
+    const capture = vi.spyOn(processTermination, "captureProcessTree").mockResolvedValue(snapshot);
+    const terminate = vi
+      .spyOn(processTermination, "terminateWithTreeKill")
+      .mockResolvedValueOnce("kill-timeout")
+      .mockResolvedValueOnce("killed");
+    Reflect.set(session, "childProcess", { pid: snapshot.pid });
+    const first = session.close();
+    const concurrent = session.close();
+    expect(concurrent).toBe(first);
+    await expect(first).rejects.toThrow("process tree did not exit");
+    await expect(session.startTurn("No new work after failed cleanup")).rejects.toThrow("closed");
+    await session.close();
+    expect(capture).toHaveBeenCalledTimes(1);
+    expect(terminate).toHaveBeenCalledTimes(2);
+    expect(terminate.mock.calls[1]?.[1].trackedProcesses).toEqual([snapshot]);
+    await session.close();
+    expect(terminate).toHaveBeenCalledTimes(2);
+  });
+
+  test("a CLI without a complete background snapshot stays unsupported, not falsely quiet", async () => {
+    const session = await createSessionForTurns([[createInitMessage(), createSuccessResult()]]);
+    try {
+      await collectStreamEvents(session);
+      expect(session.runtimeActivitySnapshot?.()).toBeNull();
+      await expect(session.suspendIfIdle?.({ idleForMs: 0 })).resolves.toBe("unsupported");
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("a complete background snapshot blocks suspension even when task edges were missed", async () => {
+    const session = await createSessionForTurns([
+      [
+        createInitMessage(),
+        {
+          type: "system",
+          subtype: "background_tasks_changed",
+          tasks: [{ task_id: "unannounced", task_type: "local_bash", description: "background" }],
+        },
+        createSuccessResult(),
+      ],
+    ]);
+    try {
+      await collectStreamEvents(session);
+      expect(session.runtimeActivitySnapshot?.()?.hasOutstandingWork).toBe(true);
+      await expect(session.suspendIfIdle?.({ idleForMs: 0 })).resolves.toBe("busy");
+    } finally {
+      await session.close();
+    }
+  });
 
   test("emits canonical task snapshots from Claude TaskCreate results", async () => {
     const session = await createSessionForTest();
@@ -2468,7 +2609,15 @@ describe("ClaudeAgentSession context window usage", () => {
       }
 
       void (async () => {
-        for await (const _ of prompt) {
+        for await (const input of prompt) {
+          if (
+            options?.emitInputLifecycle &&
+            input &&
+            typeof input === "object" &&
+            "uuid" in input
+          ) {
+            enqueue({ type: "command_lifecycle", command_uuid: input.uuid, state: "started" });
+          }
           const turnMessages = turns[turnIndex] ?? [];
           turnIndex += 1;
           for (const message of turnMessages) {

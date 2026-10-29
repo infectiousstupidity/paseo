@@ -34,6 +34,27 @@ Exact MCP preapproval is a separate daemon-owned contract. A new provider must f
 closed for Hub unattended execution until it can approve one exact injected MCP
 server and tool identity without approving native tools.
 
+## Runtime suspension
+
+Session persistence does not establish safe automatic release. The optional
+`AgentSession.suspendIfIdle()` contract owns complete activity detection and the commitment to close;
+missing support keeps a runtime resident. Share cleanup with explicit `close()`. A successful result
+requires verified process-tree release, and a failed cleanup must remain retryable even after input
+admission has closed. Never release a provider-wide or externally owned host for one session.
+
+| Runtime                             | Automatic suspension                                        | Limitation                                                                                                                                                                                                                                   |
+| ----------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude on POSIX                     | Opt-in after a complete `background_tasks_changed` snapshot | Older CLIs that do not emit the snapshot after SDK `reinitialize()` stay resident. The subagent UI deliberately filters background Bash and cannot establish quiescence. All task types, including unknown ones, block release while active. |
+| Claude on Windows                   | Unsupported                                                 | Descendant-generation verification is not available through the POSIX process-table path.                                                                                                                                                    |
+| Codex                               | Unsupported                                                 | Native threads, goals, and background command lifetimes do not yet have a complete provider-owned suspension fence. Persistence and an idle root turn are insufficient.                                                                      |
+| Pi                                  | Unsupported                                                 | Extension-owned asynchronous work is not completely observable through RPC. Opt-in must cross the runtime/extension contract, not depend on extension names in the manager.                                                                  |
+| ACP/Copilot, OMP, OpenCode, plugins | Unsupported                                                 | Require equivalent resume, activity, and ownership-aware teardown evidence before opting in.                                                                                                                                                 |
+
+The Claude idle-suspension case in `providers/claude/agent.real.e2e.test.ts` is a release gate: run it
+against the deployed CLI to verify continuation under the same handle and owned-process release.
+Adapter fixtures alone do not establish real-provider coverage. General residency and cold-history
+semantics belong to [agent lifecycle](agent-lifecycle.md#runtime-residency).
+
 ## Core adapter patterns
 
 ### ACP (Agent Client Protocol) -- recommended

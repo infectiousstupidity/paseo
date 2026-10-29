@@ -24,7 +24,10 @@ interface PendingAgentInitialization {
   options: { broadcastTimeline: boolean };
 }
 
-const pendingAgentInitializations = new Map<string, PendingAgentInitialization>();
+const pendingAgentInitializations = new WeakMap<
+  AgentLoaderManager,
+  Map<string, PendingAgentInitialization>
+>();
 
 export type AgentLoaderManager = Pick<
   AgentManager,
@@ -41,9 +44,30 @@ export interface EnsureAgentLoadedDeps {
   agentStorage: AgentStorage;
   validProviders?: Iterable<AgentProvider>;
   broadcastTimeline?: boolean;
-  /** Per-manager in-flight loads shared with the loader so both dedupe together. */
-  pendingLoads?: Map<string, PendingAgentInitialization>;
   logger: Logger;
+}
+
+/** Retained history never acquires a runtime; cold/legacy records still hydrate through the provider. */
+export async function ensureAgentHistory(
+  agentId: string,
+  deps: EnsureAgentLoadedDeps & {
+    agentManager: AgentLoaderManager & Pick<AgentManager, "getRetainedAgent">;
+  },
+): Promise<ManagedAgent> {
+  const live = deps.agentManager.getAgent(agentId);
+  if (live?.historyPrimed) return live;
+  const record = await deps.agentStorage.get(agentId);
+  if (!record && !live) throw new AgentNotFoundError(agentId);
+  const retained = deps.agentManager.getRetainedAgent(agentId);
+  if (retained && record)
+    return {
+      ...retained,
+      config: { ...retained.config, ...buildConfigOverrides(record) },
+      labels: record.labels,
+      attention: extractAttention(record),
+      updatedAt: new Date(record.updatedAt),
+    };
+  return ensureAgentLoaded(agentId, deps);
 }
 
 export async function ensureUnarchivedAgentLoaded(
@@ -75,7 +99,11 @@ export async function ensureAgentLoaded(
 ): Promise<ManagedAgent> {
   await deps.agentManager.waitForAgentClose?.(agentId);
 
-  const pendingLoads = deps.pendingLoads ?? pendingAgentInitializations;
+  let pendingLoads = pendingAgentInitializations.get(deps.agentManager);
+  if (!pendingLoads) {
+    pendingLoads = new Map();
+    pendingAgentInitializations.set(deps.agentManager, pendingLoads);
+  }
 
   const inflight = pendingLoads.get(agentId);
   if (inflight) {
@@ -150,7 +178,7 @@ export async function ensureAgentLoaded(
   })();
 
   const pending: PendingAgentInitialization = { promise: initPromise, options: pendingOptions };
-  pendingAgentInitializations.set(agentId, pending);
+  pendingLoads.set(agentId, pending);
 
   try {
     return await initPromise;

@@ -85,7 +85,13 @@ import type {
   PiThinkingLevel,
 } from "./rpc-types.js";
 import { PiUsagePoller, type PiUsagePollScheduler } from "./usage-poller.js";
-import { feedbackBridgeTarget, piFeedbackRuntimeBridge, spawnFeedbackChild, type FeedbackBridgeTarget, type FeedbackRole } from "./feedback-bridge.js";
+import {
+  feedbackBridgeTarget,
+  piFeedbackRuntimeBridge,
+  spawnFeedbackChild,
+  type FeedbackBridgeTarget,
+  type FeedbackRole,
+} from "./feedback-bridge.js";
 import {
   PI_SUBAGENT_RPC_COMMAND,
   PI_SUBAGENT_RPC_MARKER,
@@ -202,6 +208,16 @@ export interface PiRpcAgentClientOptions {
   usagePollScheduler?: PiUsagePollScheduler;
 }
 
+interface PiSubagentControlInput {
+  action: "status" | "stop" | "steer";
+  runId: string;
+  childId: string;
+  snapshotId: string;
+  index: number;
+  sessionId: string;
+  message?: string;
+}
+
 interface PiPromptPayload {
   text: string;
   images?: PiImageContent[];
@@ -295,6 +311,12 @@ interface PiTempFile {
 
 interface PiCapturedEntry extends PiCapturedUserMessageEntry {
   parentId: string | null;
+}
+
+interface PendingSubagentRpc {
+  method: PiSubagentRpcMethod;
+  resolve: (result: PiSubagentRpcResult) => void;
+  timer: NodeJS.Timeout;
 }
 
 interface PendingExtensionResult {
@@ -1232,13 +1254,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly contextUserEntries: PiCapturedEntry[] = [];
   private readonly treeUserEntriesById = new Map<string, PiCapturedEntry>();
   private readonly pendingExtensionResults = new Map<string, PendingExtensionResult>();
-  private readonly pendingSubagentRpc = new Map<
-    string,
-    {
-      method: PiSubagentRpcMethod;
-      settle: (result: PiSubagentRpcResult) => void;
-    }
-  >();
+  private readonly pendingSubagentRpc = new Map<string, PendingSubagentRpc>();
   private readonly observedAsyncRunIds = new Set<string>();
   private readonly feedbackBridge: FeedbackBridgeTarget | undefined;
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
@@ -1250,6 +1266,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly logger: Logger;
   private readonly usagePoller: PiUsagePoller;
   private closed = false;
+  private runtimeReleased = false;
   private readonly closeController = new AbortController();
   private readonly pendingExtensionHydrations = new Set<Promise<void>>();
   // Pi publishes the terminal before acknowledging abort. Autonomous runs have no
@@ -1635,7 +1652,10 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async spawnAnnotationChild(input: {
-    requestId: string; sessionId: string; role: FeedbackRole; task: string;
+    requestId: string;
+    sessionId: string;
+    role: FeedbackRole;
+    task: string;
   }): Promise<{ ok: boolean; requestId: string; runId?: string; reason?: string }> {
     if (this.closed || !this.feedbackBridge || input.sessionId !== this.state.sessionId)
       return { ok: false, requestId: input.requestId, reason: "unavailable" };
@@ -1668,39 +1688,118 @@ export class PiRpcAgentSession implements AgentSession {
    * Only daemon-owned status.json identities may reach here. The upstream status snapshot
    * is rechecked immediately before any mutation; absence/ambiguity disables controls.
    */
-  async controlSubagent(input: {
-    action: "status" | "stop" | "steer";
-    runId: string;
-    childId: string;
-    snapshotId: string;
-    index: number;
-    sessionId: string;
-    message?: string;
-  }): Promise<PiSubagentRpcResult> {
-    const fail = (message: string): PiSubagentRpcResult =>
-      ({ ok: false, reason: "invalid_target", message });
-    if (this.closed || input.sessionId !== this.state.sessionId ||
-        !validPiSubagentRunId(input.runId) || !this.observedAsyncRunIds.has(input.runId) ||
-        !Number.isSafeInteger(input.index) || input.index < 0 || !input.childId ||
-        !input.snapshotId || input.snapshotId.length > 256 ||
-        input.childId.length > 256 || /[\r\n]/.test(input.childId)) {
-      return fail("Child target is not owned by the active parent Pi session.");
-    }
-    if (input.action === "steer" && (!input.message?.trim() ||
-        Buffer.byteLength(input.message, "utf8") > 360)) {
-      return fail("Steering instruction must be nonempty and at most 360 UTF-8 bytes.");
-    }
+  async controlSubagent(input: PiSubagentControlInput): Promise<PiSubagentRpcResult> {
+    const invalidTarget = this.validateSubagentControl(input);
+    if (invalidTarget) return { ok: false, reason: "invalid_target", message: invalidTarget };
     const ping = await this.pingSubagents();
     if (!ping.ok) return ping;
-    const methods = ping.data.methods;
-    const capabilities = ping.data.capabilities;
-    if (!Array.isArray(methods) || !methods.includes(input.action) ||
-        !capabilities || typeof capabilities !== "object" ||
-        (input.action === "stop" && (capabilities as Record<string, unknown>).stop !== true) ||
-        (input.action === "steer" && ((capabilities as Record<string, unknown>).steer !== true ||
-          (capabilities as Record<string, unknown>).nonRecoveringSteer !== true))) {
-      return { ok: false, reason: "unsupported", message: "Installed pi-subagents does not support this scoped control." };
+    if (!this.supportsSubagentControl(input.action, ping.data)) {
+      return {
+        ok: false,
+        reason: "unsupported",
+        message: "Installed pi-subagents does not support this scoped control.",
+      };
     }
+    const current = await this.readSubagentControlState(input);
+    if (!current.ok || input.action === "status") return current;
+    const { state, runState } = current.data;
+    if (runState !== "running" && runState !== "queued") {
+      return { ok: false, reason: "invalid_target", message: "Async run is not active." };
+    }
+    if (state !== "running" && state !== "queued") {
+      return { ok: false, reason: "invalid_target", message: "Child is no longer controllable." };
+    }
+    if (input.action === "stop") {
+      const receipt = await this.callSubagentRpc("stop", {
+        runId: input.runId,
+        childId: input.childId,
+        index: input.index,
+      });
+      if (!receipt.ok) return receipt;
+      if (receipt.data.childId !== input.childId || receipt.data.runId !== input.runId)
+        return {
+          ok: false,
+          reason: "invalid_reply",
+          message: "Stop acknowledgement did not match the child.",
+        };
+      return { ok: true, data: { state: "stopping", childId: input.childId } };
+    }
+    const receipt = await this.callSubagentRpc("steer", {
+      runId: input.runId,
+      childId: input.childId,
+      index: input.index,
+      message: input.message!.trim(),
+    });
+    if (!receipt.ok) return receipt;
+    const details = receipt.data.details;
+    const deliveryStatus =
+      details && typeof details === "object"
+        ? (details as Record<string, unknown>).deliveryStatus
+        : receipt.data.deliveryStatus;
+    if (deliveryStatus !== "queued" && deliveryStatus !== "delivered") {
+      return {
+        ok: false,
+        reason: "invalid_reply",
+        message: "Steer delivery acknowledgement was ambiguous.",
+      };
+    }
+    return { ok: true, data: { deliveryStatus } };
+  }
+
+  private validateSubagentControl(input: PiSubagentControlInput): string | null {
+    if (
+      this.closed ||
+      input.sessionId !== this.state.sessionId ||
+      !validPiSubagentRunId(input.runId) ||
+      !this.observedAsyncRunIds.has(input.runId) ||
+      !Number.isSafeInteger(input.index) ||
+      input.index < 0 ||
+      !input.childId ||
+      !input.snapshotId ||
+      input.snapshotId.length > 256 ||
+      input.childId.length > 256 ||
+      /[\r\n]/.test(input.childId)
+    ) {
+      return "Child target is not owned by the active parent Pi session.";
+    }
+    if (
+      input.action === "steer" &&
+      (!input.message?.trim() || Buffer.byteLength(input.message, "utf8") > 360)
+    ) {
+      return "Steering instruction must be nonempty and at most 360 UTF-8 bytes.";
+    }
+    return null;
+  }
+
+  private supportsSubagentControl(
+    action: PiSubagentControlInput["action"],
+    data: Record<string, unknown>,
+  ): boolean {
+    const methods = data.methods;
+    const capabilities = data.capabilities;
+    if (
+      !Array.isArray(methods) ||
+      !methods.includes(action) ||
+      !capabilities ||
+      typeof capabilities !== "object" ||
+      (action === "stop" && (capabilities as Record<string, unknown>).stop !== true) ||
+      (action === "steer" &&
+        ((capabilities as Record<string, unknown>).steer !== true ||
+          (capabilities as Record<string, unknown>).nonRecoveringSteer !== true))
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  private async readSubagentControlState(
+    input: PiSubagentControlInput,
+  ): Promise<PiSubagentRpcResult> {
+    const fail = (message: string): PiSubagentRpcResult => ({
+      ok: false,
+      reason: "invalid_target",
+      message,
+    });
     const fresh = await this.statusSubagent(input.runId);
     if (!fresh.ok) return fresh;
     const snapshot = fresh.data.asyncSnapshot;
@@ -1708,54 +1807,41 @@ export class PiRpcAgentSession implements AgentSession {
       return fail("No authoritative async child snapshot is available.");
     }
     const typed = snapshot as Record<string, unknown>;
-    if (typed.kind !== "pi-subagents.async-status-snapshot" || typed.version !== 1 ||
-        !Array.isArray(typed.runs)) return fail("Unsupported async snapshot version.");
-    const runs = typed.runs.filter((run): run is Record<string, unknown> =>
-      !!run && typeof run === "object" && !Array.isArray(run) && (run as Record<string, unknown>).id === input.runId);
+    if (
+      typed.kind !== "pi-subagents.async-status-snapshot" ||
+      typed.version !== 1 ||
+      !Array.isArray(typed.runs)
+    )
+      return fail("Unsupported async snapshot version.");
+    const runs = typed.runs.filter(
+      (run): run is Record<string, unknown> =>
+        !!run &&
+        typeof run === "object" &&
+        !Array.isArray(run) &&
+        (run as Record<string, unknown>).id === input.runId,
+    );
     if (runs.length !== 1) return fail("Async run is missing or ambiguous.");
     const run = runs[0]!;
     if (!Array.isArray(run.children)) return fail("Async run has no verified children.");
-    const steps = run.children.filter((step): step is Record<string, unknown> =>
-      !!step && typeof step === "object" && !Array.isArray(step) &&
-      (step as Record<string, unknown>).kind === "step");
+    const steps = run.children.filter(
+      (step): step is Record<string, unknown> =>
+        !!step &&
+        typeof step === "object" &&
+        !Array.isArray(step) &&
+        (step as Record<string, unknown>).kind === "step",
+    );
     // Native status step index is authoritative; never derive it from a display row.
     const child = steps[input.index];
-    if (!child || child.id !== input.snapshotId ||
-        steps.filter((step) => step.id === input.snapshotId).length !== 1) {
+    if (
+      !child ||
+      child.id !== input.snapshotId ||
+      steps.filter((step) => step.id === input.snapshotId).length !== 1
+    ) {
       return fail("Child identity changed or is ambiguous.");
     }
     const state = child.state;
     if (typeof state !== "string") return fail("Child state is unavailable.");
-    if (input.action === "status") {
-      return { ok: true, data: { state, runState: run.state, childId: input.childId } };
-    }
-    if (run.state !== "running" && run.state !== "queued") {
-      return fail("Async run is not active.");
-    }
-    if (state !== "running" && state !== "queued") {
-      return fail("Child is no longer controllable.");
-    }
-    if (input.action === "stop") {
-      const receipt = await this.callSubagentRpc("stop", {
-        runId: input.runId, childId: input.childId, index: input.index,
-      });
-      if (!receipt.ok) return receipt;
-      if (receipt.data.childId !== input.childId || receipt.data.runId !== input.runId)
-        return { ok: false, reason: "invalid_reply", message: "Stop acknowledgement did not match the child." };
-      return { ok: true, data: { state: "stopping", childId: input.childId } };
-    }
-    const receipt = await this.callSubagentRpc("steer", {
-      runId: input.runId, childId: input.childId, index: input.index, message: input.message!.trim(),
-    });
-    if (!receipt.ok) return receipt;
-    const details = receipt.data.details;
-    const deliveryStatus = details && typeof details === "object"
-      ? (details as Record<string, unknown>).deliveryStatus
-      : receipt.data.deliveryStatus;
-    if (deliveryStatus !== "queued" && deliveryStatus !== "delivered") {
-      return { ok: false, reason: "invalid_reply", message: "Steer delivery acknowledgement was ambiguous." };
-    }
-    return { ok: true, data: { deliveryStatus } };
+    return { ok: true, data: { state, runState: run.state, childId: input.childId } };
   }
 
   private async callSubagentRpc(
@@ -1771,7 +1857,11 @@ export class PiRpcAgentSession implements AgentSession {
       const state = await this.runtimeSession.getState();
       if (this.closed) return { ok: false, reason: "closed", message: "Pi session closed." };
       if (state.sessionId !== this.state.sessionId) {
-        return { ok: false, reason: "unavailable", message: "The parent Pi session identity changed." };
+        return {
+          ok: false,
+          reason: "unavailable",
+          message: "The parent Pi session identity changed.",
+        };
       }
       if (state.isStreaming || state.isCompacting || this.activeTurnId) {
         return { ok: false, reason: "busy", message: "Parent Pi agent is busy." };
@@ -1779,9 +1869,16 @@ export class PiRpcAgentSession implements AgentSession {
       // Never send /paseo_subagent_rpc if Pi did not load our integration command:
       // unrecognized slash text might otherwise reach the model as a normal prompt.
       const commands = await this.runtimeSession.getCommands();
-      if (!commands.some((command) =>
-        command.name === PI_SUBAGENT_RPC_COMMAND && command.source === "extension")) {
-        return { ok: false, reason: "unavailable", message: "The Pi integration command is not loaded." };
+      if (
+        !commands.some(
+          (command) => command.name === PI_SUBAGENT_RPC_COMMAND && command.source === "extension",
+        )
+      ) {
+        return {
+          ok: false,
+          reason: "unavailable",
+          message: "The Pi integration command is not loaded.",
+        };
       }
     } catch {
       return { ok: false, reason: "unavailable", message: "Cannot read the parent Pi state." };
@@ -1790,47 +1887,65 @@ export class PiRpcAgentSession implements AgentSession {
     const requestId = randomUUID();
     const resultPromise = new Promise<PiSubagentRpcResult>((resolve) => {
       const timer = setTimeout(() => {
-        settle({ ok: false, reason: "timeout", message: "Pi subagent RPC notification timed out." });
+        this.settleSubagentRpc(requestId, {
+          ok: false,
+          reason: "timeout",
+          message: "Pi subagent RPC notification timed out.",
+        });
       }, PI_SUBAGENT_RPC_TIMEOUT_MS + 1000);
-      const settle = (result: PiSubagentRpcResult) => {
-        clearTimeout(timer);
-        this.pendingSubagentRpc.delete(requestId);
-        resolve(result);
-      };
-      this.pendingSubagentRpc.set(requestId, { method, settle });
+      this.pendingSubagentRpc.set(requestId, { method, resolve, timer });
     });
-    const encoded = Buffer.from(JSON.stringify({
-      version: 1, requestId, method, ...params,
-    })).toString("base64url");
+    const encoded = Buffer.from(
+      JSON.stringify({
+        version: 1,
+        requestId,
+        method,
+        ...params,
+      }),
+    ).toString("base64url");
     // A stalled Pi prompt acknowledgement must not hold the caller past our deadline.
     // The notification can arrive synchronously before the prompt acknowledgement.
     if (this.closed || this.activeTurnId || this.activeTurnStarted) {
-      this.pendingSubagentRpc.get(requestId)?.settle({
+      this.settleSubagentRpc(requestId, {
         ok: false,
         reason: this.closed ? "closed" : "busy",
         message: this.closed ? "Pi session closed." : "Parent Pi agent started a turn.",
       });
       return resultPromise;
     }
-    void this.runtimeSession.prompt(`/${PI_SUBAGENT_RPC_COMMAND} ${encoded}`)
+    void this.runtimeSession
+      .prompt(`/${PI_SUBAGENT_RPC_COMMAND} ${encoded}`)
       .then((ack) => {
         if (ack.agentInvoked === true) {
-          this.pendingSubagentRpc.get(requestId)?.settle({
-            ok: false, reason: "unavailable", message: "Pi did not handle the internal slash command locally.",
+          this.settleSubagentRpc(requestId, {
+            ok: false,
+            reason: "unavailable",
+            message: "Pi did not handle the internal slash command locally.",
           });
         }
+        return undefined;
       })
       .catch(() => {
-        this.pendingSubagentRpc.get(requestId)?.settle({
-          ok: false, reason: "unavailable", message: "Pi rejected the internal RPC command.",
+        this.settleSubagentRpc(requestId, {
+          ok: false,
+          reason: "unavailable",
+          message: "Pi rejected the internal RPC command.",
         });
       });
     return resultPromise;
   }
 
+  private settleSubagentRpc(requestId: string, result: PiSubagentRpcResult): void {
+    const pending = this.pendingSubagentRpc.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingSubagentRpc.delete(requestId);
+    pending.resolve(result);
+  }
+
   private rejectAllSubagentRpc(reason: "closed" | "unavailable"): void {
-    for (const pending of [...this.pendingSubagentRpc.values()]) {
-      pending.settle({
+    for (const requestId of this.pendingSubagentRpc.keys()) {
+      this.settleSubagentRpc(requestId, {
         ok: false,
         reason,
         message: reason === "closed" ? "Pi session closed." : "Parent Pi process exited.",
@@ -1848,7 +1963,10 @@ export class PiRpcAgentSession implements AgentSession {
     if (typeof requestId !== "string") return true;
     const pending = this.pendingSubagentRpc.get(requestId);
     if (!pending) return true;
-    pending.settle(parsePiSubagentRpcReply(payload, requestId, pending.method, this.state.sessionId));
+    this.settleSubagentRpc(
+      requestId,
+      parsePiSubagentRpcReply(payload, requestId, pending.method, this.state.sessionId),
+    );
     return true;
   }
 
@@ -1861,9 +1979,8 @@ export class PiRpcAgentSession implements AgentSession {
   }
 
   async close(): Promise<void> {
-    if (this.closed) {
-      return;
-    }
+    // Admission stays closed after failure, but physical cleanup must remain retryable.
+    if (this.runtimeReleased) return;
     this.closed = true;
     this.closeController.abort();
     this.rejectAllSubagentRpc("closed");
@@ -1876,6 +1993,7 @@ export class PiRpcAgentSession implements AgentSession {
       this.rejectAllExtensionResults(new Error("Pi session closed"));
       this.cleanup?.();
     }
+    this.runtimeReleased = true;
   }
 
   async listCommands(): Promise<AgentSlashCommand[]> {
@@ -2682,24 +2800,28 @@ export class PiRpcAgentSession implements AgentSession {
     }
   }
 
-  private emitToolCallEvent(
-    toolCallId: string,
-    toolCall: PiTrackedToolCall,
-    status: "running" | "completed" | "failed",
-    result: PiToolResult,
-    error: unknown,
-  ): boolean {
+  private observeAsyncSubagentRun(toolCall: PiTrackedToolCall, result: PiToolResult): void {
     // Only a native tool result observed in this parent may authorize a run identifier.
-    if (toolCall.toolName === "subagent" && status === "completed" &&
-        typeof toolCall.args === "object" && toolCall.args !== null &&
-        "async" in toolCall.args && toolCall.args.async === true &&
-        result && typeof result === "object" &&
-        "details" in result && result.details &&
-        typeof result.details === "object" && !Array.isArray(result.details)) {
+    if (
+      toolCall.toolName === "subagent" &&
+      typeof toolCall.args === "object" &&
+      toolCall.args !== null &&
+      "async" in toolCall.args &&
+      toolCall.args.async === true &&
+      result &&
+      typeof result === "object" &&
+      "details" in result &&
+      result.details &&
+      typeof result.details === "object" &&
+      !Array.isArray(result.details)
+    ) {
       const details = result.details as Record<string, unknown>;
-      if (details.mode !== "management" &&
-          (typeof details.asyncId === "string" || typeof details.asyncDir === "string") &&
-          typeof details.runId === "string" && validPiSubagentRunId(details.runId)) {
+      if (
+        details.mode !== "management" &&
+        (typeof details.asyncId === "string" || typeof details.asyncDir === "string") &&
+        typeof details.runId === "string" &&
+        validPiSubagentRunId(details.runId)
+      ) {
         this.observedAsyncRunIds.add(details.runId);
         // Bound long-lived sessions without retaining arbitrary historical targets.
         if (this.observedAsyncRunIds.size > 256) {
@@ -2708,6 +2830,16 @@ export class PiRpcAgentSession implements AgentSession {
         }
       }
     }
+  }
+
+  private emitToolCallEvent(
+    toolCallId: string,
+    toolCall: PiTrackedToolCall,
+    status: "running" | "completed" | "failed",
+    result: PiToolResult,
+    error: unknown,
+  ): boolean {
+    if (status === "completed") this.observeAsyncSubagentRun(toolCall, result);
     const turnId = this.currentTurnIdForEvent();
     const mapping = this.extensionHost.mapToolCall({
       callId: toolCallId,

@@ -133,6 +133,7 @@ export function toAgentPayload(
     updatedAt: agent.updatedAt.toISOString(),
     lastUserMessageAt: agent.lastUserMessageAt ? agent.lastUserMessageAt.toISOString() : null,
     status: agent.lifecycle,
+    ...(agent.lifecycle === "closed" && agent.runtimeSuspended ? { runtimeSuspended: true } : {}),
     activeTurn: agent.activeTurnId
       ? {
           turnId: agent.activeTurnId,

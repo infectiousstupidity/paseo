@@ -2,7 +2,11 @@ import { type ChildProcess, type ChildProcessWithoutNullStreams } from "node:chi
 import type { Logger } from "pino";
 
 import { spawnProcess } from "../../../utils/spawn.js";
-import { terminateWithTreeKill } from "../../../utils/tree-kill.js";
+import {
+  captureProcessTree,
+  terminateWithTreeKill,
+  type ProcessTreeSnapshot,
+} from "../../../utils/tree-kill.js";
 import { JsonlFrameDecoder } from "./jsonl-frame-decoder.js";
 export { supportsJsonlRpcProtocolV2 } from "./jsonl-frame-decoder.js";
 
@@ -83,6 +87,7 @@ export class JsonlRpcProcess {
   private disposed = false;
   private exited = false;
   private closing: Promise<void> | null = null;
+  private trackedProcessTree: ProcessTreeSnapshot | null = null;
   private readonly frameDecoder: JsonlFrameDecoder;
 
   constructor(private readonly options: JsonlRpcProcessOptions) {
@@ -224,19 +229,28 @@ export class JsonlRpcProcess {
   }
 
   async close(error = new Error(`${this.diagnosticName} process is closed`)): Promise<void> {
-    if (this.disposed) return;
+    if (this.closing) return this.closing;
     this.failAll(error);
     this.closing = this.terminate();
-    await this.closing;
+    try {
+      await this.closing;
+    } catch (failure) {
+      this.closing = null;
+      throw failure;
+    }
   }
 
   private async terminate(): Promise<void> {
+    if (!this.trackedProcessTree && this.child.pid) {
+      this.trackedProcessTree = await captureProcessTree(this.child.pid);
+    }
     try {
       this.child.stdin.end();
     } catch {
       // Ignore cleanup races.
     }
     const result = await terminateWithTreeKill(this.child, {
+      trackedProcesses: this.trackedProcessTree ? [this.trackedProcessTree] : [],
       gracefulTimeoutMs: GRACEFUL_SHUTDOWN_TIMEOUT_MS,
       forceTimeoutMs: FORCE_SHUTDOWN_TIMEOUT_MS,
       onForceSignal: () => {
@@ -247,10 +261,7 @@ export class JsonlRpcProcess {
       },
     });
     if (result === "kill-timeout") {
-      this.options.logger.warn(
-        { timeoutMs: FORCE_SHUTDOWN_TIMEOUT_MS },
-        `${this.diagnosticName} process did not report exit after SIGKILL`,
-      );
+      throw new Error(`${this.diagnosticName} process tree did not exit after SIGKILL`);
     }
   }
 
@@ -264,8 +275,16 @@ export class JsonlRpcProcess {
       message.type === "response" && typeof message.id === "string"
         ? this.pending.get(message.id)
         : undefined;
-    if (pending) {
-      this.settleRequest(pending, message as unknown as JsonlRpcResponse & { id: string });
+    if (pending && typeof message.id === "string") {
+      // Normalize the untrusted child frame before it crosses the typed response boundary.
+      this.settleRequest(pending, {
+        type: "response",
+        id: message.id,
+        success: message.success === true,
+        command: typeof message.command === "string" ? message.command : undefined,
+        error: typeof message.error === "string" ? message.error : undefined,
+        data: message.data,
+      });
       return;
     }
     // A response nothing is waiting for is published like any other frame, so a provider
@@ -300,7 +319,15 @@ export class JsonlRpcProcess {
     }
     const err = error instanceof Error ? error : new Error(String(error));
     this.options.logger.warn({ err }, `${this.diagnosticName} stdin write failed`);
-    void this.close(err);
+    void this.closeAfterStdinError(err);
+  }
+
+  private async closeAfterStdinError(error: Error): Promise<void> {
+    try {
+      await this.close(error);
+    } catch (failure) {
+      this.options.logger.warn({ err: failure }, "Failed to terminate JSONL process");
+    }
   }
 
   private failAll(error: Error): void {

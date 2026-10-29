@@ -39,7 +39,7 @@ import {
 import { curateAgentActivity } from "../activity-curator.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import type { AgentStorage } from "../agent-storage.js";
-import { AgentNotFoundError, ensureAgentLoaded } from "../agent-loading.js";
+import { AgentNotFoundError, ensureAgentHistory } from "../agent-loading.js";
 import { isStoredAgentProviderAvailable } from "../../persistence-hooks.js";
 import {
   archiveByScope,
@@ -2182,12 +2182,12 @@ function createToolCatalog(
 
       const activityFields: Record<string, unknown> = {};
       if (includeActivity) {
-        // Timeline reads hydrate a stored agent from its provider. Keep this opt-in so
-        // status-only inspection never resumes a closed agent just to retrieve a snapshot.
+        // Retained history never acquires a provider. Only a cold/legacy conversation
+        // without retained history may still require provider hydration.
         let timeline: AgentTimelineItem[] = [];
         let activityNote: string | undefined;
         try {
-          await ensureAgentLoaded(agentId, {
+          await ensureAgentHistory(agentId, {
             agentManager,
             agentStorage,
             logger: childLogger,
@@ -2311,13 +2311,16 @@ function createToolCatalog(
         { cwd: requestedCwd, ids, statuses, sinceHours, limit },
       );
 
-      // Activity is read from live timelines only; a stored agent is hydrated by inspect_agent.
+      // Listing never hydrates cold history. Retained timelines remain readable without a runtime.
       const activity = includeActivity
         ? agents.map((agent) => ({
             agentId: agent.id,
             content: curateAgentActivity(
               selectItemsByProjectedLimit({
-                items: agentManager.getTimeline(agent.id),
+                items:
+                  agentManager.getAgent(agent.id) || agentManager.getRetainedAgent(agent.id)
+                    ? agentManager.getTimeline(agent.id)
+                    : [],
                 direction: "tail",
                 limit: AGENT_LIST_ACTIVITY_LIMIT,
               }).items,

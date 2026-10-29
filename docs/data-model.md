@@ -181,6 +181,13 @@ Terminal activity contributes to the workspace status bucket **per `workspaceId`
 
 Single file, validated with `PersistedConfigSchema`.
 
+`agents.idleTimeoutMs` controls automatic runtime suspension. Omitted means `900000` milliseconds
+(15 minutes); `0` disables it; other values must be integers in `1..2147483647`. It is live-reloadable
+through `DaemonConfigStore` and projects to the optional mutable wire field `idleTimeoutMs`. Disabling
+does not wake suspended agents or abort a release already committed. Re-enabling starts a fresh quiet
+interval; positive timeout changes apply to the current interval. Runtime eligibility and retained
+history semantics belong to [agent lifecycle](agent-lifecycle.md#runtime-residency).
+
 `agents.skills.selection` is the daemon host's orchestration-skill preference. Missing means
 `{ mode: "all" }`. Installed state is not persisted; the daemon derives it from the shared
 `~/.agents/skills` and Claude skill directories and keeps config plus filesystem convergence behind
@@ -230,6 +237,7 @@ snapshot so a mixed edit can apply its live subset and still name the paths that
     local: { modelsDir: string }
   },
   agents: {
+    idleTimeoutMs?: number,
     skills?: {
       selection?: { mode: "all" } | { mode: "custom", skills: string[] }
     },

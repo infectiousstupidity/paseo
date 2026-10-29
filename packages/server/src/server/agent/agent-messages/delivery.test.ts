@@ -23,6 +23,48 @@ function createClock() {
   };
 }
 
+test("idle observation exposes queued and dispatching work and starts quiet time at settlement", async () => {
+  let now = 0;
+  let dispatch!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    dispatch = resolve;
+  });
+  let flush!: () => void;
+  const delivery = createAgentMessageDelivery({
+    nowMs: () => now,
+    schedule: (_delay, callback) => {
+      flush = callback;
+      return () => {};
+    },
+    dispatch: async () => {
+      await gate;
+      return "steered";
+    },
+    onError: (error) => {
+      throw error;
+    },
+  });
+  expect(delivery.hasOutstandingWork("parent")).toBe(false);
+  expect(delivery.getQuietMs("parent")).toBe(Infinity);
+  const receipt = delivery.enqueue({
+    recipientId: "parent",
+    prompt: "report",
+    source: { kind: "agent-message", agentId: "child" },
+  });
+  now = 1000;
+  expect(delivery.hasOutstandingWork("parent")).toBe(true);
+  flush();
+  expect(delivery.hasOutstandingWork("parent")).toBe(true);
+  dispatch();
+  await receipt.dispatched;
+  await delivery.close();
+  expect(delivery.hasOutstandingWork("parent")).toBe(false);
+  expect(delivery.getQuietMs("parent")).toBe(0);
+  now += 50;
+  expect(delivery.getQuietMs("parent")).toBe(50);
+  expect(delivery.getQuietMs("parent")).toBe(50);
+});
+
 test("a queued child report and completion reach the recipient in one steer after two quiet seconds", async () => {
   const clock = createClock();
   const sent: Array<{ recipientId: string; prompt: AgentPromptInput }> = [];

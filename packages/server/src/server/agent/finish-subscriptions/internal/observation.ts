@@ -64,6 +64,12 @@ export function createFinishObservation(input: {
         signal.throwIfAborted();
         const unsubscribe = agentManager.subscribe(
           (event) => {
+            if (
+              event.type === "agent_state" &&
+              event.agent.lifecycle === "closed" &&
+              event.agent.runtimeSuspended
+            )
+              return;
             if (event.type === "agent_state" && event.agent.lifecycle !== "idle")
               publish(toAgentPayload(event.agent, { title: stored?.title }));
             else if (

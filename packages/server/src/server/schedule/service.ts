@@ -7,7 +7,7 @@ import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentSessionConfig } from "../agent/agent-sdk-types.js";
 import type { AgentStorage } from "../agent/agent-storage.js";
 import { curateAgentActivity } from "../agent/activity-curator.js";
-import { ensureAgentLoaded } from "../agent/agent-loading.js";
+import { ensureUnarchivedAgentLoaded } from "../agent/agent-loading.js";
 import { startAgentRun, type AgentRunController } from "../agent/agent-prompt.js";
 import { resolveCreateAgentTitles } from "../agent/create-agent-title.js";
 import { type BoundCreateAgentCommand, formatProviderModel } from "../agent/create-agent/create.js";
@@ -241,6 +241,8 @@ type ScheduleAgentManager = Pick<
     | "runAgent"
     | "waitForAgentEvent"
     | "waitForAgentClose"
+    | "withAgentRuntime"
+    | "closeAgent"
   >;
 
 interface ScheduleWorkspaceCreateInput {
@@ -937,17 +939,21 @@ export class ScheduleService {
         throw new ScheduleTargetGoneError(`Agent ${schedule.target.agentId} is archived`);
       }
 
-      const agent = await ensureAgentLoaded(schedule.target.agentId, {
-        agentManager: this.agentManager,
-        agentStorage: this.agentStorage,
-        logger: this.logger,
-      });
-      if (this.agentManager.hasInFlightRun(agent.id)) {
-        throw new Error(`Agent ${agent.id} already has an active run`);
-      }
-      await startAgentRun(this.agentManager, agent.id, wrappedPrompt, this.logger, {
-        replaceRunning: true,
-        activeTurnBehavior: "steer",
+      const targetAgentId = schedule.target.agentId;
+      const agent = await this.agentManager.withAgentRuntime(targetAgentId, async () => {
+        const loaded = await ensureUnarchivedAgentLoaded(targetAgentId, {
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.logger,
+        });
+        if (this.agentManager.hasInFlightRun(loaded.id)) {
+          throw new Error(`Agent ${loaded.id} already has an active run`);
+        }
+        await startAgentRun(this.agentManager, loaded.id, wrappedPrompt, this.logger, {
+          replaceRunning: true,
+          activeTurnBehavior: "steer",
+        });
+        return loaded;
       });
       const waitResult = await this.agentManager.waitForAgentEvent(agent.id, {
         waitForActive: true,

@@ -28,6 +28,7 @@ function observeState(
     buffer.push({ status: "idle", final: null, lastMessage: null, error: null });
     return;
   }
+  if (snapshot.runtimeSuspended && !event) return;
   if (event?.type === "permission_resolved") {
     buffer.resolved(event.requestId);
     return;

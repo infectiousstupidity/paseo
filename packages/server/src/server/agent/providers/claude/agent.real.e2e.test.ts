@@ -1,4 +1,6 @@
-import { describe, expect, test, beforeAll, beforeEach } from "vitest";
+import { describe, expect, test, beforeAll, beforeEach, vi } from "vitest";
+import { z } from "zod";
+import { captureProcessTree } from "../../../../utils/tree-kill.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -173,6 +175,53 @@ async function cleanupSession(handle: { cwd: string; session: AgentSession }): P
     }
   }
 }
+
+// No availability/auth skip: this is the idle-suspension provider release gate.
+test("idle suspension releases the owned Claude process tree and resumes the same native conversation", async () => {
+  const handle = await createSession({ cwdPrefix: "claude-idle-suspension-" });
+  let resumed: AgentSession | null = null;
+  try {
+    await collectUntilTerminal(
+      streamSession(handle.session, "Remember the token PASEO_SUSPEND_42. Reply with exactly ACK."),
+    );
+    const persistence = handle.session.describePersistence();
+    if (!persistence) throw new Error("Claude did not provide a durable continuation handle");
+    const child = z
+      .object({ pid: z.number().int().positive() })
+      .parse(Reflect.get(handle.session, "childProcess"));
+    const tree = await captureProcessTree(child.pid);
+    if (!tree) throw new Error("Claude's live process tree was not observable");
+    await expect(handle.session.suspendIfIdle?.({ idleForMs: 10 })).resolves.toBe("busy");
+    await vi.waitFor(
+      () => {
+        const activity = handle.session.runtimeActivitySnapshot?.();
+        expect(activity).not.toBeNull();
+        expect(activity?.hasOutstandingWork).toBe(false);
+        expect(activity?.quietMs).toBeGreaterThanOrEqual(10);
+      },
+      { timeout: 10_000 },
+    );
+    await expect(handle.session.suspendIfIdle?.({ idleForMs: 10 })).resolves.toBe("suspended");
+    for (const identity of [tree, ...tree.descendants]) {
+      expect((await captureProcessTree(identity.pid))?.startedAt).not.toBe(identity.startedAt);
+    }
+    resumed = await client.resumeSession(persistence, {
+      ...getRealProviderConfig("claude"),
+      cwd: handle.cwd,
+    });
+    const events = await collectUntilTerminal(
+      streamSession(
+        resumed,
+        "What exact token did I ask you to remember? Reply with the token only.",
+      ),
+    );
+    expect(getAssistantText(events)).toContain("PASEO_SUSPEND_42");
+    expect(resumed.describePersistence()?.sessionId).toBe(persistence.sessionId);
+  } finally {
+    await resumed?.close();
+    await cleanupSession(handle);
+  }
+}, 120_000);
 
 describe("ClaudeAgentSession integration", () => {
   let canRun = false;

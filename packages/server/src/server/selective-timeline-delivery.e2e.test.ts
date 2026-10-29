@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createPersistedWorkspaceRecord } from "./workspace-registry.js";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
 import { DaemonClient, type WebSocketLike } from "@getpaseo/client/internal/daemon-client";
@@ -210,6 +210,95 @@ async function connect(input: {
   clients.push(connected);
   return connected;
 }
+
+test("an open and reconnected chat reads retained history without waking its suspended provider", async () => {
+  await daemon.close();
+  const provider = new MockLoadTestAgentClient();
+  const create = provider.createSession.bind(provider);
+  provider.createSession = async (...args) => {
+    const session = await create(...args);
+    return Object.assign(session, {
+      runtimeActivitySnapshot: () => ({ hasOutstandingWork: false, quietMs: Infinity }),
+      suspendIfIdle: async (): Promise<"suspended"> => {
+        await session.close();
+        return "suspended";
+      },
+    });
+  };
+  const resume = vi.spyOn(provider, "resumeSession");
+  daemon = await createTestPaseoDaemon({ isDev: true, agentClients: { mock: provider } });
+  const connected = await connect({ clientId: "idle-open-chat", selective: true });
+  const agent = await connected.client.createAgent({
+    provider: "mock",
+    cwd: "/tmp",
+    title: "Retained chat",
+    model: "ten-second-stream",
+    featureValues: { mockAssistantResponse: "Continued" },
+  });
+  const manager = daemon.daemon.agentManager;
+  await connected.setLegacyTimelineMembership([agent.id]);
+  await manager.appendTimelineItem(agent.id, {
+    type: "user_message",
+    text: "Find retained history",
+    messageId: "retained-user",
+  });
+  await manager.appendTimelineItem(agent.id, {
+    type: "assistant_message",
+    text: "A retained answer",
+    messageId: "retained-assistant",
+  });
+  const before = await connected.client.fetchAgentTimeline(agent.id, {
+    direction: "tail",
+    limit: 0,
+  });
+  const persistedHandle = manager.getAgent(agent.id)?.persistence;
+  manager.setIdleTimeoutMs(1);
+  await vi.waitFor(() => expect(manager.getAgent(agent.id)).toBeNull(), { timeout: 5_000 });
+  manager.setIdleTimeoutMs(0);
+  expect(resume).not.toHaveBeenCalled();
+  const after = await connected.client.fetchAgentTimeline(agent.id, {
+    direction: "tail",
+    limit: 0,
+  });
+  expect(after.entries).toEqual(before.entries);
+  expect(after.epoch).toBe(before.epoch);
+  expect(after.endCursor).toEqual(before.endCursor);
+  const search = await connected.client.searchAgentTimeline({
+    agentId: agent.id,
+    query: "retained",
+  });
+  expect(search.locations.length).toBeGreaterThan(0);
+  const prompts = await connected.client.listAgentTimelinePrompts(agent.id);
+  expect(prompts.prompts).toHaveLength(1);
+  expect((await connected.client.listProviderSubagents(agent.id)).subagents).toEqual([]);
+  expect((await connected.client.buildAgentForkContext(agent.id)).itemCount).toBe(2);
+  expect((await connected.client.listCommands(agent.id)).commands.length).toBeGreaterThan(0);
+  await connected.client.clearAgentAttention(agent.id);
+  const fetched = await connected.client.fetchAgent(agent.id);
+  expect(fetched?.agent.status).toBe("closed");
+  expect(fetched?.agent.archivedAt).toBeNull();
+  expect(fetched?.agent.runtimeSuspended).toBe(true);
+  expect(resume).not.toHaveBeenCalled();
+  expect(manager.getAgent(agent.id)).toBeNull();
+  await connected.client.close();
+  const reconnected = await connect({ clientId: "idle-open-chat", selective: true });
+  await reconnected.setLegacyTimelineMembership([agent.id]);
+  expect(
+    (await reconnected.client.fetchAgentTimeline(agent.id, { direction: "tail", limit: 0 }))
+      .entries,
+  ).toEqual(before.entries);
+  expect(resume).not.toHaveBeenCalled();
+  await reconnected.client.sendMessage(agent.id, "Continue the retained conversation");
+  expect((await reconnected.client.waitForFinish(agent.id, 5_000)).status).toBe("idle");
+  expect(resume).toHaveBeenCalledTimes(1);
+  expect(resume.mock.calls[0]?.[0].sessionId).toBe(persistedHandle?.sessionId);
+  expect(manager.fetchTimeline(agent.id).epoch).toBe(before.epoch);
+  expect(
+    manager
+      .getTimeline(agent.id)
+      .filter((item) => item.type === "assistant_message" && item.text === "A retained answer"),
+  ).toHaveLength(1);
+}, 30_000);
 
 test("notification timeline items are sent only to clients that advertise support", async () => {
   await daemon.close();

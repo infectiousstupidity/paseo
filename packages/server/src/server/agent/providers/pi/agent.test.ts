@@ -56,6 +56,24 @@ interface PiThinkingCatalogCase {
   defaultThinkingOptionId: PiThinkingLevel | undefined;
 }
 
+test("Pi cleanup retries a rejected runtime close despite closed admission", async () => {
+  const runtime = new FakePi();
+  const session = await createClient(runtime).createSession(createConfig());
+  const close = vi
+    .spyOn(runtime.latestSession(), "close")
+    .mockRejectedValueOnce(new Error("kill-timeout"));
+  try {
+    await expect(session.close()).rejects.toThrow("kill-timeout");
+    await expect(session.close()).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(2);
+    await session.close();
+    expect(close).toHaveBeenCalledTimes(2);
+  } finally {
+    close.mockRestore();
+    await session.close();
+  }
+});
+
 test("Pi RPC timeout defaults to 60 seconds and accepts an override", () => {
   expect(PiProviderOptionsSchema.parse({}).rpcTimeoutMs).toBe(60_000);
   expect(PiProviderOptionsSchema.parse({ rpcTimeoutMs: 90_000 }).rpcTimeoutMs).toBe(90_000);
@@ -3490,7 +3508,6 @@ describe("transformPiModels", () => {
   });
 });
 
-
 /** Exercise the real injected extension command and its process-local bus with a fake Pi host. */
 async function installFakeSubagentRpcHost(
   pi: FakePi,
@@ -3514,7 +3531,12 @@ async function installFakeSubagentRpcHost(
     (args: string, ctx: { ui: { notify: (message: string) => void } }) => Promise<void>
   >();
   const lifecycle = new Map<string, Array<() => void>>();
-  const requests: Array<{ version: number; requestId: string; method: string; params?: { runId: string } }> = [];
+  const requests: Array<{
+    version: number;
+    requestId: string;
+    method: string;
+    params?: { runId: string };
+  }> = [];
   const notifications: string[] = [];
   const events = {
     on(name: string, listener: (value: unknown) => void) {
@@ -3541,7 +3563,10 @@ async function installFakeSubagentRpcHost(
       lifecycle.set(name, handlers);
     },
     events,
-    registerCommand: (name: string, command: { handler: (args: string, ctx: unknown) => Promise<void> }) => {
+    registerCommand: (
+      name: string,
+      command: { handler: (args: string, ctx: unknown) => Promise<void> },
+    ) => {
       commandHandlers.set(name, command.handler);
     },
     registerMcpServer: () => undefined,
@@ -3587,14 +3612,15 @@ function fakeSubagentReply(
     requestId: request.requestId,
     method: request.method,
     success: true,
-    data: request.method === "ping"
-      ? {
-          version: 1,
-          methods: ["ping", "status", "manage", "stop"],
-          session: { sessionId },
-          capabilities: { status: true },
-        }
-      : { text: "Async run is running", details: { mode: "management", results: [] } },
+    data:
+      request.method === "ping"
+        ? {
+            version: 1,
+            methods: ["ping", "status", "manage", "stop"],
+            session: { sessionId },
+            capabilities: { status: true },
+          }
+        : { text: "Async run is running", details: { mode: "management", results: [] } },
   };
 }
 
@@ -3603,7 +3629,8 @@ describe("internal Pi subagent event-bus RPC", () => {
     const { pi, session, events } = await createSession();
     const runtime = pi.latestSession();
     const host = await installFakeSubagentRpcHost(pi, (request) =>
-      fakeSubagentReply(request, runtime.state.sessionId));
+      fakeSubagentReply(request, runtime.state.sessionId),
+    );
     onTestFinished(() => session.close());
 
     expect(await session.pingSubagents()).toMatchObject({
@@ -3623,14 +3650,17 @@ describe("internal Pi subagent event-bus RPC", () => {
     const { pi, session, events } = await createSession();
     const runtime = pi.latestSession();
     const host = await installFakeSubagentRpcHost(pi, (request) =>
-      fakeSubagentReply(request, runtime.state.sessionId));
+      fakeSubagentReply(request, runtime.state.sessionId),
+    );
     onTestFinished(() => session.close());
 
     expect(await session.statusSubagent("not-observed")).toMatchObject({
-      ok: false, reason: "invalid_target",
+      ok: false,
+      reason: "invalid_target",
     });
     expect(await session.statusSubagent("/tmp/other-session/status.json")).toMatchObject({
-      ok: false, reason: "invalid_target",
+      ok: false,
+      reason: "invalid_target",
     });
     expect(runtime.prompts).toHaveLength(0);
 
@@ -3651,21 +3681,28 @@ describe("internal Pi subagent event-bus RPC", () => {
       },
     });
     expect(await session.statusSubagent("run-123")).toMatchObject({
-      ok: true, data: { text: "Async run is running" },
+      ok: true,
+      data: { text: "Async run is running" },
     });
     expect(host.requests).toHaveLength(1);
     expect(host.requests[0]).toMatchObject({ method: "status", params: { runId: "run-123" } });
     expect(runtime.prompts).toHaveLength(1);
     expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
-    expect(events.timelineItems().some((item) =>
-      item.type === "notification" && item.message.includes("PASEO_SUBAGENT_RPC"))).toBe(false);
+    expect(
+      events
+        .timelineItems()
+        .some(
+          (item) => item.type === "notification" && item.message.includes("PASEO_SUBAGENT_RPC"),
+        ),
+    ).toBe(false);
   });
 
   test("will not interrupt or queue an internal slash command into an active parent turn", async () => {
     const { pi, session, events } = await createSession();
     const runtime = pi.latestSession();
     const host = await installFakeSubagentRpcHost(pi, (request) =>
-      fakeSubagentReply(request, runtime.state.sessionId));
+      fakeSubagentReply(request, runtime.state.sessionId),
+    );
     onTestFinished(() => session.close());
 
     await session.startTurn("parent is working");
@@ -3687,10 +3724,21 @@ describe("internal Pi subagent event-bus RPC", () => {
       call++;
       if (call === 1) return { ...fakeSubagentReply(request, runtime.state.sessionId), version: 2 };
       if (call === 2) return fakeSubagentReply(request, "some-other-parent");
-      if (call === 3) return { version: 1, requestId: request.requestId,
-        method: "stop", success: true, data: {} };
-      return { version: 1, requestId: request.requestId, method: request.method,
-        success: false, error: { code: "execution_failed", message: "x".repeat(25000) } };
+      if (call === 3)
+        return {
+          version: 1,
+          requestId: request.requestId,
+          method: "stop",
+          success: true,
+          data: {},
+        };
+      return {
+        version: 1,
+        requestId: request.requestId,
+        method: request.method,
+        success: false,
+        error: { code: "execution_failed", message: "x".repeat(25000) },
+      };
     });
     onTestFinished(() => session.close());
 
@@ -3716,7 +3764,9 @@ describe("internal Pi subagent event-bus RPC", () => {
       await vi.advanceTimersByTimeAsync(9_100);
       expect(await pending).toMatchObject({ ok: false, reason: "unavailable" });
       expect(host.requests).toHaveLength(1);
-      expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
+      expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(
+        0,
+      );
       await session.close();
     } finally {
       vi.useRealTimers();
@@ -3735,19 +3785,23 @@ describe("internal Pi subagent event-bus RPC", () => {
     await session.close();
     expect(await pending).toMatchObject({ ok: false, reason: "closed" });
     expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + host.requests[0]?.requestId)).toBe(0);
-    runtime.emit({ type: "extension_ui_request", id: "late", method: "notify",
-      message: 'PASEO_SUBAGENT_RPC {"requestId":"old","method":"ping"}' });
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "late",
+      method: "notify",
+      message: 'PASEO_SUBAGENT_RPC {"requestId":"old","method":"ping"}',
+    });
     expect(events.timelineItems()).toEqual([]);
   });
 });
-
 
 describe("Pi subagent bridge concurrency and unavailable command", () => {
   test("does not send a model prompt when the local integration command is absent", async () => {
     const { pi, session } = await createSession();
     onTestFinished(() => session.close());
     expect(await session.pingSubagents()).toMatchObject({
-      ok: false, reason: "unavailable",
+      ok: false,
+      reason: "unavailable",
     });
     expect(pi.latestSession().prompts).toHaveLength(0);
   });
@@ -3763,13 +3817,26 @@ describe("Pi subagent bridge concurrency and unavailable command", () => {
     expect(host.requests).toHaveLength(2);
     const [one, two] = host.requests;
     expect(one?.requestId).not.toBe(two?.requestId);
-    host.bus.emit("subagents:rpc:v1:reply:" + two!.requestId, fakeSubagentReply(two!, runtime.state.sessionId));
-    host.bus.emit("subagents:rpc:v1:reply:" + one!.requestId, fakeSubagentReply(one!, runtime.state.sessionId));
+    host.bus.emit(
+      "subagents:rpc:v1:reply:" + two!.requestId,
+      fakeSubagentReply(two!, runtime.state.sessionId),
+    );
+    host.bus.emit(
+      "subagents:rpc:v1:reply:" + one!.requestId,
+      fakeSubagentReply(one!, runtime.state.sessionId),
+    );
     expect((await first).ok).toBe(true);
     expect((await second).ok).toBe(true);
-    host.bus.emit("subagents:rpc:v1:reply:" + one!.requestId, fakeSubagentReply(one!, runtime.state.sessionId));
-    runtime.emit({ type: "extension_ui_request", id: "duplicate", method: "notify",
-      message: host.notifications[0]! });
+    host.bus.emit(
+      "subagents:rpc:v1:reply:" + one!.requestId,
+      fakeSubagentReply(one!, runtime.state.sessionId),
+    );
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "duplicate",
+      method: "notify",
+      message: host.notifications[0]!,
+    });
     expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + one!.requestId)).toBe(0);
     expect(host.bus.listenerCount("subagents:rpc:v1:reply:" + two!.requestId)).toBe(0);
     expect(events.timelineItems()).toEqual([]);

@@ -30,23 +30,25 @@ class Host implements HostObservation {
       this.released = true;
     };
   }
-  emit(status: "idle" | "running", event?: AgentStreamEvent) {
-    this.handler!(
-      buildStoredAgentPayload(
-        {
-          id: "child",
-          cwd: "/tmp",
-          provider: "codex",
-          labels: {},
-          lastStatus: status,
-          createdAt: "2026-01-01",
-          updatedAt: "2026-01-01",
-        },
-        ["codex"],
-      ),
-      event,
-      "Last response",
+  emit(
+    status: "idle" | "running" | "closed",
+    event?: AgentStreamEvent,
+    runtimeSuspended?: boolean,
+  ) {
+    const snapshot = buildStoredAgentPayload(
+      {
+        id: "child",
+        cwd: "/tmp",
+        provider: "codex",
+        labels: {},
+        lastStatus: status,
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      },
+      ["codex"],
     );
+    snapshot.runtimeSuspended = runtimeSuspended;
+    this.handler!(snapshot, event, "Last response");
   }
 }
 function permission(id: string): AgentStreamEvent {
@@ -66,6 +68,24 @@ async function scenario() {
   );
   return { host, observation, controller };
 }
+
+test("automatic runtime release is not another remote finish checkpoint, but explicit close still is", async () => {
+  const { host, observation } = await scenario();
+  try {
+    let settled = false;
+    const next = observation.next().then((result) => {
+      settled = true;
+      return result;
+    });
+    host.emit("closed", undefined, true);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    host.emit("closed");
+    expect((await next).final?.status).toBe("closed");
+  } finally {
+    await observation.close();
+  }
+});
 
 test("permission resolution followed by transient idle waits for resumed work to settle", async () => {
   const { host, observation } = await scenario();

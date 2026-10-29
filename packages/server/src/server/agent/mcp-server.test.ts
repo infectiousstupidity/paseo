@@ -269,6 +269,10 @@ function buildAgentManagerSpies() {
     archiveAgent: vi.fn().mockResolvedValue({ archivedAt: new Date().toISOString() }),
     notifyAgentState: vi.fn(),
     getAgent: vi.fn(),
+    getRetainedAgent: vi.fn().mockReturnValue(null),
+    withAgentRuntime: vi.fn(async <T>(_agentId: string, operation: () => Promise<T>) =>
+      operation(),
+    ),
     listAgents: vi.fn().mockReturnValue([]),
     getTimeline: vi.fn().mockReturnValue([]),
     resumeAgentFromPersistence: vi.fn(),
@@ -1017,6 +1021,75 @@ describe("agents family consolidation", () => {
     const client = await connectInMemoryMcpClient(server);
     return { spies, closeAgent, server, client };
   }
+
+  it("MCP status with activity reads a suspended conversation without resuming its provider", async () => {
+    const root = await mkdtemp(join(tmpdir(), "paseo-mcp-retained-"));
+    const clients = createTestAgentClients();
+    const create = clients.claude!.createSession.bind(clients.claude!);
+    clients.claude!.createSession = async (...args) => {
+      const session = await create(...args);
+      return Object.assign(session, {
+        suspendIfIdle: async (): Promise<"suspended"> => {
+          await session.close();
+          return "suspended";
+        },
+      });
+    };
+    const storage = new AgentStorage(join(root, "agents"), logger);
+    let now = 0;
+    const sharedManager = new AgentManager({
+      clients,
+      registry: storage,
+      logger,
+      idleTimeoutMs: 100,
+      nowMs: () => now,
+    });
+    const resume = vi.spyOn(clients.claude!, "resumeSession");
+    let server: Awaited<ReturnType<typeof createAgentMcpServer>> | undefined;
+    let client: Awaited<ReturnType<typeof connectInMemoryMcpClient>> | undefined;
+    try {
+      const agent = await sharedManager.createAgent({ provider: "claude", cwd: root }, undefined, {
+        workspaceId: undefined,
+      });
+      await sharedManager.hydrateTimelineFromProvider(agent.id);
+      await sharedManager.appendTimelineItem(agent.id, {
+        type: "assistant_message",
+        text: "Retained MCP result",
+      });
+      now = 100;
+      await sharedManager.suspendAgentIfIdle(agent.id);
+      expect(sharedManager.getAgent(agent.id)).toBeNull();
+      server = await createAgentMcpServer({
+        agentManager: sharedManager,
+        agentStorage: storage,
+        providerSnapshotManager: createOpenCodeManager().manager,
+        logger,
+      });
+      client = await connectInMemoryMcpClient(server);
+      const result = await client.callTool({
+        name: "inspect_agent",
+        arguments: { agentId: agent.id, includeActivity: true },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({
+        status: "closed",
+        updateCount: 1,
+        content: expect.stringContaining("Retained MCP result"),
+      });
+      expect(resume).not.toHaveBeenCalled();
+      expect(sharedManager.getAgent(agent.id)).toBeNull();
+    } finally {
+      await client?.close();
+      await server?.close();
+      sharedManager.prepareForShutdown();
+      await sharedManager.flushForShutdown();
+      await Promise.all(
+        sharedManager.listAgents().map((agent) => sharedManager.closeAgent(agent.id)),
+      );
+      await storage.flush();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 
   it("advertises one detail tool and one termination tool for agents", async () => {
     const { server, client } = await createConsolidatedServer();
@@ -7116,14 +7189,13 @@ describe("agent snapshot MCP serialization", () => {
       id: "archived-activity-agent",
       currentModeId: "default",
     } as ManagedAgent;
-    // inspect_agent reads the live snapshot first, so the archived lookup sees null twice:
-    // once in the tool, once inside ensureAgentLoaded, before resume resolves it.
-    spies.agentManager.getAgent
-      .mockReturnValueOnce(null)
-      .mockReturnValueOnce(null)
-      .mockReturnValue(snapshot);
+    let resumed = false;
+    spies.agentManager.getAgent.mockImplementation(() => (resumed ? snapshot : null));
     spies.agentStorage.get.mockResolvedValue(record);
-    spies.agentManager.resumeAgentFromPersistence.mockResolvedValue(snapshot);
+    spies.agentManager.resumeAgentFromPersistence.mockImplementation(async () => {
+      resumed = true;
+      return snapshot;
+    });
     spies.agentManager.getTimeline.mockReturnValue([
       {
         kind: "status",

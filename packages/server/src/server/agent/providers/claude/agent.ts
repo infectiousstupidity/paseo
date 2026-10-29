@@ -119,6 +119,8 @@ import {
   type AgentTimelineItem,
   type AgentUsage,
   type AgentRuntimeInfo,
+  type ProviderRuntimeActivitySnapshot,
+  type ProviderSuspensionResult,
   type FetchCatalogOptions,
   type ImportableProviderSession,
   type ImportProviderSessionContext,
@@ -141,7 +143,11 @@ import {
   type ResolvedProviderLaunch,
 } from "../../provider-launch-config.js";
 import { withTimeout } from "../../../../utils/promise-timeout.js";
-import { terminateWithTreeKill } from "../../../../utils/tree-kill.js";
+import {
+  captureProcessTree,
+  terminateWithTreeKill,
+  type ProcessTreeSnapshot,
+} from "../../../../utils/tree-kill.js";
 import { execCommand } from "../../../../utils/spawn.js";
 import { composeSystemPromptParts } from "../../system-prompt.js";
 
@@ -2353,6 +2359,13 @@ class ClaudeAgentSession implements AgentSession {
   private pendingFreshSessionId: string | null = null;
   private recentStderr = "";
   private closed = false;
+  private trackedProcessTree: ProcessTreeSnapshot | null = null;
+  private closing: Promise<void> | null = null;
+  private runtimeQuietSince = Date.now();
+  private readonly runtimeTasks = new Set<string>();
+  private backgroundTasks: ReadonlySet<string> | null = null;
+  private requestedBackgroundSnapshot = false;
+  private runtimeControls = 0;
 
   constructor(config: ClaudeAgentConfig, options: ClaudeAgentSessionOptions) {
     this.config = config;
@@ -2659,6 +2672,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async setMode(modeId: string): Promise<void> {
+    return this.runRuntimeControl(() => this.setModeNow(modeId));
+  }
+
+  private async setModeNow(modeId: string): Promise<void> {
     // Validate mode
     if (!VALID_CLAUDE_MODES.has(modeId)) {
       const validModesList = Array.from(VALID_CLAUDE_MODES).join(", ");
@@ -2690,6 +2707,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async setModel(modelId: string | null): Promise<void> {
+    return this.runRuntimeControl(() => this.setModelNow(modelId));
+  }
+
+  private async setModelNow(modelId: string | null): Promise<void> {
     const normalizedModelId =
       typeof modelId === "string" && modelId.trim().length > 0 ? modelId.trim() : null;
     const activeQuery = await this.ensureQuery();
@@ -2730,6 +2751,12 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void | AgentProviderNotice> {
+    return this.runRuntimeControl(() => this.setThinkingOptionNow(thinkingOptionId));
+  }
+
+  private async setThinkingOptionNow(
+    thinkingOptionId: string | null,
+  ): Promise<void | AgentProviderNotice> {
     const normalizedThinkingOptionId =
       typeof thinkingOptionId === "string" && thinkingOptionId.trim().length > 0
         ? thinkingOptionId
@@ -2750,6 +2777,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async setFeature(featureId: string, value: unknown): Promise<void> {
+    return this.runRuntimeControl(() => this.setFeatureNow(featureId, value));
+  }
+
+  private async setFeatureNow(featureId: string, value: unknown): Promise<void> {
     if (featureId !== "fast_mode") {
       throw new Error(`Unknown Claude feature: ${featureId}`);
     }
@@ -2853,6 +2884,13 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+    return this.runRuntimeControl(() => this.respondToPermissionNow(requestId, response));
+  }
+
+  private async respondToPermissionNow(
+    requestId: string,
+    response: AgentPermissionResponse,
+  ): Promise<void> {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) {
       throw new Error(`No pending permission request with id '${requestId}'`);
@@ -2930,7 +2968,107 @@ class ClaudeAgentSession implements AgentSession {
     return this.persistence;
   }
 
-  async close(): Promise<void> {
+  runtimeActivitySnapshot(): ProviderRuntimeActivitySnapshot | null {
+    // An older CLI's filtered task edges cannot establish complete background quiescence.
+    if (this.query && this.backgroundTasks === null) return null;
+    return {
+      quietMs: Math.max(0, Date.now() - this.runtimeQuietSince),
+      hasOutstandingWork:
+        this.closed ||
+        this.runtimeControls > 0 ||
+        this.turnState !== "idle" ||
+        this.mainTurnInFlight ||
+        this.compacting ||
+        this.pendingInterruptAbort ||
+        this.activeForegroundTurnId !== null ||
+        this.autonomousTurn !== null ||
+        this.pendingPermissions.size > 0 ||
+        this.unstartedMessageUuids.size > 0 ||
+        this.runtimeTasks.size > 0 ||
+        (this.backgroundTasks?.size ?? 0) > 0,
+    };
+  }
+
+  async suspendIfIdle({ idleForMs }: { idleForMs: number }): Promise<ProviderSuspensionResult> {
+    if (process.platform === "win32") return "unsupported";
+    if (this.query && this.backgroundTasks === null && !this.requestedBackgroundSnapshot) {
+      // New CLIs send a complete background-task snapshot after reinitialize, even when empty.
+      // Old CLIs send nothing and stay unsupported. Do not infer support from an empty UI list.
+      this.requestedBackgroundSnapshot = true;
+      this.startQueryPump();
+      if (!this.query.reinitialize) return "unsupported";
+      try {
+        await this.query.reinitialize();
+        return "busy";
+      } catch (error) {
+        this.logger.warn(
+          { err: error, code: "idle_activity_unavailable" },
+          "Claude background activity snapshot unavailable; retaining runtime",
+        );
+        return "unsupported";
+      }
+    }
+    const activity = this.runtimeActivitySnapshot();
+    if (!activity) return "unsupported";
+    if (activity.hasOutstandingWork || activity.quietMs < idleForMs) return "busy";
+    // close() closes admission synchronously before its first await. The same cleanup owns
+    // both explicit close and automatic release, and retains the tree identity on failure.
+    await this.close();
+    return "suspended";
+  }
+
+  private observeRuntimeActivity(message: SDKMessage): void {
+    if (message.type === "system" && message.subtype === "background_tasks_changed") {
+      const next = new Set(message.tasks.map((task) => task.task_id));
+      if (
+        this.backgroundTasks === null ||
+        next.size !== this.backgroundTasks.size ||
+        [...next].some((id) => !this.backgroundTasks?.has(id))
+      )
+        this.runtimeQuietSince = Date.now();
+      this.backgroundTasks = next;
+      return;
+    }
+    this.runtimeQuietSince = Date.now();
+    if (message.type !== "system") return;
+    if (message.subtype === "task_started" || message.subtype === "task_progress") {
+      this.runtimeTasks.add(message.task_id);
+    } else if (message.subtype === "task_notification") {
+      this.runtimeTasks.delete(message.task_id);
+    } else if (message.subtype === "task_updated") {
+      if (["completed", "failed", "killed", "stopped"].includes(message.patch.status ?? ""))
+        this.runtimeTasks.delete(message.task_id);
+      else this.runtimeTasks.add(message.task_id);
+    }
+  }
+
+  private async runRuntimeControl<T>(
+    operation: () => Promise<T>,
+    options?: { readOnly: true },
+  ): Promise<T> {
+    if (this.closed) throw new Error("Claude session is closed");
+    this.runtimeControls++;
+    try {
+      return await operation();
+    } finally {
+      this.runtimeControls--;
+      if (!options?.readOnly) this.runtimeQuietSince = Date.now();
+    }
+  }
+
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
+    // Close admission synchronously, before capturing process identity or awaiting cleanup.
+    this.closed = true;
+    const closing = this.closeRuntime();
+    this.closing = closing;
+    void closing.catch(() => {
+      if (this.closing === closing) this.closing = null;
+    });
+    return closing;
+  }
+
+  private async closeRuntime(): Promise<void> {
     this.logger.trace(
       {
         agentId: this.agentId,
@@ -2944,7 +3082,10 @@ class ClaudeAgentSession implements AgentSession {
       },
       "provider.claude.session_close.start",
     );
-    this.closed = true;
+    // Capture descendants before SDK close can kill the root and reparent its MCP processes.
+    if (!this.trackedProcessTree && this.childProcess?.pid) {
+      this.trackedProcessTree = await captureProcessTree(this.childProcess.pid);
+    }
     this.rejectAllPendingPermissions(new Error("Claude session closed"));
     this.cancelCurrentTurn?.();
     this.subscribers.clear();
@@ -2969,16 +3110,15 @@ class ClaudeAgentSession implements AgentSession {
     // direct child process.
     if (this.childProcess) {
       const result = await terminateWithTreeKill(this.childProcess, {
+        trackedProcesses: this.trackedProcessTree ? [this.trackedProcessTree] : [],
         gracefulTimeoutMs: 2_000,
         forceTimeoutMs: 2_000,
       });
       if (result === "kill-timeout") {
-        this.logger.warn(
-          { pid: this.childProcess.pid, agentId: this.agentId },
-          "Claude process tree did not report exit after SIGKILL",
-        );
+        throw new Error("Claude process tree did not exit after SIGKILL");
       }
       this.childProcess = null;
+      this.trackedProcessTree = null;
     }
     if (this.persistSession === false && this.claudeSessionId) {
       // Claude Code currently ignores --no-session-persistence outside --print mode
@@ -3009,6 +3149,10 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   async listCommands(): Promise<AgentSlashCommand[]> {
+    return this.runRuntimeControl(() => this.readCommands(), { readOnly: true });
+  }
+
+  private async readCommands(): Promise<AgentSlashCommand[]> {
     const q = await this.ensureQuery();
     const commands = await q.supportedCommands();
     const commandMap = new Map<string, AgentSlashCommand>();
@@ -3375,6 +3519,7 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async ensureQuery(launchMode: PermissionMode = this.currentMode): Promise<Query> {
+    if (this.closed) throw new Error("Claude session is closed");
     // Controls use the running turn's query. Pending launch settings take effect
     // after that turn finishes, when its active query handle has been cleared.
     if (this.query && (!this.queryRestartNeeded || this.activeForegroundQuery === this.query)) {
@@ -3421,9 +3566,16 @@ class ClaudeAgentSession implements AgentSession {
 
     const input = createAsyncMessageInput<SDKUserMessage>();
     const options = await this.buildOptions(launchMode);
+    // A control may have started before closure and spent its startup time resolving options.
+    // Do not install a new process after close() has committed admission shutdown.
+    if (this.closed) throw new Error("Claude session is closed");
     this.logger.debug({ options: summarizeClaudeOptionsForLog(options) }, "claude query");
     this.input = input;
-    // A fresh Claude process has no turn of its own in flight.
+    // A fresh CLI owns no old background work. Require a new complete snapshot for opt-in.
+    this.runtimeTasks.clear();
+    this.backgroundTasks = null;
+    this.requestedBackgroundSnapshot = false;
+    this.runtimeQuietSince = Date.now();
     this.mainTurnInFlight = false;
     this.query = claudeQuery(
       { prompt: input.iterable, options },
@@ -4201,6 +4353,7 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private async routeSdkMessageFromPump(message: SDKMessage): Promise<void> {
+    this.observeRuntimeActivity(message);
     if (this.consumeSessionStateChange(message)) {
       return;
     }

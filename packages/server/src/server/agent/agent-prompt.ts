@@ -323,6 +323,12 @@ export async function sendPromptToAgent(
 export async function sendPreparedPromptToAgent(
   params: Omit<SendPromptToAgentParams, "source" | "messageId">,
 ): Promise<{ disposition: PromptDispatchDisposition }> {
+  return params.agentManager.withAgentRuntime(params.agentId, () => dispatchPreparedPrompt(params));
+}
+
+async function dispatchPreparedPrompt(
+  params: Omit<SendPromptToAgentParams, "source" | "messageId">,
+): Promise<{ disposition: PromptDispatchDisposition }> {
   const unarchive = params.unarchive ?? true;
 
   const record = await params.agentStorage.get(params.agentId);

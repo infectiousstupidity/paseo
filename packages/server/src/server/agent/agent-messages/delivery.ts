@@ -38,6 +38,7 @@ interface DispatchRequest {
 interface Dependencies {
   dispatch(request: DispatchRequest): Promise<PromptDispatchDisposition>;
   onError(error: unknown, request: DispatchRequest): void;
+  nowMs?: () => number;
   /** Return a cancellation function. Production uses the daemon's event loop. */
   schedule?: (delayMs: number, callback: () => void) => () => void;
 }
@@ -49,6 +50,8 @@ export interface AgentMessageDelivery {
   waitForDispatch(recipientId: string, signal: AbortSignal): Promise<void>;
   /** True while the recipient has messages admitted but unresolved, dispatches in flight, or retries pending. */
   hasOutstandingWork(recipientId: string): boolean;
+  /** Continuous time since the last admission or dispatch settlement; reads never reset it. */
+  getQuietMs(recipientId: string): number;
 }
 
 /** Recipient-owned agent delivery. Human prompts never enter this module. */
@@ -59,6 +62,8 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
       const timer = setTimeout(callback, delayMs);
       return () => clearTimeout(timer);
     });
+  const nowMs = dependencies.nowMs ?? Date.now;
+  const lastWorkAt = new Map<string, number>();
   const pending = new Map<string, { messages: Admitted[]; cancel(): void }>();
   const dispatching = new Map<string, Promise<void>>();
   let closed = false;
@@ -110,6 +115,7 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
     dispatching.set(recipientId, dispatched);
     void dispatched
       .finally(() => {
+        lastWorkAt.set(recipientId, nowMs());
         if (dispatching.get(recipientId) === dispatched) dispatching.delete(recipientId);
       })
       .catch(() => undefined);
@@ -142,6 +148,7 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
   return {
     enqueue(message) {
       if (closed) throw new Error("Agent message delivery is closed");
+      lastWorkAt.set(message.recipientId, nowMs());
       let resolve!: Admitted["resolve"];
       let reject!: Admitted["reject"];
       const dispatched = new Promise<PromptDispatchDisposition>((accepted, failed) => {
@@ -163,6 +170,10 @@ export function createAgentMessageDelivery(dependencies: Dependencies): AgentMes
     },
     hasOutstandingWork(recipientId) {
       return pending.has(recipientId) || dispatching.has(recipientId);
+    },
+    getQuietMs(recipientId) {
+      const lastWork = lastWorkAt.get(recipientId);
+      return lastWork === undefined ? Infinity : Math.max(0, nowMs() - lastWork);
     },
     async waitForDispatch(recipientId, signal) {
       signal.throwIfAborted();

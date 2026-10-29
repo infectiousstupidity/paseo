@@ -730,6 +730,7 @@ export class OmpAgentSession implements AgentSession {
   private readonly noTurnScheduler: OmpNoTurnScheduler;
   private readonly usagePoller: OmpUsagePoller;
   private closed = false;
+  private runtimeReleased = false;
   private live: boolean;
   private readonly emittedUserMessageIds = new Set<string>();
 
@@ -1173,9 +1174,8 @@ export class OmpAgentSession implements AgentSession {
   }
 
   async close(): Promise<void> {
-    if (this.closed) {
-      return;
-    }
+    // Admission stays closed after failure, but physical cleanup must remain retryable.
+    if (this.runtimeReleased) return;
     this.closed = true;
     this.unsubscribeRuntime?.();
     this.usagePoller.close();
@@ -1186,6 +1186,7 @@ export class OmpAgentSession implements AgentSession {
       await this.hostTools?.close();
       this.clearOmpSessionState();
     }
+    this.runtimeReleased = true;
   }
 
   private clearOmpSessionState(): void {

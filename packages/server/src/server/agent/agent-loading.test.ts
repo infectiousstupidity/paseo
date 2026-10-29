@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
-import { ensureAgentLoaded } from "./agent-loading.js";
+import { ensureAgentLoaded, ensureAgentHistory } from "./agent-loading.js";
 import { startAgentRun } from "./agent-prompt.js";
 import { AgentStorage } from "./agent-storage.js";
 import type {
@@ -17,6 +17,112 @@ import type {
   AgentSessionConfig,
 } from "./agent-sdk-types.js";
 import { createTestAgentClients } from "../test-utils/fake-agent-client.js";
+
+test("independent managers with the same agent ID never share pending resumes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-loading-managers-"));
+  const logger = createTestLogger();
+  const storage = new AgentStorage(path.join(root, "agents"), logger);
+  const creator = new AgentManager({
+    clients: createTestAgentClients(),
+    registry: storage,
+    logger,
+  });
+  const agent = await creator.createAgent({ provider: "codex", cwd: root }, undefined, {
+    workspaceId: undefined,
+  });
+  await creator.closeAgent(agent.id);
+  creator.prepareForShutdown();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered!: () => void;
+  const starting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const firstClients = createTestAgentClients();
+  const firstClient = firstClients.codex!;
+  const resume = firstClient.resumeSession.bind(firstClient);
+  firstClient.resumeSession = async (...args) => {
+    entered();
+    await gate;
+    return resume(...args);
+  };
+  const first = new AgentManager({ clients: firstClients, registry: storage, logger });
+  const second = new AgentManager({ clients: createTestAgentClients(), registry: storage, logger });
+  try {
+    const firstLoad = ensureAgentLoaded(agent.id, {
+      agentManager: first,
+      agentStorage: storage,
+      logger,
+    });
+    await starting;
+    const secondLoaded = await ensureAgentLoaded(agent.id, {
+      agentManager: second,
+      agentStorage: storage,
+      logger,
+    });
+    expect(second.getAgent(agent.id)?.session).toBe(secondLoaded.session);
+    expect(first.getAgent(agent.id)).toBeNull();
+    release();
+    const firstLoaded = await firstLoad;
+    expect(firstLoaded.session).not.toBe(secondLoaded.session);
+  } finally {
+    release();
+    for (const manager of [first, second]) {
+      manager.prepareForShutdown();
+      await manager.flushForShutdown();
+      await manager.closeAgent(agent.id);
+    }
+    await storage.flush();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("retained history and attention reads do not resume a closed conversation", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-history-retained-"));
+  const logger = createTestLogger();
+  const storage = new AgentStorage(path.join(root, "agents"), logger);
+  const clients = createTestAgentClients();
+  const client = clients.codex!;
+  let resumes = 0;
+  const resume = client.resumeSession.bind(client);
+  client.resumeSession = async (...args) => {
+    resumes++;
+    return resume(...args);
+  };
+  const manager = new AgentManager({ clients, registry: storage, logger });
+  try {
+    const agent = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
+      workspaceId: undefined,
+    });
+    await manager.hydrateTimelineFromProvider(agent.id);
+    const timeline = manager.fetchTimeline(agent.id);
+    await manager.closeAgent(agent.id);
+    const snapshot = await ensureAgentHistory(agent.id, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+    });
+    expect(snapshot.lifecycle).toBe("closed");
+    expect(manager.fetchTimeline(agent.id)).toEqual(timeline);
+    await manager.clearAgentAttention(agent.id);
+    await manager.updateAgentMetadata(agent.id, { title: "Renamed", labels: { read: "yes" } });
+    await manager.listAgentCommands(agent.id);
+    expect(resumes).toBe(0);
+    expect(manager.getAgent(agent.id)).toBeNull();
+    expect(await storage.get(agent.id)).toMatchObject({
+      title: "Renamed",
+      labels: { read: "yes" },
+    });
+  } finally {
+    manager.prepareForShutdown();
+    await manager.flushForShutdown();
+    await Promise.all(manager.listAgents().map((agent) => manager.closeAgent(agent.id)));
+    await storage.flush();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("loads archived records for history and active records with the interactive default", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "agent-loading-purpose-"));

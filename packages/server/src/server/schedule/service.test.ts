@@ -756,6 +756,48 @@ describe("ScheduleService", () => {
     ]);
   });
 
+  test("a schedule resumes a closed target once under runtime admission and keeps its durable identity", async () => {
+    const clients = createTestAgentClients();
+    const manager = new AgentManager({
+      logger: createTestLogger(),
+      clients,
+      registry: agentStorage,
+    });
+    const agent = await manager.createAgent({ provider: "claude", cwd: tempDir }, undefined, {
+      workspaceId: undefined,
+    });
+    await manager.hydrateTimelineFromProvider(agent.id);
+    const handle = agent.persistence;
+    await manager.closeAgent(agent.id);
+    const resume = vi.spyOn(clients.claude!, "resumeSession");
+    const admit = vi.spyOn(manager, "withAgentRuntime");
+    const service = createScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: manager,
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+    });
+    try {
+      const schedule = await service.create({
+        prompt: "Continue the existing conversation",
+        cadence: { type: "every", everyMs: 60_000 },
+        target: { type: "agent", agentId: agent.id },
+      });
+      await service.runOnce(schedule.id);
+      expect(resume).toHaveBeenCalledTimes(1);
+      expect(resume.mock.calls[0]?.[0].sessionId).toBe(handle?.sessionId);
+      expect(admit).toHaveBeenCalledWith(agent.id, expect.any(Function));
+      const inspected = await service.inspect(schedule.id);
+      expect(inspected.runs[0]).toMatchObject({ status: "succeeded", agentId: agent.id });
+    } finally {
+      manager.prepareForShutdown();
+      await manager.flushForShutdown();
+      await manager.closeAgent(agent.id);
+    }
+  });
+
   test("titles scheduled new agents from the schedule prompt", async () => {
     const manager = new AgentManager({
       logger: createTestLogger(),

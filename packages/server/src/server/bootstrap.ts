@@ -988,6 +988,8 @@ export async function createPaseoDaemon(
     clients: initialAgentManagerState.clients,
     providerDefinitions: initialAgentManagerState.providerDefinitions,
     registry: agentStorage,
+    idleTimeoutMs: config.agentIdleTimeoutMs,
+    agentMessages: () => wsServer?.agentMessages,
     appendSystemPrompt: config.appendSystemPrompt,
     onWorkspaceStateMayHaveChanged: ({ cwd }) => {
       workspaceGitService.onWorkspaceStateMayHaveChanged(cwd);
@@ -1637,6 +1639,8 @@ export async function createPaseoDaemon(
           void server.close();
         });
 
+        // SAFETY: Express passes the original Node IncomingMessage/ServerResponse objects;
+        // this bridge only reconciles the Express and MCP packages' HTTP type declarations.
         await transport.handleRequest(
           req as unknown as IncomingMessage,
           res as unknown as ServerResponse,

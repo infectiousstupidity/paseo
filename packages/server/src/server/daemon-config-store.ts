@@ -17,6 +17,7 @@ type MutableDaemonConfigPatch = import("@getpaseo/protocol/messages").MutableDae
 type ProviderOverride = import("./agent/provider-launch-config.js").ProviderOverride;
 
 interface SupportedMutableConfigPatch {
+  idleTimeoutMs?: MutableDaemonConfig["idleTimeoutMs"];
   relay?: { enabled?: boolean; requireProtectedSecurity?: boolean };
   mcp?: { injectIntoAgents?: boolean };
   browserTools?: { enabled?: boolean };
@@ -268,6 +269,7 @@ function pickRelayPatch(
 function pickSupportedPatchFields(patch: MutableDaemonConfigPatch): SupportedMutableConfigPatch {
   return {
     ...pickRelayPatch(patch.relay),
+    ...(patch.idleTimeoutMs !== undefined ? { idleTimeoutMs: patch.idleTimeoutMs } : {}),
     ...(patch.mcp?.injectIntoAgents !== undefined
       ? { mcp: { injectIntoAgents: patch.mcp.injectIntoAgents } }
       : {}),
@@ -616,6 +618,7 @@ function mergeMutableAgentPatch(
 ): PersistedConfig["agents"] {
   if (
     patch.providers === undefined &&
+    patch.idleTimeoutMs === undefined &&
     patch.metadataGeneration === undefined &&
     patch.skills === undefined &&
     removeProviders.length === 0
@@ -644,6 +647,10 @@ function mergeMutableAgentPatch(
         (entry) => !removed.has(entry.provider),
       ),
     };
+  }
+
+  if (patch.idleTimeoutMs !== undefined) {
+    next["idleTimeoutMs"] = patch.idleTimeoutMs;
   }
 
   if (patch.skills?.selection !== undefined) {

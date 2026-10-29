@@ -263,6 +263,19 @@ describe("PersistedConfigSchema agent provider runtime settings", () => {
     });
   });
 
+  test.each([0, 1, 900_000, 2_147_483_647])("accepts idle timeout %i", (idleTimeoutMs) => {
+    expect(PersistedConfigSchema.parse({ agents: { idleTimeoutMs } }).agents?.idleTimeoutMs).toBe(
+      idleTimeoutMs,
+    );
+  });
+
+  test.each([-1, 0.5, 2_147_483_648, Infinity, NaN, "100"])(
+    "rejects invalid idle timeout %s",
+    (idleTimeoutMs) => {
+      expect(() => PersistedConfigSchema.parse({ agents: { idleTimeoutMs } })).toThrow();
+    },
+  );
+
   test("accepts a custom provider catalog refresh timeout", () => {
     const parsed = PersistedConfigSchema.parse({
       agents: { catalogRefreshTimeoutMs: 180_000 },
