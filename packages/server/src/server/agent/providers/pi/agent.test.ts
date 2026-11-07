@@ -3842,3 +3842,114 @@ describe("Pi subagent bridge concurrency and unavailable command", () => {
     expect(events.timelineItems()).toEqual([]);
   });
 });
+
+describe("Pi manual compaction prompt admission", () => {
+  test("holds a submitted prompt until compaction finishes, then submits exactly once", async () => {
+    const { pi, session } = await createSession();
+    onTestFinished(() => session.close());
+    const runtime = pi.latestSession();
+    const release = runtime.holdCompaction();
+    const handler = session.tryHandleOutOfBand?.("/compact");
+    expect(handler).not.toBeNull();
+    const compacting = handler!.run({ emit: () => undefined });
+    await session.startTurn("after compact");
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([]);
+    release();
+    await compacting;
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([{ message: "after compact", imageCount: 0 }]);
+  });
+
+  test("allows a queued prompt after a failed compaction", async () => {
+    const { pi, session } = await createSession();
+    onTestFinished(() => session.close());
+    const runtime = pi.latestSession();
+    runtime.compactError = new Error("summarization failed");
+    const release = runtime.holdCompaction();
+    const handler = session.tryHandleOutOfBand?.("/compact");
+    expect(handler).not.toBeNull();
+    const compacting = handler!.run({ emit: () => undefined });
+    await session.startTurn("after failed compact");
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([]);
+    release();
+    await compacting;
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([{ message: "after failed compact", imageCount: 0 }]);
+  });
+
+  test("does not send a waiting prompt after Stop", async () => {
+    const { pi, session } = await createSession();
+    onTestFinished(() => session.close());
+    const runtime = pi.latestSession();
+    const release = runtime.holdCompaction();
+    const handler = session.tryHandleOutOfBand?.("/compact");
+    expect(handler).not.toBeNull();
+    const compacting = handler!.run({ emit: () => undefined });
+    await session.startTurn("cancel this");
+    await session.interrupt();
+    release();
+    await compacting;
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([]);
+  });
+
+  test("does not send a waiting prompt after session closure", async () => {
+    const { pi, session } = await createSession();
+    const runtime = pi.latestSession();
+    const release = runtime.holdCompaction();
+    const handler = session.tryHandleOutOfBand?.("/compact");
+    expect(handler).not.toBeNull();
+    const compacting = handler!.run({ emit: () => undefined });
+    await session.startTurn("closed session");
+    await session.close();
+    release();
+    await compacting;
+    await waitForImmediate();
+    expect(runtime.prompts).toEqual([]);
+  });
+});
+
+test("Pi tool-result images appear live between the tool result and its following reply", async () => {
+  const { pi, session, events } = await createSession();
+  onTestFinished(() => session.close());
+  const runtime = pi.latestSession();
+  await session.startTurn("read screenshot");
+  runtime.emit({
+    type: "tool_execution_start",
+    toolCallId: "image-live",
+    toolName: "read",
+    args: { path: "screenshot.png" },
+  });
+  runtime.emit({
+    type: "tool_execution_end",
+    toolCallId: "image-live",
+    toolName: "read",
+    result: {
+      content: [
+        { type: "text", text: "image loaded" },
+        { type: "image", data: ONE_BY_ONE_PNG_BASE64, mimeType: "image/png" },
+      ],
+    },
+    isError: false,
+  });
+  runtime.emit({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", delta: "Screenshot received." },
+  });
+  const items = events.timelineItems();
+  const completed = items.findIndex(
+    (item) => item.type === "tool_call" && item.callId === "image-live" && item.status === "completed",
+  );
+  expect(completed).toBeGreaterThanOrEqual(0);
+  expect(items[completed + 1]).toMatchObject({
+    type: "assistant_message",
+    text: expect.stringContaining("![Image]("),
+  });
+  expect(items[completed + 2]).toMatchObject({
+    type: "assistant_message",
+    text: "Screenshot received.",
+  });
+  expect(JSON.stringify(items[completed])).not.toContain(ONE_BY_ONE_PNG_BASE64);
+});

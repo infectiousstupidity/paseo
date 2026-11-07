@@ -2721,7 +2721,9 @@ export class PiRpcAgentSession implements AgentSession {
       const item = renderProviderImageOutputAsAssistantMarkdown(image, {
         materialize: materializeProviderImage,
       });
-      if (item) this.emit({ type: "timeline", provider: this.provider, turnId, item });
+      if (item) {
+        this.emit({ type: "timeline", provider: this.provider, turnId, item });
+      }
     }
   }
 

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { mapToolDetail, parseToolArgs, parseToolResult, parseToolResult, splitPiToolResultImages } from "./tool-call-mapper.js";
+import {
+  mapToolDetail,
+  parseToolArgs,
+  parseToolResult,
+  splitPiToolResultImages,
+} from "./tool-call-mapper.js";
 
 describe("Pi tool call mapper", () => {
   test("maps bash args and result to shell detail", () => {
@@ -59,13 +64,21 @@ describe("Pi tool call mapper", () => {
 
 
 test("extracts image blocks while retaining structured metadata and placeholders", () => {
-  const result = splitPiToolResultImages(parseToolResult({
-    content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
-    structuredContent: { kind: "snapshot", nested: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png", tag: "preserve" }] },
-  }));
+  const result = splitPiToolResultImages(
+    parseToolResult({
+      content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+      structuredContent: {
+        kind: "snapshot",
+        nested: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png", tag: "preserve" }],
+      },
+    }),
+  );
   expect(result.images).toEqual([{ data: "aGVsbG8=", mimeType: "image/png" }]);
   expect(result.result).toMatchObject({
     content: [{ type: "text", text: "[image]" }],
-    structuredContent: { kind: "snapshot", nested: [{ type: "image", data: "[image]", tag: "preserve" }] },
+    structuredContent: {
+      kind: "snapshot",
+      nested: [{ type: "image", data: "[image]", tag: "preserve" }],
+    },
   });
 });

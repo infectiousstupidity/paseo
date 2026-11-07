@@ -37,3 +37,5 @@ Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/
 - Pi tool-result images use the fork's existing synchronous image materializer in live events and native replay, preserving tool ordering, without importing upstream's asynchronous output queue. Extension mapping and fork-specific subagent controls are unchanged.
 - Source baseline: fork `main` tree `2175e5c3d67205dfd839dc9e9fc7b0324de44644`; upstream `main` tree `751dc82e6c4d113b357a80593089b935113aa65c`.
 - Verification: static transformations checked against exact fork anchors. Local npm/typecheck/lint/real Pi sessions are **not available through this GitHub-only execution environment**. CI must validate the commit; a real Pi replay remains required before closing #14. Live daemon was not restarted.
+
+Initial implementation commit: [`7a97dd34`](https://github.com/infectiousstupidity/paseo/commit/7a97dd34ce768649c0b385cda5106f7f8c19407a).

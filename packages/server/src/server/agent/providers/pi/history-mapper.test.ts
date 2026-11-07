@@ -225,18 +225,35 @@ describe("Pi history mapper", () => {
 
 test("Pi tool-result images replay in order without exposing base64 as tool output", async () => {
   const events = await collectHistory([
-    { role: "assistant", content: [{ type: "toolCall", id: "image-1", name: "read", arguments: { path: "test.png" } }] },
-    { role: "toolResult", toolCallId: "image-1", toolName: "read", content: [
-      { type: "text", text: "Read image" },
-      { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
-    ] },
+    {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "image-1", name: "read", arguments: { path: "test.png" } }],
+    },
+    {
+      role: "toolResult",
+      toolCallId: "image-1",
+      toolName: "read",
+      content: [
+        { type: "text", text: "Read image" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+    },
     { role: "assistant", content: [{ type: "text", text: "Image read complete." }] },
   ]);
-  const items = events.filter((event) => event.type === "timeline").map((event) => event.item);
+  const items = events.flatMap((event) => (event.type === "timeline" ? [event.item] : []));
   expect(items.map((item) => item.type)).toEqual([
-    "tool_call", "tool_call", "assistant_message", "assistant_message",
+    "tool_call",
+    "tool_call",
+    "assistant_message",
+    "assistant_message",
   ]);
-  expect(items[2]).toMatchObject({ type: "assistant_message", text: expect.stringContaining("![Image](") });
-  expect(items[3]).toMatchObject({ type: "assistant_message", text: "Image read complete." });
+  expect(items[2]).toMatchObject({
+    type: "assistant_message",
+    text: expect.stringContaining("![Image]("),
+  });
+  expect(items[3]).toMatchObject({
+    type: "assistant_message",
+    text: "Image read complete.",
+  });
   expect(JSON.stringify(items[1])).not.toContain("aGVsbG8=");
 });
