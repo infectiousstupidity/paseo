@@ -333,6 +333,7 @@ export function createPluginWorker(options: {
       registerSettings,
       on: hooks.on,
       before: hooks.before,
+      addHook: hooks.addHook,
     });
     if (typeof contributedCleanup !== "function") {
       throw new Error("Plugin contribution must return a cleanup function");

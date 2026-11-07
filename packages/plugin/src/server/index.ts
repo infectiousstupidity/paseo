@@ -16,6 +16,10 @@ export type {
 export type {
   PluginHookContext,
   PluginHookWorkspace,
+  PluginHookWorktree,
+  PluginHooks,
+  PluginHookPayload,
+  PluginHookResult,
   PluginHookAgent,
   PluginSessionOpenRequest,
   PluginTurnOutcome,

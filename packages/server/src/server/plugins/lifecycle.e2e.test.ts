@@ -1,4 +1,5 @@
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,7 @@ import { expect, onTestFinished, test } from "vitest";
 import { DaemonClient } from "../test-utils/daemon-client.js";
 import { createTestPaseoDaemon } from "../test-utils/paseo-daemon.js";
 import { resolveDaemonVersion } from "../daemon-version.js";
+import { BuiltinPluginLoader } from "./builtin/index.js";
 
 test("a plugin transforms workspace creation once across receipt replays and observes its committed lifecycle", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "paseo-lifecycle-"));
@@ -584,5 +586,66 @@ test("reloading a plugin does not send on a closed IPC channel", async () => {
     await daemon.close();
     await rm(cwd, { recursive: true, force: true });
     await rm(pluginDirectory, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("new worktrees await plugins and include ignored files, with failure rollback", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "paseo-await-worktree-hook-"));
+  const repository = path.join(root, "repository");
+  const pluginDirectory = path.join(root, "plugin");
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: repository, encoding: "utf8", stdio: "pipe" });
+  await mkdir(repository);
+  git("init", "-b", "main");
+  await writeFile(path.join(repository, ".gitignore"), ".env\n");
+  await writeFile(path.join(repository, ".worktreeinclude"), ".env\n");
+  git("add", ".gitignore", ".worktreeinclude");
+  git("-c", "user.name=Test", "-c", "user.email=test@example.com",
+    "-c", "commit.gpgsign=false", "commit", "-m", "initial");
+  await writeFile(path.join(repository, ".env"), "LOCAL_SECRET");
+  await mkdir(pluginDirectory);
+  await writeFile(
+    path.join(pluginDirectory, "paseo-plugin.json"),
+    JSON.stringify({ id: "worktree-hook-qa", requirements: { paseo: ">=0.13.0-beta.2" } }),
+  );
+  await writeFile(
+    path.join(pluginDirectory, "index.server.ts"),
+    `export default function contribute(server) {
+      return server.addHook("worktree.create.after", async ({worktree}) => {
+        const { writeFile, readFile } = await import("node:fs/promises");
+        const env = await readFile(worktree.path + "/.env", "utf8");
+        await writeFile(worktree.path + "/hook-result.txt", env);
+        if (worktree.branch === "fail") throw new Error("intentional hook error");
+      });
+    }`,
+  );
+  const daemon = await createTestPaseoDaemon({ builtinPlugins: new BuiltinPluginLoader() });
+  const client = new DaemonClient({ url: `ws://127.0.0.1:${daemon.port}/ws` });
+  try {
+    await client.connect();
+    await client.patchDaemonConfig({ pluginsEnabled: true });
+    expect((await client.installDirectoryPlugin(pluginDirectory)).status).toBe("running");
+    const success = await client.createWorkspace({
+      source: { kind: "worktree", cwd: repository, branchName: "success", worktreeSlug: "success" },
+    });
+    expect(success.error).toBeNull();
+    expect(success.workspace).not.toBeNull();
+    expect(await readFile(path.join(success.workspace!.workspaceDirectory, "hook-result.txt"), "utf8"))
+      .toBe("LOCAL_SECRET");
+    const beforeGit = git("worktree", "list", "--porcelain");
+    const beforeWorkspaces = await client.fetchWorkspaces();
+    const failed = await client.createWorkspace({
+      source: { kind: "worktree", cwd: repository, branchName: "fail", worktreeSlug: "fail" },
+    });
+    expect(failed.workspace).toBeNull();
+    expect(failed.error).toContain("Plugin worktree-hook-qa worktree.create.after failed");
+    expect(git("worktree", "list", "--porcelain")).toBe(beforeGit);
+    expect((await client.fetchWorkspaces()).entries.map((entry) => entry.id).sort()).toEqual(
+      beforeWorkspaces.entries.map((entry) => entry.id).sort(),
+    );
+  } finally {
+    await client.close();
+    await daemon.close();
+    await rm(root, { recursive: true, force: true });
   }
 }, 60_000);
