@@ -845,6 +845,8 @@ function createToolCatalog(
       mapInput?: (input: Record<string, unknown>) => Record<string, unknown>;
     },
   ) => {
+    // Retired aliases remain callable, so plugins must not shadow their names.
+    builtinNames.add(name);
     const targetTool = tools.get(PASEO_AGENT_TOOL_COMPAT_ALIASES[name]);
     if (!targetTool || !isPaseoToolEnabled(options.paseoToolPolicy, name)) {
       return;
