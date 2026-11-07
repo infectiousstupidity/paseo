@@ -48,6 +48,7 @@ import {
   type ArchiveDependencies,
 } from "../../workspace-archive-service.js";
 import { createAgentCommand } from "../create-agent/create.js";
+import { inheritWorkspaceBackground } from "../create-agent/intent.js";
 import type { VoiceCallerContext, VoiceSpeakHandler } from "../../voice-types.js";
 import type { FirstAgentContext } from "../../messages.js";
 import { everyMsToFiveFieldCron } from "@getpaseo/protocol/schedule/cadence";
@@ -158,7 +159,7 @@ export interface PaseoToolHostDependencies {
   ensureWorkspaceForCreate?: (
     cwd: string,
     firstAgentContext?: FirstAgentContext,
-    context?: { callerWorkspaceId?: string },
+    context?: { background?: boolean; callerWorkspaceId?: string },
   ) => Promise<string>;
   browserToolsEnabled?: boolean;
   browserToolsBroker?: BrowserToolsBroker | null;
@@ -741,6 +742,7 @@ function createToolCatalog(
   const hostResolver = createHostResolver({
     serverId: options.serverId ?? "self",
     callerAgentId,
+    caller: () => resolveCallerAgent(),
     lockedCwd: callerContext?.lockedCwd,
     hosts: () => {
       if (!options.hosts) throw new Error("Connected hosts are not configured");
@@ -914,6 +916,14 @@ function createToolCatalog(
       throw new PaseoToolInputError(`Parent agent ${callerAgentId} not found`);
     }
     return parentAgent;
+  };
+
+  const workspaceBackgroundIntent = (background: boolean | undefined) => {
+    const caller = resolveCallerAgent();
+    return {
+      background: inheritWorkspaceBackground(background, caller),
+      callerWorkspaceId: caller?.workspaceId,
+    };
   };
 
   const resolveInheritedProviderConfig = (
@@ -1247,6 +1257,12 @@ function createToolCatalog(
       .trim()
       .min(1, "initialPrompt is required")
       .describe("Required first task to run immediately after creation."),
+    background: z
+      .boolean()
+      .optional()
+      .describe(
+        "True creates a background agent: hidden from tabs, default lists, your subagent track and notifications. You still get its finish notification and can address it by id. Omit to inherit your own value (false without a caller); use it for helpers the user does not need to watch.",
+      ),
   };
   const legacyCreateAgentPlacementFields = {
     relationship: AgentRelationshipInputSchema.describe(
@@ -1453,7 +1469,7 @@ function createToolCatalog(
           .boolean()
           .optional()
           .describe(
-            "True hides the workspace from default lists and the sidebar while its contents remain durable and accessible; omit background to inherit your current workspace’s value (false without a caller), and override it only when the user explicitly asks.",
+            "True hides the workspace from default lists and the sidebar while its contents remain durable and accessible; omit background to inherit your own visibility (true when you or your current workspace are background, false without a caller), and override it only when the user explicitly asks.",
           ),
         mode: z
           .enum(["branch-off", "checkout-branch", "checkout-pr"])
@@ -1523,10 +1539,12 @@ function createToolCatalog(
         if (!options.createDirectoryWorkspace) {
           throw new Error("Workspace provisioning is not configured");
         }
-        workspace = await options.createDirectoryWorkspace(cwd, title, projectId, {
-          background,
-          callerWorkspaceId: resolveCallerAgent()?.workspaceId,
-        });
+        workspace = await options.createDirectoryWorkspace(
+          cwd,
+          title,
+          projectId,
+          workspaceBackgroundIntent(background),
+        );
       } else {
         let cwd =
           path !== undefined || !projectId ? resolveScopedCwd(path, { required: true }) : null;
@@ -1557,8 +1575,7 @@ function createToolCatalog(
             ...(worktreeSlug ? { worktreeSlug } : {}),
             ...worktreeTarget,
             ...(title ? { title } : {}),
-            background,
-            callerWorkspaceId: resolveCallerAgent()?.workspaceId,
+            ...workspaceBackgroundIntent(background),
           },
         );
         if (!result.ok) {
@@ -1704,6 +1721,7 @@ function createToolCatalog(
           mode: parsedArgs.settings?.modeId,
           promptFailure: "throw",
           notifyOnFinish,
+          background: parsedArgs.background,
           detached: resolvedArgs.detached,
           callerAgentId,
           callerContext,
@@ -1877,9 +1895,11 @@ function createToolCatalog(
       const cwd = process.cwd();
       return {
         cwd,
-        workspaceId: await options.ensureWorkspaceForCreate(cwd, firstAgentContext, {
-          callerWorkspaceId: resolveCallerAgent()?.workspaceId,
-        }),
+        workspaceId: await options.ensureWorkspaceForCreate(
+          cwd,
+          firstAgentContext,
+          workspaceBackgroundIntent(undefined),
+        ),
       };
     }
     const caller = resolveCallerAgent();
@@ -1983,9 +2003,11 @@ function createToolCatalog(
       }
       return {
         cwd,
-        workspaceId: await options.ensureWorkspaceForCreate(cwd, firstAgentContext, {
-          callerWorkspaceId: resolveCallerAgent()?.workspaceId,
-        }),
+        workspaceId: await options.ensureWorkspaceForCreate(
+          cwd,
+          firstAgentContext,
+          workspaceBackgroundIntent(undefined),
+        ),
       };
     }
 
