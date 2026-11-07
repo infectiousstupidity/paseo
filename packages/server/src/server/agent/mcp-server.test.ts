@@ -2157,11 +2157,11 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: existingCwd }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 
-  it("rejects public internal helpers and the old top-level execution background option", async () => {
+  it("rejects public internal helpers", async () => {
     const workdir = await mkdtemp(join(tmpdir(), "mcp-public-helper-removal-"));
     const storage = new AgentStorage(join(workdir, "agents"), logger);
     const agentManager = new AgentManager({
@@ -2179,9 +2179,6 @@ describe("create_agent MCP tool", () => {
       const tool = registeredTool(server, "create_agent");
       const input = { title: "Helper", provider: "codex/gpt-5.4", initialPrompt: "Summarize" };
       await expect(tool.handler({ ...input, internal: true })).rejects.toThrow(/Unrecognized key/);
-      await expect(tool.handler({ ...input, background: true })).rejects.toThrow(
-        /Unrecognized key/,
-      );
     } finally {
       await removeAgentStateDir(agentManager, storage, workdir);
     }
@@ -2303,7 +2300,7 @@ describe("create_agent MCP tool", () => {
         cwd: existingCwd,
       }),
       undefined,
-      { workspaceId: "wks_existing" },
+      { workspaceId: "wks_existing", background: false },
     );
   });
 
@@ -2347,7 +2344,7 @@ describe("create_agent MCP tool", () => {
         featureValues: { fast_mode: true },
       }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 
@@ -2543,7 +2540,7 @@ describe("create_agent MCP tool", () => {
         title: "Fix auth bug",
       }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 
@@ -2578,7 +2575,7 @@ describe("create_agent MCP tool", () => {
         title: "Fix auth",
       }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 
@@ -2622,6 +2619,7 @@ describe("create_agent MCP tool", () => {
       {
         labels: { source: "mcp" },
         workspaceId: "workspace-created",
+        background: false,
       },
     );
   });
@@ -2724,7 +2722,7 @@ describe("create_agent MCP tool", () => {
           title: "Directory agent",
         }),
         undefined,
-        { workspaceId: "workspace-directory-auto-title" },
+        { workspaceId: "workspace-directory-auto-title", background: false },
       );
       expect(workspaceRecords.get("workspace-directory-auto-title")).toMatchObject({
         title: "Directory Workspace Title",
@@ -3338,12 +3336,13 @@ describe("create_agent MCP tool", () => {
           source: "voice",
         },
         workspaceId: "wks_voice",
+        background: false,
       },
     );
     await rm(baseDir, { recursive: true, force: true });
   });
 
-  it("rejects background from caller agents and defaults notify-on-finish on", async () => {
+  it("defaults notify-on-finish on for caller agents", async () => {
     const { agentManager, agentStorage, spies } = createTestDeps();
     spies.agentManager.getAgent.mockReturnValue({
       id: "parent-agent",
@@ -3363,16 +3362,6 @@ describe("create_agent MCP tool", () => {
     });
 
     const tool = registeredTool(server, "create_agent");
-    await expect(
-      tool.handler({
-        ...subagentCurrentWorkspace(),
-        title: "Child",
-        provider: "codex/gpt-5.4",
-        initialPrompt: "Do work",
-        background: false,
-      }),
-    ).rejects.toThrow(/Unrecognized key/);
-
     const parsed = await tool.inputSchema.safeParseAsync({
       ...subagentCurrentWorkspace(),
       title: "Child",
@@ -3529,6 +3518,7 @@ describe("create_agent MCP tool", () => {
           source: "handoff",
         },
         workspaceId: "wks_parent",
+        background: false,
       },
     );
   });
@@ -3590,6 +3580,7 @@ describe("create_agent MCP tool", () => {
           [PARENT_AGENT_ID_LABEL]: "parent-agent",
         },
         workspaceId: "wks_parent",
+        background: false,
       },
     );
   });
@@ -3728,6 +3719,7 @@ describe("create_agent MCP tool", () => {
     expect(agentIdArg).toBeUndefined();
     expect(optionsArg).toEqual({
       workspaceId: "workspace-created",
+      background: false,
     });
   });
 
@@ -3805,7 +3797,7 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ modeId: "dynamic" }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 
@@ -3844,7 +3836,7 @@ describe("create_agent MCP tool", () => {
     expect(spies.agentManager.createAgent).toHaveBeenCalledWith(
       expect.objectContaining({ modeId: "build", featureValues: { auto_accept: true } }),
       undefined,
-      { workspaceId: "workspace-created" },
+      { workspaceId: "workspace-created", background: false },
     );
   });
 

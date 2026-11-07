@@ -17,6 +17,7 @@ function makeAgent(input: {
   archivedAt?: Date | null;
   createdAt?: Date;
   lastActivityAt?: Date;
+  background?: boolean;
 }): Agent {
   const createdAt = input.createdAt ?? new Date("2026-03-04T00:00:00.000Z");
   const lastActivityAt = input.lastActivityAt ?? createdAt;
@@ -57,12 +58,40 @@ function makeAgent(input: {
     attentionReason: null,
     attentionTimestamp: null,
     archivedAt: input.archivedAt ?? null,
+    background: input.background ?? false,
   };
 }
 
 const WORKSPACE_ID = "ws-1";
 
 describe("workspace agent visibility", () => {
+  it("keeps a background agent active without auto-opening its tab", () => {
+    const visible = makeAgent({ id: "visible", cwd: "/repo", workspaceId: WORKSPACE_ID });
+    const classifier = makeAgent({
+      id: "classifier",
+      cwd: "/repo",
+      workspaceId: WORKSPACE_ID,
+      background: true,
+    });
+    const result = deriveWorkspaceAgentVisibility({
+      workspaceId: WORKSPACE_ID,
+      sessionAgents: new Map([
+        [visible.id, visible],
+        [classifier.id, classifier],
+      ]),
+    });
+
+    expect(result.autoOpenAgentIds).toEqual(new Set([visible.id]));
+    expect(result.activeAgentIds).toEqual(new Set([visible.id, classifier.id]));
+    expect(
+      shouldPruneWorkspaceAgentTab({
+        agentId: classifier.id,
+        agentsHydrated: true,
+        activeAgentIds: result.activeAgentIds,
+      }),
+    ).toBe(false);
+  });
+
   it("keeps subagents active while excluding them from auto-open", () => {
     const parent = makeAgent({
       id: "parent-agent",
