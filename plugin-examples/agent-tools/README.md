@@ -29,5 +29,5 @@ From the repository root, `npm run typecheck` includes this example. Outside thi
 use `paseo plugin init` to create the package and TypeScript setup, then copy `index.server.ts`
 and the manifest into that project.
 
-See [Attach tools to agents](../../public-docs/plugins/reference.md#attach-tools-to-agents)
+See [Attach tools to agents](../../skills/paseo-plugin/references/rpc-and-sdk.md#scoped-agent-tools-and-session-mcp-servers)
 for targeting, execution, provider gates, collisions, and plugin reload behavior.

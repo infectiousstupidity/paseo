@@ -447,8 +447,12 @@ The [public reference](../public-docs/plugins/reference.md#icons) owns the autho
 ## Lifecycle hooks
 
 Server entries register lifecycle observers with `server.on()` and request transforms with
-`server.before()`. The [public reference](../public-docs/plugins/reference.md#lifecycle-hooks)
-owns callback shapes, ordering, and failure behavior. `plugin-examples/lifecycle-logger` registers all
+`server.before()`. The `agent.create` hook changes saved agent settings; `agent.session_open`
+contributes launch-only `env`, `tools`, and `mcpServers`, rederived on create, resume, import
+and explicit refresh. Each plugin receives only its own tool/MCP contributions, not another
+plugin's list. Invalid schemas, reserved/internal names, saved MCP name conflicts, cross-plugin
+collisions, and unsupported providers cause an explicit failure rather than silently dropping
+tools. See [agent tool/MCP author guidance](../skills/paseo-plugin/references/rpc-and-sdk.md#scoped-agent-tools-and-session-mcp-servers). `plugin-examples/lifecycle-logger` registers all
 eleven hooks; `plugin-examples/lifecycle-actions` demonstrates common automation callbacks.
 
 Emit from the operation owner, not a client subscription. Provider history replay must not trigger
