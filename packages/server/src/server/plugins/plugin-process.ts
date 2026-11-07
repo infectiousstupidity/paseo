@@ -409,7 +409,8 @@ export function createPluginWorker(options: {
       message.type === "provider.catalog_key" ||
       message.type === "usage.fetch" ||
       message.type === "usage.discover" ||
-      message.type === "subscribe"
+      message.type === "subscribe" ||
+      message.type === "tool.call"
     ) {
       send({ type: "error", requestId: message.requestId, error: "Plugin is stopping" });
     } else if (message.type === "provider.connect") {
