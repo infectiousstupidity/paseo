@@ -90,6 +90,10 @@ export class V2Harness {
 
   readonly api: V2Api = {
     server: { info: unexpected },
+    shell: {
+      remove: unexpected,
+      list: async () => ({ location: { directory: this.info.location.directory }, data: [] }),
+    },
     plugin: {
       list: async () => ({
         location: { directory: this.info.location.directory },

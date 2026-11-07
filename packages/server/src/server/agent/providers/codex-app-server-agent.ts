@@ -1,3 +1,4 @@
+import { CodexBackgroundInventory } from "./codex/background-inventory.js";
 import { validateProviderOptions } from "../provider-options.js";
 import {
   getAgentStreamEventTurnId,
@@ -3449,6 +3450,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     cancelRequested: boolean;
   } | null = null;
   private client: CodexAppServerClient | null = null;
+  private readonly background = new CodexBackgroundInventory((event) => this.emitEvent(event));
   private threadRollbackAvailable = true;
   private readonly subscribers = new Set<(event: AgentStreamEvent) => void>();
   private startupEvents: AgentStreamEvent[] | null = null;
@@ -3661,6 +3663,7 @@ export class CodexAppServerAgentSession implements AgentSession {
         throw this.createClosedError();
       }
       this.connectionState = "connected";
+      this.background.start({ client, thread: this.currentThreadId });
     } catch (error) {
       try {
         if (this.client === client) {
@@ -3712,6 +3715,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private handleUnexpectedTermination(error: Error): void {
     this.connectionState = "disconnected";
+    this.background.stop();
     const hasActiveRootTurn = this.activeForegroundTurnId !== null || this.currentTurnId !== null;
     this.clearPendingPermissions({ preservePlanApprovals: !hasActiveRootTurn });
     if (hasActiveRootTurn) {
@@ -4550,6 +4554,8 @@ export class CodexAppServerAgentSession implements AgentSession {
     const startupEvents = this.startupEvents;
     this.startupEvents = null;
     for (const event of startupEvents ?? []) this.notifySubscribers(event);
+    const background = this.background.snapshot();
+    if (background) callback(background);
     return () => {
       this.subscribers.delete(callback);
     };
@@ -5032,6 +5038,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   async close(): Promise<void> {
     this.closed = true;
+    this.background.stop();
     this.clearPendingPermissions();
     this.pendingSubAgentNotificationsByThreadId.clear();
     this.subscribers.clear();
@@ -5061,6 +5068,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private async disposeClient(): Promise<void> {
+    this.background.stop();
     const client = this.client;
     this.connectionState = "disconnected";
     this.currentTurnId = null;
@@ -5129,6 +5137,10 @@ export class CodexAppServerAgentSession implements AgentSession {
         },
       };
     }
+
+  stopBackgroundWork(id: string): Promise<void> {
+    return this.background.stopItem(id);
+  }
 
     if (!this.goalsEnabled || parsed.commandName !== "goal") return null;
 
@@ -5720,6 +5732,14 @@ export class CodexAppServerAgentSession implements AgentSession {
     } else if (isTerminalSubAgentStatus(state.toolCall.status)) {
       nextStatus = undefined;
     }
+    if (
+      parsed.kind === "turn_completed" ||
+      parsed.kind === "exec_command_started" ||
+      parsed.kind === "exec_command_completed" ||
+      ((parsed.kind === "item_started" || parsed.kind === "item_completed") &&
+        normalizeCodexThreadItemType(parsed.item.type) === "commandExecution")
+    )
+      this.background.changed(this.currentThreadId);
     this.emitSubAgentActivityUpdate(callId, nextStatus, { subAgentType });
     return true;
   }
@@ -6079,6 +6099,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     parsed: Extract<ParsedCodexNotification, { kind: "thread_started" }>,
   ): void {
     this.currentThreadId = parsed.threadId;
+    this.background.changed(this.currentThreadId);
     this.emitEvent({
       type: "thread_started",
       provider: CODEX_PROVIDER,
