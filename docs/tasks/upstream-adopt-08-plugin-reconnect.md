@@ -1,7 +1,7 @@
 # Upstream adoption 08 — Retain plugin state on host reconnect
 
 **Priority:** P2  
-**Status:** Planned  
+**Status:** Implemented pending QA  
 **Tracker:** https://github.com/infectiousstupidity/paseo/issues/13
 
 ## Outcome
@@ -29,3 +29,33 @@ Temporary disconnect/reconnect preserves draft, selection and expansion; changed
 Catalog lifecycle tests and isolated browser WebSocket-disconnect test.
 
 Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/provider evidence. Record the commit, exact results, unresolved differences and blockers in this doc. Do not restart the live daemon or run full local test suites. Update the relevant owning product docs if behavior changes.
+
+## Implementation record — 2026-11-07
+
+Compared fork `main` at `cac42048adae53b58f92804c516e05a9b56f6865`
+against upstream #8105, #8040 and #8076. The fork still unloaded plugin
+installations on socket disconnect in `catalog-sync.tsx`. Full persistent
+bundle caching and client minification from the other upstream PRs are intentionally
+**not included**: keeping state while reconnecting does not require either.
+
+Changes:
+- Extracted the catalog subscription model. Disconnecting the **same** DaemonClient
+  now releases only its catalog observer; mounted plugin contributions, local draft
+  state, and the plugin QueryClient remain installed until the host is actually
+  removed. Reconnecting fetches the current catalog and reconciles removals,
+  changed code and reload events.
+- Bound installations to their originating DaemonClient identity. A different
+  client must replace them rather than leaving stale RPC and event clients.
+- Replayed catalog snapshots invalidate settings queries with `refetchType: "all"`
+  so inactive settings also pick up writes made while offline. Existing targeted
+  live invalidation and explicit cleanup remain intact.
+- Unchanged catalog and client retain installation identity and the presentation
+  snapshot. Added focused model and registry regressions.
+- No direct/relay switching guarantees or app-restart persistence added.
+
+**Verification outstanding:** GitHub-only work environment has no source checkout
+with workspace dependencies, and requires Node >=26.12.1 (container Node 22).
+Unit tests, typecheck, lint, formatting, real browser disconnect/reconnect, and
+Shiori draft/selection UI verification could not be run here. Do not mark #21
+accepted or closed until those are proven against the delivered commit. No
+production daemon was restarted.

@@ -475,6 +475,19 @@ for the scoped session API. `plugin-examples/lifecycle-logger` and
 `plugin-examples/lifecycle-actions` still use supported legacy registration methods.
 Provider history replay must not trigger live hooks.
 
+## Client plugin lifetime across reconnects
+
+A transient socket disconnect does **not** unload a host's plugin installations.
+Mounted plugin views, unsent drafts, selections, expansion state, and plugin query
+caches stay in memory while the existing daemon client reconnects. On the next
+catalog snapshot, unchanged bundles preserve installation identity; changed,
+removed, or explicitly reloaded plugins are disposed and reconciled. Settings
+queries are refreshed (including inactive settings) because another client may
+have written to the host while offline. Explicit host removal still disposes
+all contributions and observations. A different daemon client instance
+(direct/relay handover) replaces the prior installations; this is not
+persisted app-restart state.
+
 ## Contribute a provider
 
 Register a provider from `index.server.ts`. The provider connection is callback-based and owns all
