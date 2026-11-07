@@ -1,3 +1,4 @@
+import { readFile, unlink } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
 import type { AgentStreamEvent } from "../../agent-sdk-types.js";
@@ -256,4 +257,30 @@ test("Pi tool-result images replay in order without exposing base64 as tool outp
     text: "Image read complete.",
   });
   expect(JSON.stringify(items[1])).not.toContain("aGVsbG8=");
+});
+
+test("Pi replay recreates persisted image bytes after the temporary file disappears", async () => {
+  const nativeMessages: PiAgentMessage[] = [
+    {
+      role: "toolResult",
+      toolCallId: "replay-image",
+      toolName: "read",
+      content: [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }],
+    },
+  ];
+  const first = await collectHistory(nativeMessages);
+  const image = first.find(
+    (event) => event.type === "timeline" && event.item.type === "assistant_message",
+  );
+  if (image?.type !== "timeline" || image.item.type !== "assistant_message") {
+    throw new Error("Missing replayed Pi image");
+  }
+  const match = image.item.text.match(/\((file:[^)]+)\)/);
+  if (!match) throw new Error("Expected a materialized file image");
+  const imageUrl = new URL(match[1]);
+  expect(await readFile(imageUrl)).toEqual(Buffer.from("hello"));
+  await unlink(imageUrl);
+  const second = await collectHistory(nativeMessages);
+  expect(second).toContainEqual(image);
+  expect(await readFile(imageUrl)).toEqual(Buffer.from("hello"));
 });

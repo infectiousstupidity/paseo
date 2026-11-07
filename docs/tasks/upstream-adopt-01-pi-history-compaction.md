@@ -39,3 +39,9 @@ Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/
 - Verification: static transformations checked against exact fork anchors. Local npm/typecheck/lint/real Pi sessions are **not available through this GitHub-only execution environment**. CI must validate the commit; a real Pi replay remains required before closing #14. Live daemon was not restarted.
 
 Initial implementation commit: [`7a97dd34`](https://github.com/infectiousstupidity/paseo/commit/7a97dd34ce768649c0b385cda5106f7f8c19407a).
+
+Targeted regression coverage added in `agent.test.ts` (success, failed compaction, Stop,
+closure, and live images), `transcript.test.ts` (compaction, rewind and corrupt ancestry),
+`history-mapper.test.ts` (image order and rematerialization), and
+`tool-call-mapper.test.ts` (base64 cleanup). Tests are written but not executed
+here; a provider replay and passing CI are still needed to establish acceptance.

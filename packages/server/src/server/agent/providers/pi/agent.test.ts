@@ -3844,7 +3844,7 @@ describe("Pi subagent bridge concurrency and unavailable command", () => {
 });
 
 describe("Pi manual compaction prompt admission", () => {
-  test("holds a submitted prompt until compaction finishes, then submits exactly once", async () => {
+  test("waits for manual compaction before submitting a prompt", async () => {
     const { pi, session } = await createSession();
     onTestFinished(() => session.close());
     const runtime = pi.latestSession();
@@ -3911,7 +3911,7 @@ describe("Pi manual compaction prompt admission", () => {
   });
 });
 
-test("Pi tool-result images appear live between the tool result and its following reply", async () => {
+test("Pi tool-result images appear between the tool result and following reply", async () => {
   const { pi, session, events } = await createSession();
   onTestFinished(() => session.close());
   const runtime = pi.latestSession();
@@ -3940,7 +3940,8 @@ test("Pi tool-result images appear live between the tool result and its followin
   });
   const items = events.timelineItems();
   const completed = items.findIndex(
-    (item) => item.type === "tool_call" && item.callId === "image-live" && item.status === "completed",
+    (item) =>
+      item.type === "tool_call" && item.callId === "image-live" && item.status === "completed",
   );
   expect(completed).toBeGreaterThanOrEqual(0);
   expect(items[completed + 1]).toMatchObject({
