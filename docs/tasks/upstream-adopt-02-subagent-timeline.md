@@ -57,6 +57,10 @@ adopted the two upstream fixes without merging upstream's entire provider implem
 - `66318f05` — Removed obsolete translation labels and changed real Codex/Claude provider replay
   tests to verify child timelines rather than duplicated parent log strings.
 - `8e76f453` — Added the upstream Codex child-compaction deduplication regression.
+- `33defd0f` — Recorded complete QA blockers and coverage in this task document.
+- `f8751a84` — Explicitly closes an originating compact sheet before navigating to its parent,
+  including when the parent belongs to another workspace; navigation continues through the
+  existing workspace resolution path.
 
 Static checks: inspected the final GitHub source, verified the changed Codex path has no residual
 child log or child-item accumulator methods, checked the fork's Pi control adapter was preserved,
