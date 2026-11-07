@@ -11,6 +11,18 @@ import { resolveMobilePanelGestureIntent } from "./gesture-intent";
 
 const MOBILE_WEB_EDGE_SWIPE_WIDTH = 32;
 
+/** A horizontal surface takes the current touch before either panel opens. */
+export function usePanelAwareHorizontalScrollGesture() {
+  const { leftOpenGestureRef, rightOpenGestureRef } = useMobilePanelsRuntime();
+  return useMemo(
+    () =>
+      Gesture.Native()
+        .blocksExternalGesture(leftOpenGestureRef, rightOpenGestureRef)
+        .disallowInterruption(true),
+    [leftOpenGestureRef, rightOpenGestureRef],
+  );
+}
+
 function isCurrentSelection(startedRevision: number): boolean {
   return usePanelStore.getState().mobilePanel.revision === startedRevision;
 }
