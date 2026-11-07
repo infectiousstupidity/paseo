@@ -5,6 +5,7 @@ import {
   buildStoredAgentPayload,
   selectAgentListItems,
   toAgentPayload,
+  toAgentListItemPayload,
   toRecentProviderSessionDescriptorPayload,
   toStoredAgentRecord,
   type ManagedAgent,
@@ -538,6 +539,14 @@ describe("toRecentProviderSessionDescriptorPayload", () => {
       firstPromptPreview: null,
       lastPromptPreview: null,
     });
+  });
+});
+
+it("omits unknown background work and preserves known summary in list items", () => {
+  const snapshot = toAgentPayload(createManagedAgent());
+  expect(toAgentListItemPayload(snapshot)).not.toHaveProperty("backgroundWork");
+  expect(toAgentListItemPayload({ ...snapshot, backgroundWork: { count: 2 } })).toMatchObject({
+    backgroundWork: { count: 2 },
   });
 });
 
