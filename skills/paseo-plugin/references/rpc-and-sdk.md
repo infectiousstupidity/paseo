@@ -94,6 +94,34 @@ Inputs and outputs are validated on both sides. Backend handlers receive the sam
 
 Use TanStack Query for async request state, caching, and mutations.
 
+### Stream events from the daemon
+
+Use `defineSubscription` when a plugin panel needs live push updates rather than polling a query. Each subscriber has its own subprocess handler; it runs until the subscriber releases, the panel unmounts, the host disconnects, or the plugin stops. On reconnect, mounted `useSubscription` hooks subscribe again. Events are ordered, with no replay of missed events.
+
+```ts
+// shared/changes.ts
+import { defineSubscription } from "@getpaseo/plugin";
+import { z } from "zod";
+
+export const changes = defineSubscription({
+  name: "changes.watch",
+  input: z.object({ path: z.string() }),
+  event: z.object({ path: z.string(), kind: z.enum(["added", "modified", "deleted"]) }),
+});
+```
+
+```ts
+// index.server.ts
+server.handle(changes, ({ path }, { push, signal }) => {
+  const watcher = watchPath(path, (kind) => { void push({ path, kind }); });
+  signal.addEventListener("abort", () => watcher.close(), { once: true });
+});
+```
+
+`watchPath` is illustrative; implement it with a real watcher in the plugin's `server/` directory. In a React panel, call `useSubscription(changes, { path }, onEvent)` and inspect its `connecting | live | closed | error` status. For imperative subscriptions in client setup use `client.subscribe(changes, input, onEvent)` and release the returned handle in cleanup.
+
+An RPC input/output or subscription event that is a **top-level** `Uint8Array` is transported as binary; a nested `Uint8Array` is invalid. Define byte contracts with `z.instanceof(Uint8Array)`. See the working `plugin-examples/diff-watch` and `plugin-examples/media-stream` for real subscribe and byte-RPC examples. Do not build a second transport or poll a subscription from the UI.
+
 ### Debug daemon-side behavior
 
 Backend contributions can use normal Node logging. `console.log()` writes to the plugin's stdout;

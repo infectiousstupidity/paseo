@@ -1,6 +1,6 @@
 ---
 name: paseo-plugin
-description: Build and manage trusted local Paseo plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Paseo plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a screen, sidebar header or footer item, workspace panel, or file panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Paseo from plugin code; or add plugin RPCs.
+description: Build and manage trusted local Paseo plugins. Use when the user asks to create, edit, install, reload, enable, disable, remove, or troubleshoot a Paseo plugin; add lifecycle hooks; transform agent configuration, environment, MCP servers, or workspace creation; automate permissions or turn follow-ups; add a screen, sidebar header or footer item, workspace panel, or file panel; add Command Center items or slash commands; add composer pills or attachment sources; transform, render, or append agent timeline items; contribute a theme; use Paseo from plugin code; or add plugin RPCs or live plugin subscriptions.
 ---
 
 # Paseo plugins
@@ -41,6 +41,7 @@ renderer draws.
 | Timeline transformer  | `addTimelineTransformer` + `addTimelineRenderer`            | Replace, explode, or hide a built-in item, including while it streams                  | [Timeline](references/timeline.md)                                              |
 | Timeline row          | `paseo.agents.ref(id).timeline.append(...)`                 | Push a plugin-owned row from a server handler and update it later                      | [Timeline](references/timeline.md)                                              |
 | Plugin RPC            | `defineRpc`, `server.handle`, `useRpc`                      | Daemon-side work that is not a normal Paseo operation: vendor APIs, credentials, files | [RPC](references/rpc-and-sdk.md)                                                |
+| Live plugin subscription | `defineSubscription`, `server.handle`, `useSubscription` | Push typed JSON events or binary frames from a daemon handler to a mounted plugin surface | [Subscriptions](references/rpc-and-sdk.md#stream-events-from-the-daemon) |
 | Paseo SDK             | `usePaseo()` / handler `{ paseo }`                          | Normal Paseo operations: workspaces, agents, providers, config                         | [SDK](references/rpc-and-sdk.md)                                                |
 | Lifecycle hooks       | `server.on`, `server.before`                                | Observe turns, answer permissions, change config, environment, MCP, isolation          | [reference.md](https://paseo.sh/docs/plugins/reference.md#lifecycle-hooks)      |
 | Theme                 | `addTheme`                                                  | A light or dark palette under Settings → Appearance                                    | [Theme](references/ui-surfaces.md)                                              |
