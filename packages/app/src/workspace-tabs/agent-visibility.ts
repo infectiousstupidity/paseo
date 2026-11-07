@@ -37,7 +37,8 @@ export function deriveWorkspaceAgentVisibility(input: {
       const parentAgent = agent.parentAgentId
         ? (sessionAgents?.get(agent.parentAgentId) ?? agentDetails?.get(agent.parentAgentId))
         : undefined;
-      if (isWorkspaceRootAgent(agent, parentAgent)) {
+      // Hidden helpers remain addressable by id, but never auto-open a tab.
+      if (!agent.background && isWorkspaceRootAgent(agent, parentAgent)) {
         autoOpenAgentIds.add(agent.id);
       }
     }
