@@ -18,6 +18,11 @@ import { selectAgentListItems } from "../agent-projections.js";
 import { selectItemsByProjectedLimit } from "../timeline-projection.js";
 import { curateAgentActivity } from "../activity-curator.js";
 import { summarizeAgentActivity } from "../activity-curator.js";
+import {
+  inheritAgentBackground,
+  inheritWorkspaceBackground,
+  type BackgroundCaller,
+} from "../create-agent/intent.js";
 import { expandUserPath } from "../../path-utils.js";
 import type { PaseoToolExecutionContext, PaseoToolResult } from "../tools/types.js";
 
@@ -178,6 +183,7 @@ const remoteCreate = z
     workspaceId: z.string().min(1),
     labels: z.record(z.string(), z.string()).optional(),
     notifyOnFinish: z.boolean().optional(),
+    background: z.boolean().optional(),
     idempotencyKey: z.string().optional(),
     settings: z
       .object({
@@ -198,6 +204,8 @@ export function createHostResolver(input: {
   local: HostOperations;
   hosts: () => ToolHosts;
   callerAgentId?: string;
+  /** The destination can't see the caller, so its background defaults resolve before routing. */
+  caller: () => BackgroundCaller | null;
   lockedCwd?: string;
 }) {
   return {
@@ -215,9 +223,7 @@ export function createHostResolver(input: {
           async createAgent(args) {
             const parsed = remoteCreate.parse(args);
             const { provider, model } = resolveRequiredProviderModel(parsed.provider);
-            const workspace = (await client.fetchWorkspaces({})).entries.find(
-              (row) => row.id === parsed.workspaceId,
-            );
+            const workspace = await client.findWorkspace(parsed.workspaceId);
             if (!workspace) throw new Error(`Workspace ${parsed.workspaceId} not found`);
             const labels = {
               ...parsed.labels,
@@ -236,6 +242,10 @@ export function createHostResolver(input: {
                 featureValues: parsed.settings?.features,
               },
               workspaceId: parsed.workspaceId,
+              // Older hosts reject any background with a workspaceId, so a visible create omits it.
+              ...(inheritAgentBackground(parsed.background, input.caller())
+                ? { background: true }
+                : {}),
               labels,
               initialPrompt: parsed.initialPrompt,
               idempotencyKey: parsed.idempotencyKey,
@@ -379,7 +389,10 @@ export function createHostResolver(input: {
                       worktreeSlug: args.worktreeSlug as string | undefined,
                     },
               title: args.title as string | undefined,
-              background: args.background as boolean | undefined,
+              background: inheritWorkspaceBackground(
+                args.background as boolean | undefined,
+                input.caller(),
+              ),
             });
             if (response.error || !response.workspace)
               throw new Error(response.error ?? "Workspace creation failed");
