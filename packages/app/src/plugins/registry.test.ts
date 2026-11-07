@@ -118,6 +118,28 @@ describe("PluginRegistry", () => {
     expect(second?.queryClient.getQueryData(["counter"])).toBe(3);
   });
 
+  it("retains unchanged state and snapshot for the same host client, but replaces a new client", () => {
+    const code = bundle("reconnect");
+    pluginRegistry.installCatalog("host-a", [{ id: "example", clientBundle: code }]);
+    const initial = pluginRegistry.getSnapshot();
+    const installed = initial[0];
+    installed?.queryClient.setQueryData(["draft"], "unsent");
+    pluginRegistry.installCatalog("host-a", [{ id: "example", clientBundle: code }]);
+    expect(pluginRegistry.getSnapshot()).toBe(initial);
+    expect(pluginRegistry.getSnapshot()[0]?.queryClient.getQueryData(["draft"])).toBe("unsent");
+
+    // A new DaemonClient instance has different RPC and observation ownership.
+    registry.installCatalog(
+      "host-a",
+      [{ id: "example", clientBundle: code, requirements: { paseo: `>=${appPackage.version}` } }],
+      { client: { id: "replacement" } as unknown as DaemonClient, audio },
+    );
+    const after = pluginRegistry.getSnapshot()[0];
+    expect(after).not.toBe(installed);
+    expect(installed?.lifetime.signal.aborted).toBe(true);
+    expect(installed?.queryClient.getQueryData(["draft"])).toBeUndefined();
+  });
+
   it("replaces the query cache when the plugin bundle changes", () => {
     pluginRegistry.installCatalog("host-a", [{ id: "example", clientBundle: bundle("one") }]);
     const first = pluginRegistry.getSnapshot()[0];
