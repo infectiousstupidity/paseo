@@ -22,6 +22,8 @@ Allow Shiori and other plugin surfaces to receive push events without polling, s
 - `04a0909d`, `6572d2f2` — update existing fixtures and add focused SDK, session, and connection assertions.
 - `35cf0ea0` — binary frame tests, plugin subscription unit/integration/performance tests and isolated Playwright panel journey.
 - `c8580611` — diff-watch and binary media-stream example plugins used by the browser scenario.
+- `5304be1d` — owning docs and plugin author skill reference.
+- `dbec9f19` — fixed synchronous-invalid-event release and abort-listener cleanup, with targeted regressions (unexecuted).
 
 Fork-specific: retained Shiori's independent global queue, Pi subagent controls, fork plugin hook/provider behavior, and existing workspace/session ownership. The fork has no `public-docs/` tree; documentation is kept in `docs/plugins.md` and the local `skills/paseo-plugin/` reference rather than inventing a duplicate website document tree.
 
