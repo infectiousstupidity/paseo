@@ -53,6 +53,11 @@ adopted the two upstream fixes without merging upstream's entire provider implem
 - `2ad3aa85` — Desktop parent pill, compact sheet parent callout and real-provider browser
   navigation tests added.
 
+- `f4077b1f` — Updated the owning lifecycle doc and aligned provider-panel JSX layout.
+- `66318f05` — Removed obsolete translation labels and changed real Codex/Claude provider replay
+  tests to verify child timelines rather than duplicated parent log strings.
+- `8e76f453` — Added the upstream Codex child-compaction deduplication regression.
+
 Static checks: inspected the final GitHub source, verified the changed Codex path has no residual
 child log or child-item accumulator methods, checked the fork's Pi control adapter was preserved,
 and checked that the owning app pane and navigation hooks resolve in this fork. These are source
@@ -60,7 +65,8 @@ checks, **not passing automated tests**.
 
 **Unverified/blockers:** GitHub-connected execution here cannot install/build the workspace or
 run `npm run typecheck`, `npm run lint`, `npm run format`, targeted Vitest or real Playwright/Pi
-sessions. No UI screenshots or real/captured child session replay were produced. Follow up with
+sessions. No UI screenshots or real/captured child session replay were produced. GitHub reported no
+CI check runs for the pushed head. The targeted tests are committed but were not executed. Follow up with
 focused provider/adapter suites and app browser runs in the checkout, and test cross-workspace
 parent navigation, compact sheet dismissal, nested-child replay, archived child reload and Pi
 controls. No live Paseo daemon was restarted. Keep issue #15 open until these acceptance
