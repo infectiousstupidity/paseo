@@ -120,6 +120,33 @@ test.describe("real provider composer task lists", () => {
  * foreground turn and a second browser client. Kept isolated from the mock task-list tests.
  * Requires configured native provider credentials; never targets the production daemon.
  */
+test("Claude stops one compact-sheet background shell without stopping its sibling", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), "paseo-compact-background-")));
+  let handle: AgentHandle | undefined;
+  try {
+    handle = await launchAgent({ page, provider: "claude", cwd, mode: "full-access" });
+    await sendMessage(
+      handle,
+      "Use Bash twice with run_in_background, running sleep 180 and sleep 181 separately. Do not wait or stop either. Reply BG_READY immediately.",
+    );
+    const pill = page.getByRole("button", { name: "2 background tasks" });
+    await expect(pill).toBeVisible({ timeout: 60_000 });
+    await pill.click();
+    const sheet = page.getByTestId("background-work-panel-content");
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText("sleep 180");
+    await expect(sheet).toContainText("sleep 181");
+
+    await sheet.getByRole("button", { name: /Stop .*sleep 180/ }).click();
+    await expect(sheet).not.toContainText("sleep 180", { timeout: 40_000 });
+    await expect(sheet).toContainText("sleep 181");
+  } finally {
+    await cleanupRewindFlow({ handle, cwd });
+  }
+});
+
 test.describe("real provider background work", () => {
   test.setTimeout(300_000);
 
