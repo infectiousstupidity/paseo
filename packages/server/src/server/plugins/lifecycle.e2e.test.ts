@@ -606,7 +606,7 @@ test("new worktrees await plugins and include ignored files, with failure rollba
   await mkdir(pluginDirectory);
   await writeFile(
     path.join(pluginDirectory, "paseo-plugin.json"),
-    JSON.stringify({ id: "worktree-hook-qa", requirements: { paseo: ">=0.13.0-beta.2" } }),
+    JSON.stringify({ id: "z-worktree-hook-qa", requirements: { paseo: ">=0.13.0-beta.2" } }),
   );
   await writeFile(
     path.join(pluginDirectory, "index.server.ts"),
@@ -638,7 +638,7 @@ test("new worktrees await plugins and include ignored files, with failure rollba
       source: { kind: "worktree", cwd: repository, branchName: "fail", worktreeSlug: "fail" },
     });
     expect(failed.workspace).toBeNull();
-    expect(failed.error).toContain("Plugin worktree-hook-qa worktree.create.after failed");
+    expect(failed.error).toContain("Plugin z-worktree-hook-qa worktree.create.after failed");
     expect(git("worktree", "list", "--porcelain")).toBe(beforeGit);
     expect((await client.fetchWorkspaces()).entries.map((entry) => entry.id).sort()).toEqual(
       beforeWorkspaces.entries.map((entry) => entry.id).sort(),

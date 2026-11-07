@@ -14,7 +14,6 @@ import type {
   PluginHookContext,
   PluginLifecycleRegistration,
   PluginHookWorktree,
-  PluginHooks,
 } from "@getpaseo/plugin/server";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import type {
