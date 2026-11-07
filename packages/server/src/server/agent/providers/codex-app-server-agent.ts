@@ -49,10 +49,10 @@ import { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
 import { composeSystemPromptParts } from "../system-prompt.js";
-import { curateAgentActivity } from "../activity-curator.js";
 import { CodexAsyncQuestions, codexAsyncQuestionToTimeline } from "./codex/async-questions.js";
 import {
   mapCodexToolCallEnvelope,
@@ -3400,8 +3400,6 @@ interface CodexSubAgentCallState {
   activityItemIds: Set<string>;
   pendingCommandOutputDeltas: Map<string, string[]>;
   pendingFileChangeOutputDeltas: Map<string, string[]>;
-  childItemOrder: string[];
-  childItems: Map<string, AgentTimelineItem>;
   childThreadIds: Set<string>;
 }
 
@@ -3501,6 +3499,9 @@ export class CodexAppServerAgentSession implements AgentSession {
   private compactionTriggerByItemId = new Map<string, "auto" | "manual">();
   private pendingRootCompactionItemIds = new Set<string>();
   private pendingAnonymousRootCompactions = 0;
+  // Child threads with a compaction shown as loading. Some Codex builds settle it only through
+  // `thread/compacted` or the end of the child's turn.
+  private pendingChildCompactionThreadIds = new Set<string>();
   // Codex can report one completed compaction through both channels:
   // `thread/compacted` and a completed `contextCompaction` item.
   private unpairedCompactionNotificationCompletions = 0;
@@ -5474,6 +5475,9 @@ export class CodexAppServerAgentSession implements AgentSession {
       case "patch_apply_completed":
         this.handlePatchApplyCompletedNotification(parsed, callId);
         return;
+      case "context_compacted":
+        this.settleChildCompaction(parsed.threadId);
+        return;
       default:
         // Aggregate child telemetry is redundant and must not leak into the
         // root timeline. Concrete legacy tools are projected above for Codex
@@ -5650,20 +5654,10 @@ export class CodexAppServerAgentSession implements AgentSession {
         activityItemIds: new Set<string>(),
         pendingCommandOutputDeltas: new Map<string, string[]>(),
         pendingFileChangeOutputDeltas: new Map<string, string[]>(),
-        childItemOrder: [],
-        childItems: new Map<string, AgentTimelineItem>(),
         childThreadIds: new Set<string>(),
       } satisfies CodexSubAgentCallState);
 
-    state.toolCall = {
-      ...timelineItem,
-      detail: {
-        ...timelineItem.detail,
-        log:
-          timelineItem.detail.log ||
-          (state.toolCall.detail.type === "sub_agent" ? state.toolCall.detail.log : ""),
-      },
-    };
+    state.toolCall = timelineItem;
     state.parentCallId ??= parentCallId;
     state.parentSubagentId ??= parentSubagentId;
     const activity = readCodexSubAgentActivity(rawItem);
@@ -5716,25 +5710,17 @@ export class CodexAppServerAgentSession implements AgentSession {
     const activityToolCall = mapCodexToolCallFromThreadItem(rawItem, {
       cwd: this.config.cwd ?? null,
     });
-    if (
-      activityToolCall?.detail.type === "sub_agent" &&
-      state.toolCall.detail.type === "sub_agent"
-    ) {
-      state.toolCall = {
-        ...state.toolCall,
-        detail: {
-          ...state.toolCall.detail,
-          subAgentType: activityToolCall.detail.subAgentType,
-        },
-      };
-    }
+    const subAgentType =
+      activityToolCall?.detail.type === "sub_agent"
+        ? activityToolCall.detail.subAgentType
+        : undefined;
     let nextStatus: ToolCallTimelineItem["status"] | undefined = "running";
     if (activity.kind === "interrupted") {
       nextStatus = "canceled";
     } else if (isTerminalSubAgentStatus(state.toolCall.status)) {
       nextStatus = undefined;
     }
-    this.emitSubAgentActivityUpdate(callId, nextStatus);
+    this.emitSubAgentActivityUpdate(callId, nextStatus, { subAgentType });
     return true;
   }
 
@@ -5775,7 +5761,13 @@ export class CodexAppServerAgentSession implements AgentSession {
   ): boolean {
     if (
       childSubAgentCallId &&
-      this.handleSubAgentContextCompactionItem(childSubAgentCallId, parsed.item, "completed")
+      parsed.threadId &&
+      this.handleSubAgentContextCompactionItem(
+        childSubAgentCallId,
+        parsed.threadId,
+        parsed.item,
+        "completed",
+      )
     ) {
       return true;
     }
@@ -5783,17 +5775,6 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.handleCompletedContextCompactionItem(parsed.item) ||
       this.handleRegisteredSubAgentActivity(parsed.item)
     );
-  }
-
-  private upsertSubAgentChildItem(callId: string, itemId: string, item: AgentTimelineItem): void {
-    const state = this.subAgentCallsByCallId.get(callId);
-    if (!state) {
-      return;
-    }
-    if (!state.childItems.has(itemId)) {
-      state.childItemOrder.push(itemId);
-    }
-    state.childItems.set(itemId, item);
   }
 
   private emitCodexToolTimelineItem(
@@ -5805,7 +5786,6 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.emitEvent({ type: "timeline", provider: CODEX_PROVIDER, item: timelineItem });
       return;
     }
-    this.upsertSubAgentChildItem(subAgentCallId, timelineItem.callId, timelineItem);
     const state = this.subAgentCallsByCallId.get(subAgentCallId);
     if (state) {
       const targetThreadIds = childThreadId ? [childThreadId] : state.childThreadIds;
@@ -5819,26 +5799,15 @@ export class CodexAppServerAgentSession implements AgentSession {
     );
   }
 
-  private getSubAgentChildTimeline(state: CodexSubAgentCallState): AgentTimelineItem[] {
-    return state.childItemOrder
-      .map((itemId) => state.childItems.get(itemId))
-      .filter((item): item is AgentTimelineItem => Boolean(item));
-  }
-
   private emitSubAgentActivityUpdate(
     callId: string,
     status?: ToolCallTimelineItem["status"],
-    options?: { reopen?: boolean },
+    options?: { reopen?: boolean; subAgentType?: string },
   ): void {
     const state = this.subAgentCallsByCallId.get(callId);
     if (!state || state.toolCall.detail.type !== "sub_agent") {
       return;
     }
-    const childTimeline = this.getSubAgentChildTimeline(state);
-    const log =
-      childTimeline.length > 0
-        ? curateAgentActivity(childTimeline, { labelAssistantMessages: true })
-        : "";
     let resolvedStatus = status ?? state.toolCall.status;
     if (
       status === "running" &&
@@ -5847,16 +5816,12 @@ export class CodexAppServerAgentSession implements AgentSession {
     ) {
       resolvedStatus = state.toolCall.status;
     }
-    for (const childThreadId of state.childThreadIds) {
-      this.emitProviderSubagentUpsert(childThreadId, state, resolvedStatus);
-    }
-    const baseToolCall = {
-      ...state.toolCall,
-      detail: {
-        ...state.toolCall.detail,
-        log,
-      },
-    };
+    const baseToolCall = options?.subAgentType
+      ? {
+          ...state.toolCall,
+          detail: { ...state.toolCall.detail, subAgentType: options.subAgentType },
+        }
+      : state.toolCall;
     const nextToolCall: ToolCallTimelineItem =
       resolvedStatus === "failed"
         ? {
@@ -5869,10 +5834,14 @@ export class CodexAppServerAgentSession implements AgentSession {
             status: resolvedStatus,
             error: null,
           };
+    // The card is a launch marker: the child's activity streams to its own timeline, so the card
+    // is re-sent only when its status or label changes.
+    const cardChanged = !isDeepStrictEqual(nextToolCall, state.toolCall);
     state.toolCall = nextToolCall;
-    if (state.parentCallId && state.parentCallId !== callId) {
-      this.upsertSubAgentChildItem(state.parentCallId, state.callId, nextToolCall);
-      this.emitSubAgentActivityUpdate(state.parentCallId);
+    for (const childThreadId of state.childThreadIds) {
+      this.emitProviderSubagentUpsert(childThreadId, state, resolvedStatus);
+    }
+    if (!cardChanged || (state.parentCallId && state.parentCallId !== callId)) {
       return;
     }
     this.emitEvent({ type: "timeline", provider: CODEX_PROVIDER, item: nextToolCall });
@@ -5980,7 +5949,6 @@ export class CodexAppServerAgentSession implements AgentSession {
   ): void {
     this.applyBufferedDeltaTextToTimelineItem(timelineItem, itemId);
     if (itemId) {
-      this.upsertSubAgentChildItem(callId, itemId, timelineItem);
       this.pendingAgentMessages.delete(itemId);
       this.pendingReasoning.delete(itemId);
       this.pendingCommandOutputDeltas.delete(itemId);
@@ -5991,17 +5959,27 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private handleSubAgentContextCompactionItem(
     callId: string,
+    childThreadId: string,
     item: { id?: string; type?: string; [key: string]: unknown },
     status: "loading" | "completed",
   ): boolean {
     if (!this.isContextCompactionItem(item)) {
       return false;
     }
-    if (item.id) {
-      this.upsertSubAgentChildItem(callId, item.id, { type: "compaction", status });
+    if (status === "loading") {
+      this.pendingChildCompactionThreadIds.add(childThreadId);
+      this.emitProviderSubagentTimeline(childThreadId, { type: "compaction", status });
+    } else {
+      this.settleChildCompaction(childThreadId);
     }
     this.emitSubAgentActivityUpdate(callId);
     return true;
+  }
+
+  private settleChildCompaction(childThreadId: string): void {
+    if (this.pendingChildCompactionThreadIds.delete(childThreadId)) {
+      this.emitProviderSubagentTimeline(childThreadId, { type: "compaction", status: "completed" });
+    }
   }
 
   private shouldSkipCompletedThreadItem(
@@ -6034,11 +6012,6 @@ export class CodexAppServerAgentSession implements AgentSession {
             text: parsed.delta,
           });
         }
-        this.upsertSubAgentChildItem(subAgentCallId, parsed.itemId, {
-          type: "assistant_message",
-          messageId: parsed.itemId,
-          text,
-        });
         this.emitSubAgentActivityUpdate(subAgentCallId, "running");
         return;
       }
@@ -6072,10 +6045,6 @@ export class CodexAppServerAgentSession implements AgentSession {
             text: parsed.delta,
           });
         }
-        this.upsertSubAgentChildItem(subAgentCallId, parsed.itemId, {
-          type: "reasoning",
-          text: prev.join(""),
-        });
         this.emitSubAgentActivityUpdate(subAgentCallId, "running");
         return;
       }
@@ -6143,6 +6112,7 @@ export class CodexAppServerAgentSession implements AgentSession {
   ): void {
     const subAgentCallId = this.getSubAgentCallIdForThread(parsed.threadId);
     if (subAgentCallId) {
+      if (parsed.threadId) this.settleChildCompaction(parsed.threadId);
       let status: ToolCallTimelineItem["status"] = "completed";
       if (parsed.status === "failed") {
         status = "failed";
@@ -6723,7 +6693,13 @@ export class CodexAppServerAgentSession implements AgentSession {
     const childSubAgentCallId = this.getSubAgentCallIdForThread(parsed.threadId);
     if (
       childSubAgentCallId &&
-      this.handleSubAgentContextCompactionItem(childSubAgentCallId, parsed.item, "loading")
+      parsed.threadId &&
+      this.handleSubAgentContextCompactionItem(
+        childSubAgentCallId,
+        parsed.threadId,
+        parsed.item,
+        "loading",
+      )
     ) {
       return;
     }
@@ -6754,9 +6730,6 @@ export class CodexAppServerAgentSession implements AgentSession {
     });
     if (childSubAgentCallId) {
       this.emitStartedProviderSubagentItem(parsed.threadId, timelineItem);
-      if (parsed.item.id) {
-        this.upsertSubAgentChildItem(childSubAgentCallId, parsed.item.id, timelineItem);
-      }
       this.emitSubAgentActivityUpdate(childSubAgentCallId, "running");
       this.replayPendingSubAgentNotifications(registeredChildThreadIds);
       return;
@@ -6809,9 +6782,6 @@ export class CodexAppServerAgentSession implements AgentSession {
       this.emittedProviderSubagentUserMessageKeys.add(childMessageKey);
       if (parsed.threadId) {
         this.emitProviderSubagentTimeline(parsed.threadId, timelineItem);
-      }
-      if (itemId) {
-        this.upsertSubAgentChildItem(childSubAgentCallId, itemId, timelineItem);
       }
       this.emitSubAgentActivityUpdate(childSubAgentCallId, "running");
       return;
