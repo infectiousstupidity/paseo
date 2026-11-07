@@ -16,6 +16,7 @@ import {
   useSubagentOpensInSheet,
   type SubagentRow,
 } from "@/subagents";
+import { ParentAgentPill } from "@/subagents/parent";
 import { SubagentsTrack } from "@/subagents/track";
 import type { TodoEntry } from "@/types/stream";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -34,6 +35,7 @@ export const AgentTracks = memo(function AgentTracks({
   serverId,
   workspaceId,
   agentId,
+  parentAgentId,
   subagentRows,
   tasks,
   archiveFinishedStatus,
@@ -43,6 +45,7 @@ export const AgentTracks = memo(function AgentTracks({
   serverId: string;
   workspaceId: string;
   agentId: string;
+  parentAgentId: string | null;
   subagentRows: SubagentRow[];
   tasks: TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
@@ -108,6 +111,7 @@ export const AgentTracks = memo(function AgentTracks({
   if (
     !hasWorkspaceDiffStat &&
     !hasAgentTracks({
+      parentAgentId,
       subagentRows,
       tasks,
       archiveFinishedStatus,
@@ -119,6 +123,7 @@ export const AgentTracks = memo(function AgentTracks({
 
   return (
     <ComposerTrackBar>
+      {parentAgentId ? <ParentAgentPill serverId={serverId} parentAgentId={parentAgentId} /> : null}
       <AgentTaskList tasks={tasks} />
       <SubagentsTrack
         serverId={serverId}
@@ -147,17 +152,20 @@ export const AgentTracks = memo(function AgentTracks({
 });
 
 export function hasAgentTracks({
+  parentAgentId = null,
   subagentRows,
   tasks,
   archiveFinishedStatus,
   hasPluginComposerPills = false,
 }: {
+  parentAgentId?: string | null;
   subagentRows: readonly SubagentRow[];
   tasks: readonly TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
   hasPluginComposerPills?: boolean;
 }): boolean {
   return (
+    parentAgentId !== null ||
     subagentRows.length > 0 ||
     Boolean(tasks?.length) ||
     archiveFinishedStatus.kind !== "idle" ||
