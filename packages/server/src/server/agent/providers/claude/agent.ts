@@ -47,6 +47,7 @@ import {
 import { parsePartialJsonObject } from "./partial-json.js";
 import { withClaudeReplayHistory, type ClaudeReplayHistory } from "./transcript-history.js";
 import { ClaudeSidechainTracker } from "./sidechain-tracker.js";
+import { ClaudeRuntimeSafety } from "./runtime-safety.js";
 import { readClaudeSubagentHandback } from "./subagent-handback.js";
 import { ClaudeTaskState } from "./task-state.js";
 import {
@@ -2261,6 +2262,9 @@ class ClaudeAgentSession implements AgentSession {
   private readonly queryFactory?: ClaudeQueryFactory;
   private readonly resolveBinary: () => Promise<string>;
   private query: Query | null = null;
+  // Provider background inventory is separate from the fork's existing guarded idle-suspension ledger.
+  private readonly backgroundInventory = new ClaudeRuntimeSafety();
+  private readonly backgroundStops = new Map<string, (outcome: string) => void>();
   private readonly harnessEnvironment: Record<string, string>;
   private readonly usageSessionKey = randomUUID();
   private childProcess: ChildProcess | null = null;
@@ -2624,6 +2628,35 @@ class ClaudeAgentSession implements AgentSession {
     return () => {
       this.subscribers.delete(callback);
     };
+  }
+
+  async stopBackgroundWork(id: string): Promise<void> {
+    return this.runRuntimeControl(async () => {
+      const query = this.query;
+      if (!query || !this.backgroundInventory.canStop(id))
+        throw new Error("Background work is no longer available");
+      if (this.backgroundStops.has(id)) throw new Error("Stop is already pending");
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let finish!: (outcome: string) => void;
+      const outcome = new Promise<string>((resolve) => {
+        finish = resolve;
+        this.backgroundStops.set(id, resolve);
+      });
+      try {
+        const result = await Promise.race([
+          Promise.all([query.stopTask(id), outcome]).then(([, value]) => value),
+          outcome.then((value) => (value === "stopped" ? new Promise<string>(() => {}) : value)),
+          new Promise<string>((resolve) => {
+            timer = setTimeout(() => resolve("timeout"), 15000);
+          }),
+        ]);
+        if (result !== "stopped") throw new Error(`Background work stop: ${result}`);
+        if (this.query !== query) throw new Error("Background work connection changed");
+      } finally {
+        clearTimeout(timer);
+        if (this.backgroundStops.get(id) === finish) this.backgroundStops.delete(id);
+      }
+    });
   }
 
   async interrupt(): Promise<void> {
@@ -3087,6 +3120,9 @@ class ClaudeAgentSession implements AgentSession {
       this.trackedProcessTree = await captureProcessTree(this.childProcess.pid);
     }
     this.rejectAllPendingPermissions(new Error("Claude session closed"));
+    for (const finish of this.backgroundStops.values()) finish("connection lost");
+    this.backgroundStops.clear();
+    this.backgroundInventory.retire();
     this.cancelCurrentTurn?.();
     this.subscribers.clear();
     this.activeForegroundTurnId = null;
@@ -3531,6 +3567,8 @@ class ClaudeAgentSession implements AgentSession {
       const oldInput = this.input;
       // Null out query/input BEFORE awaiting the old iterator's return so the
       // old pump sees this.query !== activeQuery and skips failActiveTurns.
+      for (const finish of this.backgroundStops.values()) finish("connection lost");
+      this.backgroundInventory.retire();
       this.query = null;
       this.input = null;
       this.queryPumpPromise = null;
@@ -3572,6 +3610,8 @@ class ClaudeAgentSession implements AgentSession {
     this.logger.debug({ options: summarizeClaudeOptionsForLog(options) }, "claude query");
     this.input = input;
     // A fresh CLI owns no old background work. Require a new complete snapshot for opt-in.
+    this.backgroundInventory.reset();
+    this.dispatchEvents([{ type: "background_work", provider: "claude", items: null }]);
     this.runtimeTasks.clear();
     this.backgroundTasks = null;
     this.requestedBackgroundSnapshot = false;
@@ -4161,11 +4201,14 @@ class ClaudeAgentSession implements AgentSession {
   }
 
   private failRunningRuntimeTasks(): void {
-    this.dispatchEvents(
-      foldSubagentObservations(this.taskProtocolSource.failRunningTasks()).map(
+    for (const finish of this.backgroundStops.values()) finish("connection lost");
+    this.backgroundInventory.retire();
+    this.dispatchEvents([
+      ...foldSubagentObservations(this.taskProtocolSource.failRunningTasks()).map(
         (event): AgentStreamEvent => ({ type: "provider_subagent", provider: "claude", event }),
       ),
-    );
+      { type: "background_work", provider: "claude", items: null },
+    ]);
   }
 
   private startQueryPump(): void {
@@ -4230,12 +4273,21 @@ class ClaudeAgentSession implements AgentSession {
       );
     };
     const handlePumpedMessage = async (message: SDKMessage): Promise<boolean> => {
+      const backgroundWork = this.backgroundInventory.observe(message);
+      if (message.type === "system" && message.subtype === "task_notification")
+        this.backgroundStops.get(message.task_id)?.(message.status);
       logRawMessage(message);
       consecutiveInterruptAbortRecoveries = 0;
       if (await this.handleMissingResumedConversation(message, activeQuery)) {
         return true;
       }
+      if (this.query !== activeQuery) return true;
       await this.routeSdkMessageFromPump(message);
+      if (this.query !== activeQuery) return true;
+      if (backgroundWork && this.backgroundInventory.isCurrentInventory(backgroundWork))
+        this.dispatchEvents([
+          { type: "background_work", provider: "claude", items: backgroundWork },
+        ]);
       return false;
     };
     const drainActiveQuery = async (): Promise<boolean> => {
@@ -4841,6 +4893,13 @@ class ClaudeAgentSession implements AgentSession {
     }
     if (message.subtype === "task_notification") {
       this.appendTaskNotificationEvents(message, events);
+      return;
+    }
+    if (message.subtype === "background_tasks_changed") {
+      this.logger.debug(
+        { tasks: message.tasks.map(({ task_id, task_type }) => ({ task_id, task_type })) },
+        "claude.background_tasks_changed",
+      );
       return;
     }
     if (message.subtype === "task_progress") {
