@@ -6122,6 +6122,7 @@ export class Session {
   ): Promise<CreatePaseoWorktreeResult> {
     const result = await createPaseoWorktree(input, {
       github: this.github,
+      lifecycle: this.pluginRuntime,
       ...(options?.resolveDefaultBranch
         ? { resolveDefaultBranch: options.resolveDefaultBranch }
         : {}),

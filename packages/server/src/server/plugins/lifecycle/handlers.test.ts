@@ -131,3 +131,56 @@ test.each([{ title: "Changed" }, { labels: { changed: "true" } }])(
     ).rejects.toThrow("agent.session_open hooks can only change env, tools, and mcpServers");
   },
 );
+
+test("canonical hooks compose in registration order with legacy hooks", async () => {
+  const hooks = new PluginHookHandlers(() => {});
+  const removed = hooks.addHook("workspace.create.before", async ({ request }) => ({
+    ...request,
+    title: "canonical",
+  }));
+  hooks.before("workspace.create", ({ request }) => ({
+    ...request,
+    title: `${request.title}:legacy`,
+  }));
+  const input = { source: { kind: "directory", path: "/project" } };
+  expect(await hooks.invoke("first", "before", "workspace.create", input, paseo)).toEqual({
+    ...input,
+    title: "canonical:legacy",
+  });
+  removed();
+  expect(await hooks.invoke("second", "before", "workspace.create", input, paseo)).toEqual({
+    ...input,
+    title: "undefined:legacy",
+  });
+  expect(() =>
+    hooks.addHook("agent.session_open" as never, async () => {}),
+  ).toThrow("Unknown lifecycle hook: agent.session_open");
+  hooks.close();
+});
+
+test("awaited worktree after hook runs before returning and propagates errors", async () => {
+  const hooks = new PluginHookHandlers(() => {});
+  const observed: string[] = [];
+  const worktree = {
+    path: "/project/worktree",
+    branch: "feature",
+    sourceCheckout: "/project",
+  };
+  hooks.addHook("worktree.create.after", async ({ worktree: current }) => {
+    expect(current).toEqual(worktree);
+    await Promise.resolve();
+    observed.push("first");
+  });
+  hooks.addHook("worktree.create.after", async () => {
+    observed.push("second");
+    throw new Error("copy failed");
+  });
+  hooks.addHook("worktree.create.after", async () => {
+    observed.push("never");
+  });
+  await expect(
+    hooks.invoke("worktree", "before", "worktree.create.after", { worktree }, paseo),
+  ).rejects.toThrow("copy failed");
+  expect(observed).toEqual(["first", "second"]);
+  hooks.close();
+});

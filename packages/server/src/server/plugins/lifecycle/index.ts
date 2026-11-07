@@ -13,6 +13,7 @@ import type {
   PluginHookAgent,
   PluginHookContext,
   PluginLifecycleRegistration,
+  PluginHookWorktree,
 } from "@getpaseo/plugin/server";
 import { PARENT_AGENT_ID_LABEL } from "@getpaseo/protocol/agent-labels";
 import type {
@@ -25,6 +26,7 @@ import type { PersistedWorkspaceRecord } from "../../workspace-registry.js";
 
 export type PluginWireBeforeRequests = Omit<PluginBeforeRequests, "agent.session_open"> & {
   "agent.session_open": SessionOpenWireRequest;
+  "worktree.create.after": { worktree: PluginHookWorktree };
 };
 
 /** Daemon-only results; ownership never crosses the plugin process boundary. */
@@ -43,9 +45,17 @@ export const lifecycleEventNames = [
   "workspace.created",
   "workspace.archived",
 ] as const;
-export const beforeHookNames = ["agent.create", "agent.session_open", "workspace.create"] as const;
+const legacyBeforeHookNames = ["agent.create", "agent.session_open", "workspace.create"] as const;
+export const beforeHookNames = [...legacyBeforeHookNames, "worktree.create.after"] as const;
 
 const beforeSchemas = {
+  "worktree.create.after": z.object({
+    worktree: z.object({
+      path: z.string().min(1),
+      branch: z.string().min(1),
+      sourceCheckout: z.string().min(1),
+    }).strict(),
+  }).strict(),
   "agent.create": CreateAgentRequestMessageSchema.pick({ config: true, env: true }).strict(),
   "agent.session_open": z
     .object({
@@ -79,6 +89,8 @@ const sessionOpenLocalResultSchema = beforeSchemas["agent.session_open"].extend(
 });
 
 export interface PluginLifecycle {
+  /** Waits for every subscribed plugin; an error aborts worktree creation. */
+  wait(name: "worktree.create.after", payload: { worktree: PluginHookWorktree }): Promise<void>;
   emit<Name extends keyof PluginLifecycleEvents>(
     name: Name,
     event: PluginLifecycleEvents[Name],
@@ -219,10 +231,40 @@ export class PluginHookHandlers implements PluginLifecycleRegistration {
   };
 
   readonly before: PluginLifecycleRegistration["before"] = (name, handler) => {
-    if (!beforeHookNames.includes(name)) {
+    if (!legacyBeforeHookNames.includes(name)) {
       throw new Error(`Unknown before hook: ${name}`);
     }
     return this.register(this.transforms, name, handler as Handler);
+  };
+
+  /** Canonical names reuse the existing process protocol and legacy registrations. */
+  readonly addHook: PluginLifecycleRegistration["addHook"] = (name, handler) => {
+    if (name === "worktree.create.after") {
+      return this.register(this.transforms, name, handler as Handler);
+    }
+    const events: Record<string, string> = {
+      "agent.turn.before": "agent.turn_started",
+      "agent.turn.after": "agent.turn_ended",
+      "agent.permission.before": "agent.permission_requested",
+      "agent.permission.after": "agent.permission_resolved",
+      "agent.archive.after": "agent.archived",
+      "agent.create.after": "agent.created",
+      "agent.close.after": "agent.closed",
+      "workspace.create.after": "workspace.created",
+      "workspace.archive.after": "workspace.archived",
+    };
+    const requests: Record<string, string> = {
+      "agent.create.before": "agent.create",
+      "agent.open.before": "agent.session_open",
+      "workspace.create.before": "workspace.create",
+    };
+    if (Object.hasOwn(events, name)) {
+      return this.register(this.events, events[name]!, handler as Handler);
+    }
+    if (Object.hasOwn(requests, name)) {
+      return this.register(this.transforms, requests[name]!, handler as Handler);
+    }
+    throw new Error(`Unknown lifecycle hook: ${name}`);
   };
 
   catalog(): { events: string[]; before: string[] } {
@@ -242,12 +284,20 @@ export class PluginHookHandlers implements PluginLifecycleRegistration {
       if (kind === "before") {
         if (
           !beforeHookNames.includes(
-            name as keyof import("@getpaseo/plugin/server").PluginBeforeRequests,
+            name as (typeof beforeHookNames)[number],
           )
         ) {
           throw new Error(`Unknown before hook: ${name}`);
         }
-        const hookName = name as keyof import("@getpaseo/plugin/server").PluginBeforeRequests;
+        const hookName = name as keyof PluginWireBeforeRequests;
+        if (hookName === "worktree.create.after") {
+          const payload = validateBeforeRequest(hookName, input);
+          for (const handler of this.transforms.get(name) ?? []) {
+            controller.signal.throwIfAborted();
+            await handler(structuredClone(payload), { paseo, signal: controller.signal });
+          }
+          return null;
+        }
         if (hookName === "agent.session_open") {
           return await this.openSession(input, { paseo, signal: controller.signal });
         }

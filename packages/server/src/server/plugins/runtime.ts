@@ -8,6 +8,7 @@ import {
 } from "@getpaseo/plugin/server/provider";
 import type {
   PluginLifecycleEvents,
+  PluginHookWorktree,
   PluginHookAgent,
   AgentToolResult,
 } from "@getpaseo/plugin/server";
@@ -607,6 +608,29 @@ export class PluginRuntime {
 
   async drainEvents(): Promise<void> {
     await Promise.all(this.pendingEvents);
+  }
+
+  async wait(
+    name: "worktree.create.after",
+    payload: { worktree: PluginHookWorktree },
+  ): Promise<void> {
+    const plugins = [...this.plugins.values()].sort((a, b) => a.id.localeCompare(b.id));
+    for (const loaded of plugins) {
+      if (!loaded.hooks.before.includes(name)) continue;
+      try {
+        await this.request(loaded, {
+          type: "hook",
+          requestId: randomUUID(),
+          kind: "before",
+          name,
+          input: payload,
+        });
+      } catch (error) {
+        throw new Error(`Plugin ${loaded.id} ${name} failed: ${describeError(error)}`, {
+          cause: error,
+        });
+      }
+    }
   }
 
   async before<Name extends keyof PluginWireBeforeRequests>(

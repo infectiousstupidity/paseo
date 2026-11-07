@@ -46,6 +46,7 @@ interface PluginRuntimePort {
   emit?: PluginLifecycle["emit"];
   drainEvents?: PluginRuntime["drainEvents"];
   before?: PluginLifecycle["before"];
+  wait?: PluginLifecycle["wait"];
   catalog: PluginRuntime["catalog"];
   invoke(pluginId: string, method: string, input: unknown): Promise<unknown>;
   startSubscription: PluginRuntime["startSubscription"];
@@ -169,6 +170,10 @@ export class PluginService {
   async drainEvents(): Promise<void> {
     await this.runtime.drainEvents?.();
   }
+
+  readonly wait: PluginLifecycle["wait"] = async (name, payload) => {
+    await this.runtime.wait?.(name, payload);
+  };
 
   readonly before: PluginLifecycle["before"] = async (name, request) => {
     if (this.runtime.before) {

@@ -446,18 +446,34 @@ The [public reference](../public-docs/plugins/reference.md#icons) owns the autho
 
 ## Lifecycle hooks
 
-Server entries register lifecycle observers with `server.on()` and request transforms with
-`server.before()`. The `agent.create` hook changes saved agent settings; `agent.session_open`
-contributes launch-only `env`, `tools`, and `mcpServers`, rederived on create, resume, import
-and explicit refresh. Each plugin receives only its own tool/MCP contributions, not another
-plugin's list. Invalid schemas, reserved/internal names, saved MCP name conflicts, cross-plugin
-collisions, and unsupported providers cause an explicit failure rather than silently dropping
-tools. See [agent tool/MCP author guidance](../skills/paseo-plugin/references/rpc-and-sdk.md#scoped-agent-tools-and-session-mcp-servers). `plugin-examples/lifecycle-logger` registers all
-eleven hooks; `plugin-examples/lifecycle-actions` demonstrates common automation callbacks.
+Plugins can register async callbacks with `server.addHook(name, handler)` using names such as
+`workspace.create.before`, `agent.open.before`, and `agent.turn.after`. The original
+`server.on()` and `server.before()` APIs remain compatible and run in registration order
+with corresponding canonical callbacks. An `agent.open.before` callback contributes
+launch-only `env`, `tools`, and `mcpServers`, rederived on create, resume, import,
+and refresh. Each plugin receives only its own contributions, and invalid requests fail.
 
-Emit from the operation owner, not a client subscription. Provider history replay must not trigger
-live hooks. Observers must not be awaited inside agent mutations: a callback can send a prompt or
-answer a permission through its own daemon session. Awaiting it there deadlocks that command.
+`worktree.create.after` is an **awaited** hook. Its payload has
+`{ worktree: { path, branch, sourceCheckout } }`, without a workspace ID. The daemon
+waits for every registered plugin (sorted by plugin ID) before workspace setup, terminals,
+or the first agent; a hook error or 30-second timeout aborts the creation and rolls the
+new worktree back. Plugins must not create or delete the worktree themselves.
+Other event notifications are intentionally not awaited inside agent mutations because
+their callbacks may invoke the same daemon and deadlock if blocked.
+
+The built-in `worktree-include` plugin uses this hook to copy only local ignored files
+selected by a source checkout's `.worktreeinclude` file. For example, include patterns
+`.env` and `config/*.local.json` on separate lines. The file must match an include
+pattern **and** be Git-ignored; tracked files and other unignored files are never copied.
+An existing destination is never overwritten, and no `.worktreeinclude` means no
+copying. The copy runs before setup and the first agent, and a copy error rolls back
+worktree creation. Symlink escapes are rejected. Files copied into worktrees can contain
+secrets, so only include files you intend to expose in those workspaces.
+
+See [agent tool/MCP author guidance](../skills/paseo-plugin/references/rpc-and-sdk.md#scoped-agent-tools-and-session-mcp-servers)
+for the scoped session API. `plugin-examples/lifecycle-logger` and
+`plugin-examples/lifecycle-actions` still use supported legacy registration methods.
+Provider history replay must not trigger live hooks.
 
 ## Contribute a provider
 
