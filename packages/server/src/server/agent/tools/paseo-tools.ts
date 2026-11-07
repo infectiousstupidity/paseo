@@ -1,3 +1,4 @@
+import { registerPluginTools } from "./plugin-tools.js";
 import type { FinishSubscriptions, FinishRegistration } from "../finish-subscriptions/index.js";
 import type { AgentMessageDelivery } from "../agent-messages/index.js";
 import {
@@ -726,6 +727,7 @@ function createToolCatalog(
   }
   const localHostOperations = new Map<string, HostOperation>();
   const tools = new Map<string, PaseoToolDefinition>();
+  const builtinNames = new Set<string>();
   // Consolidated families keep their retired names callable here instead of in `tools`, so
   // advertised catalogs shrink while old call shapes from stored sessions still work.
   const compatAliases = new Map<string, PaseoToolDefinition>();
@@ -764,6 +766,7 @@ function createToolCatalog(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tool handlers are schema-validated at registration boundaries.
     handler: (input: any, context: PaseoToolExecutionContext) => Promise<PaseoToolResult>,
   ) => {
+    builtinNames.add(name);
     if (
       !isPaseoToolEnabled(options.paseoToolPolicy, name) ||
       CONSOLIDATED_TOOL_NAMES[name]?.some(isDisabledToolName)
@@ -3505,6 +3508,14 @@ function createToolCatalog(
     },
   );
 
+  registerPluginTools({
+    agentManager,
+    callerAgentId,
+    scope,
+    tools,
+    builtinNames,
+    policy: options.paseoToolPolicy,
+  });
   return toCatalog();
 }
 
