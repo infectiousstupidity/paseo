@@ -99,6 +99,16 @@ test("compact opens files and subagents in a sheet, leaving the tabs for agents"
       await expectSubagentRowVisible(page, child.id);
     });
 
+    await test.step("Open parent from a compact subagent sheet", async () => {
+      await openSubagentFromCompactTrack(page, child.id);
+      const childSheet = sheet(page, child.title);
+      await expectSheetAtSnap(page, child.title);
+      await expect(childSheet.getByTestId("composer-parent-agent-pill")).toHaveCount(0);
+      await childSheet.getByTestId("parent-agent-callout-open").click();
+      await expect(childSheet).toHaveCount(0);
+      await expectOpenTabCount(page, 1);
+    });
+
     await test.step("Open as tab promotes the subagent to a full tab and ends the list", async () => {
       await page.getByTestId(`subagents-track-open-${child.id}`).click();
       await expectSheetAtSnap(page, child.title);
