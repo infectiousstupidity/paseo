@@ -30,8 +30,9 @@ replacement. Once closure succeeds, a failed resume leaves the durable agent clo
 Eligible public runtimes can close automatically after a continuous quiet interval. See
 [idle-timeout configuration](data-model.md#2-daemon-configuration) and the
 [provider opt-in limits](providers.md#runtime-suspension). Turns, permissions, admitted runtime
-operations, message delivery, and attached children with outstanding or unknown work keep the runtime
-resident. A tab, subscription, history read, heartbeat, usage poll, or metadata edit does not.
+operations, message delivery, attached children with outstanding or unknown work, and an observed
+nonempty background-command inventory keep the runtime resident. A tab, subscription, history read,
+heartbeat, usage poll, or metadata edit does not.
 
 Automatic closure leaves the tab and archive state alone, preserves timeline epoch and sequence
 numbers, and does not emit `agent.closed` plugin hooks or another finish checkpoint. Routed finish
@@ -42,6 +43,23 @@ A failed or ambiguous provider release retains cleanup ownership and refuses new
 explicit close succeeds. A successful physical release followed by a failed final storage write stays
 closed in memory; its precommitted handle remains available for retry. Shutdown stops automatic
 scheduling before flushing committed transitions.
+
+### Provider background work
+
+Claude Bash and Monitor tasks, Codex app-server background terminals, and OpenCode v2 shells
+have a separate **live, process-owned background-work inventory**. It is not a foreground turn or a
+provider subagent. The daemon distributes a full replacement list on changes; agent and workspace
+status indicators can show running work even when the foreground lifecycle remains `idle`.
+A composer pill opens the item list. Each Stop uses a current authorization token and the
+provider's native per-item control, never a blanket foreground interrupt. Stop remains unavailable
+if the provider cannot confirm that it owns the item. Other providers, including Pi, do not
+invent an inventory or Stop affordance.
+
+An inventory is not a durable conversation record: process restart, disconnect and deliberate
+runtime closure revoke stale items/stop tokens until the provider republishes them. The client's
+reconnect path re-reads the current inventory. The existing idle-suspension activity checks remain
+authoritative; an observed nonempty inventory is an additional veto, not a replacement for the
+provider's complete ownership/quiet proof.
 
 A provider runtime can still die on its own — crash, OOM kill, host suspend. Work the agent parked
 inside that process dies with it: Claude Code's background Bash shells, `Monitor` watches, and
