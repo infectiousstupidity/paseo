@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useAgentDescriptor } from "@/agent-presentation";
 import type { PanelDescriptor } from "@/panels/panel-registry";
+import { usePaneContext } from "@/panels/pane-context";
 import { useSessionStore } from "@/stores/session-store";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
@@ -25,10 +26,12 @@ export function useParentAgentId(serverId: string, agentId: string): string | nu
 /** The parent as its own tab presents it, and the way back to it. */
 export function useParentAgent(serverId: string, parentAgentId: string): ParentAgent {
   const descriptor = useAgentDescriptor({ kind: "agent", agentId: parentAgentId }, { serverId });
-  // Global navigation locates the parent, even in another workspace.
+  const { host, closeCurrentTab } = usePaneContext();
+  // A parent can live in another workspace, so dismiss the source sheet before navigation.
   const open = useCallback(() => {
+    if (host === "sheet") closeCurrentTab();
     navigateToAgent({ serverId, agentId: parentAgentId });
-  }, [parentAgentId, serverId]);
+  }, [closeCurrentTab, host, parentAgentId, serverId]);
   return {
     label: descriptor.label || null,
     icon: descriptor.icon,
