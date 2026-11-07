@@ -258,23 +258,23 @@ function ProviderSubagentPanel() {
       <View style={styles.stream}>
         <AgentStreamView
           agentId={streamId}
-        serverId={serverId}
-        context={streamContext}
-        streamItems={timeline?.tail ?? EMPTY_STREAM_ITEMS}
-        streamHead={timeline?.head ?? EMPTY_STREAM_ITEMS}
-        turnPresentation={turnPresentation}
-        pendingPermissions={EMPTY_PERMISSIONS}
-        isAuthoritativeHistoryReady
-        onOpenWorkspaceFile={openFileInWorkspace}
-        readOnly
-        historyPagination={historyPagination}
-        bottomOverlayTailClearance={childTrackClearance.tail}
+          serverId={serverId}
+          context={streamContext}
+          streamItems={timeline?.tail ?? EMPTY_STREAM_ITEMS}
+          streamHead={timeline?.head ?? EMPTY_STREAM_ITEMS}
+          turnPresentation={turnPresentation}
+          pendingPermissions={EMPTY_PERMISSIONS}
+          isAuthoritativeHistoryReady
+          onOpenWorkspaceFile={openFileInWorkspace}
+          readOnly
+          historyPagination={historyPagination}
+          bottomOverlayTailClearance={childTrackClearance.tail}
           bottomOverlayControlClearance={childTrackClearance.controls}
         />
         <ProviderSubagentChildTrack
-        serverId={serverId}
-        rows={childRows}
-        onOpenProviderSubagent={openProviderChild}
+          serverId={serverId}
+          rows={childRows}
+          onOpenProviderSubagent={openProviderChild}
           opensInSheet={opensInSheet}
         />
       </View>
