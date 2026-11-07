@@ -187,7 +187,8 @@ export const piSubagents: PiExtension = {
         type: "sub_agent" as const,
         subAgentType: displayAgent,
         description,
-        log: extractTextFromToolResult(call.result)?.trim() ?? "",
+        // COMPAT(subagent-log): remove after 2027-04-30.
+        log: "",
       };
       const base = {
         type: "upsert" as const,
