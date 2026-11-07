@@ -1112,8 +1112,14 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
   const hasActiveComposer = !agentState.archivedAt && !isArchivingCurrentAgent;
   const parentAgentId = useParentAgentId(serverId, agentId);
   const parentPillAgentId = showsComposer ? parentAgentId : null;
+  const backgroundWorkCount = useSessionStore((state) => {
+    const session = state.sessions[serverId];
+    const agent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
+    return agent?.backgroundWork?.count ?? 0;
+  });
   const hasVisibleAgentTracks = hasAgentTracks({
     parentAgentId: parentPillAgentId,
+    backgroundWorkCount,
     subagentRows,
     tasks,
     archiveFinishedStatus: archiveFinishedSubagents.status,

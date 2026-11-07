@@ -33,7 +33,11 @@ export function resolveSubagentState(row: SubagentRow): SubagentStateWord | null
         return "finished";
     }
   }
-  if (row.turn.phase === "open" || row.status === "running") return "running";
+  if (
+    row.turn.phase === "open" ||
+    row.status === "running" ||
+    (row.backgroundWork?.count ?? 0) > 0
+  ) return "running";
   if (row.status === "error") return "failed";
   if (row.status === "initializing") return null;
   return "finished";
@@ -76,7 +80,12 @@ function isOrderingActive(row: SubagentRow): boolean {
   if (row.kind === "provider") {
     return row.status === "running" || row.status === "failed";
   }
-  return row.turn.phase === "open" || row.status === "running" || row.status === "error";
+  return (
+    row.turn.phase === "open" ||
+    row.status === "running" ||
+    row.status === "error" ||
+    (row.backgroundWork?.count ?? 0) > 0
+  );
 }
 
 function presentationStatus(row: SubagentRow) {
@@ -141,6 +150,7 @@ export function buildSubagentRowPresentationData(row: SubagentRow): SubagentRowP
     statusBucket: deriveSidebarStateBucket({
       status,
       requiresAttention: false,
+      backgroundWork: row.kind === "paseo" ? row.backgroundWork : undefined,
     }),
   };
 }

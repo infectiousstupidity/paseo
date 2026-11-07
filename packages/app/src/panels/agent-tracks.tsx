@@ -1,5 +1,6 @@
 import type { AgentAddress } from "@getpaseo/protocol/addresses";
-import { memo, useCallback, type ReactElement } from "react";
+import { memo, useCallback, useMemo, type ReactElement } from "react";
+import { BackgroundWorkTrack, createHostBackgroundWorkModel } from "@/background-work";
 import { WorkspaceDiffStatPill } from "@/composer/diff-stat-pill";
 import { useWorkspaceHasDiffStat } from "@/composer/workspace-diff-stat";
 import { AgentTaskList } from "@/composer/task-list";
@@ -53,6 +54,15 @@ export const AgentTracks = memo(function AgentTracks({
   hasPluginComposerPills: boolean;
 }): ReactElement | null {
   const { tabId } = usePaneContext();
+  const backgroundWorkCount = useSessionStore((state) => {
+    const session = state.sessions[serverId];
+    const agent = session?.agents.get(agentId) ?? session?.agentDetails.get(agentId);
+    return agent?.backgroundWork?.count ?? 0;
+  });
+  const backgroundModel = useMemo(
+    () => createHostBackgroundWorkModel(serverId, agentId),
+    [serverId, agentId],
+  );
   const hasWorkspaceDiffStat = useWorkspaceHasDiffStat(serverId, workspaceId);
   const isCompact = useIsCompactFormFactor();
   const openInSidePane = useSettings((settings) => settings.openInSidePane);
@@ -112,6 +122,7 @@ export const AgentTracks = memo(function AgentTracks({
     !hasWorkspaceDiffStat &&
     !hasAgentTracks({
       parentAgentId,
+      backgroundWorkCount,
       subagentRows,
       tasks,
       archiveFinishedStatus,
@@ -123,6 +134,7 @@ export const AgentTracks = memo(function AgentTracks({
 
   return (
     <ComposerTrackBar>
+      <BackgroundWorkTrack model={backgroundModel} count={backgroundWorkCount} />
       {parentAgentId ? <ParentAgentPill serverId={serverId} parentAgentId={parentAgentId} /> : null}
       <AgentTaskList tasks={tasks} />
       <SubagentsTrack
@@ -153,12 +165,14 @@ export const AgentTracks = memo(function AgentTracks({
 
 export function hasAgentTracks({
   parentAgentId = null,
+  backgroundWorkCount = 0,
   subagentRows,
   tasks,
   archiveFinishedStatus,
   hasPluginComposerPills = false,
 }: {
   parentAgentId?: string | null;
+  backgroundWorkCount?: number;
   subagentRows: readonly SubagentRow[];
   tasks: readonly TodoEntry[] | undefined;
   archiveFinishedStatus: ArchiveFinishedStatus;
@@ -166,6 +180,7 @@ export function hasAgentTracks({
 }): boolean {
   return (
     parentAgentId !== null ||
+    backgroundWorkCount > 0 ||
     subagentRows.length > 0 ||
     Boolean(tasks?.length) ||
     archiveFinishedStatus.kind !== "idle" ||

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet } from "react-native-unistyles";
 import {
   MENU_ITEM_HEIGHT,
@@ -13,6 +14,7 @@ import {
 import { StatusRing } from "@/components/status-ring";
 import { STATUS_RING_HALO_INSET } from "@/components/status-ring/geometry";
 import { isWeb } from "@/constants/platform";
+import { usePanelAwareHorizontalScrollGesture } from "@/mobile-panels/gestures";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
@@ -31,10 +33,23 @@ import { COMPOSER_PILL_CLEARANCE, composerPillStyles } from "./pill-styles";
  * the final footer clear without turning the overlay into a layout band.
  */
 export function ComposerTrackBar({ children }: { children: ReactNode }): ReactElement {
+  const scrollGesture = usePanelAwareHorizontalScrollGesture();
   return (
     <View style={styles.bar} pointerEvents="box-none">
-      <View style={styles.track} pointerEvents="box-none">
-        {children}
+      <View style={styles.trackViewport} pointerEvents="box-none">
+        <GestureDetector gesture={scrollGesture}>
+          <ScrollView
+            testID="composer-track-scroll"
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            pointerEvents="box-none"
+          >
+            <View style={styles.track} pointerEvents="box-none">
+              {children}
+            </View>
+          </ScrollView>
+        </GestureDetector>
       </View>
     </View>
   );
@@ -362,9 +377,14 @@ const styles = StyleSheet.create((theme) => {
         md: COMPOSER_PILL_CLEARANCE.wide,
       },
     },
-    track: {
+    trackViewport: {
       width: "100%",
       maxWidth: theme.contentMaxWidth,
+      minWidth: 0,
+      flexGrow: 0,
+      flexShrink: 1,
+    },
+    track: {
       flexDirection: "row",
       alignItems: "center",
       gap: theme.spacing[1],
