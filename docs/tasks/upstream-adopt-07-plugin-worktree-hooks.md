@@ -66,3 +66,9 @@ and recovery code.
   No live daemon was restarted.
 - This task's full acceptance is **not proven**. Keep issue #20 open and the
   tracker checklist incomplete until the placement path and above QA pass.
+
+## Delivery on main
+
+Merged to `main` in [PR #26](https://github.com/infectiousstupidity/paseo/pull/26), merge commit `36fd8ce4c1e7de27a0c9020246011ee9a3fd5e12`. The 19-file implementation is **partial**; placement and full test evidence remain outstanding.
+
+As of this record, GitHub has reported no CI check runs on the merge head; no local test success is claimed.

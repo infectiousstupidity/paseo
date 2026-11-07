@@ -59,3 +59,9 @@ Unit tests, typecheck, lint, formatting, real browser disconnect/reconnect, and
 Shiori draft/selection UI verification could not be run here. Do not mark #21
 accepted or closed until those are proven against the delivered commit. No
 production daemon was restarted.
+
+## Delivery on main
+
+Merged to `main` in [PR #27](https://github.com/infectiousstupidity/paseo/pull/27), merge commit `bb52bc0482c9394280f2cfbb9d4aa8b838c3d6da`. The 9-file change is source-implemented but **not acceptance-verified**; the new tests and controlled WebSocket/browser QA still require execution.
+
+As of this record, GitHub has reported no CI check runs on the merge head; no local test success is claimed.
