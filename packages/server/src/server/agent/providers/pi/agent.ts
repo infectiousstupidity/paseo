@@ -64,7 +64,10 @@ import {
   streamPiHistory,
   type PiCapturedUserMessageEntry,
 } from "./history-mapper.js";
-import { materializeProviderImage } from "../provider-image-output.js";
+import {
+  materializeProviderImage,
+  renderProviderImageOutputAsAssistantMarkdown,
+} from "../provider-image-output.js";
 import { PiCliRuntime } from "./cli-runtime.js";
 import {
   createPiExtensionHost,
@@ -107,6 +110,7 @@ import {
   mapToolDetail,
   parseToolArgs,
   parseToolResult,
+  splitPiToolResultImages,
   type PiToolResult,
   type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
@@ -1257,6 +1261,7 @@ export class PiRpcAgentSession implements AgentSession {
   private readonly pendingSubagentRpc = new Map<string, PendingSubagentRpc>();
   private readonly observedAsyncRunIds = new Set<string>();
   private readonly feedbackBridge: FeedbackBridgeTarget | undefined;
+  private compactionPromise: Promise<void> | null = null;
   private outOfBandCompactionEmit: ((event: AgentStreamEvent) => void) | null = null;
   private outOfBandCompactionStarted = false;
   private outOfBandCompactionCompleted = false;
@@ -1366,6 +1371,17 @@ export class PiRpcAgentSession implements AgentSession {
 
     void (async () => {
       try {
+        if (this.compactionPromise) {
+          // Pi rejects prompts while manual compaction is in progress.
+          await this.compactionPromise.catch(() => undefined);
+          if (
+            this.closed ||
+            this.activeTurnId !== turnId ||
+            this.interruptingTurn?.turnId === turnId
+          ) {
+            return;
+          }
+        }
         const ack = await this.runtimeSession.prompt(payload.text, payload.images);
         this.activePromptRequestId = ack.requestId ?? null;
         const correlatedResult = ack.requestId
@@ -1482,10 +1498,11 @@ export class PiRpcAgentSession implements AgentSession {
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
     await this.requestEntryCapture("history");
+    const history = await this.runtimeSession.getHistory();
     yield* streamPiHistory(
       this.provider,
-      await this.runtimeSession.getMessages(),
-      this.contextUserEntries,
+      history.messages,
+      history.userEntries,
       {},
       // At most eight 2 MiB child files per replay; later cards retain their summaries.
       createPiExtensionHost(this.logger, undefined, 16 * 1024 * 1024),
@@ -2186,7 +2203,8 @@ export class PiRpcAgentSession implements AgentSession {
     this.outOfBandCompactionStarted = false;
     this.outOfBandCompactionCompleted = false;
     try {
-      await this.runtimeSession.compact(customInstructions);
+      this.compactionPromise = this.runtimeSession.compact(customInstructions);
+      await this.compactionPromise;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -2212,6 +2230,7 @@ export class PiRpcAgentSession implements AgentSession {
         },
       });
     } finally {
+      this.compactionPromise = null;
       if (this.outOfBandCompactionEmit === emit && !this.outOfBandCompactionStarted) {
         this.outOfBandCompactionEmit = null;
         this.outOfBandCompactionStarted = false;
@@ -2684,8 +2703,10 @@ export class PiRpcAgentSession implements AgentSession {
       this.activeToolCalls.get(event.toolCallId) ?? parseToolArgs(event.toolName, null);
     this.activeToolCalls.delete(event.toolCallId);
 
-    const result = parseToolResult(event.result);
-    const error = event.isError ? event.result : null;
+    // Extract images before tool output/stringification. The shared renderer is synchronous
+    // in this fork, so the output stays ordered without an asynchronous event queue.
+    const { images, result } = splitPiToolResultImages(parseToolResult(event.result));
+    const error = event.isError ? result : null;
     const status = event.isError ? "failed" : "completed";
     this.extensionHost.onToolEnd({
       callId: event.toolCallId,
@@ -2695,6 +2716,13 @@ export class PiRpcAgentSession implements AgentSession {
       result,
     });
     this.emitToolCallEvent(event.toolCallId, toolCall, status, result, error);
+    const turnId = this.currentTurnIdForEvent();
+    for (const image of images) {
+      const item = renderProviderImageOutputAsAssistantMarkdown(image, {
+        materialize: materializeProviderImage,
+      });
+      if (item) this.emit({ type: "timeline", provider: this.provider, turnId, item });
+    }
   }
 
   private emitCompactionTimeline(input: {

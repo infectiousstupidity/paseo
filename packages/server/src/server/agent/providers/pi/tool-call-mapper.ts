@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { ToolCallDetail } from "../../agent-sdk-types.js";
+import type { ProviderImageOutput } from "../provider-image-output.js";
 
 interface BashToolInput {
   command: string;
@@ -52,6 +53,7 @@ interface PiToolResultObject {
   stdout?: string;
   text?: string;
   content?: PiToolResultContent[];
+  structuredContent?: unknown;
   exitCode?: number;
   code?: number;
   details?: PiToolResultDetails;
@@ -66,6 +68,12 @@ interface PiToolResultTextContent {
   type: "text";
   text: string;
 }
+
+const PiToolResultImageContentSchema = z.object({
+  type: z.literal("image"),
+  data: z.string().min(1),
+  mimeType: z.string().optional(),
+});
 
 interface PiToolResultUnknownContent {
   type: string;
@@ -234,6 +242,48 @@ export function parseToolResult(rawResult: unknown): PiToolResult {
     return parsed.data;
   }
   return null;
+}
+
+// Keep base64 out of tool details, retaining readable placeholders and non-image metadata.
+export function splitPiToolResultImages(result: PiToolResult): {
+  images: ProviderImageOutput[];
+  result: PiToolResult;
+} {
+  if (!result || typeof result === "string" || !result.content) {
+    return { images: [], result };
+  }
+  const images: ProviderImageOutput[] = [];
+  let replaced = false;
+  const content = result.content.map((block) => {
+    const parsed = PiToolResultImageContentSchema.safeParse(block);
+    if (!parsed.success) return block;
+    images.push({ data: parsed.data.data, mimeType: parsed.data.mimeType ?? null });
+    replaced = true;
+    return { type: "text", text: "[image]" } satisfies PiToolResultTextContent;
+  });
+  if (!replaced) return { images: [], result };
+  return {
+    images,
+    result: {
+      ...result,
+      content,
+      ...(result.structuredContent === undefined
+        ? {}
+        : { structuredContent: withoutPiImageData(result.structuredContent) }),
+    },
+  };
+}
+
+function withoutPiImageData(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutPiImageData);
+  if (value === null || typeof value !== "object") return value;
+  const parsed = PiToolResultImageContentSchema.safeParse(value);
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      parsed.success && key === "data" ? "[image]" : withoutPiImageData(child),
+    ]),
+  );
 }
 
 export function extractTextFromToolResult(result: PiToolResult): string | undefined {

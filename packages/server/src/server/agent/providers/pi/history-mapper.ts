@@ -1,4 +1,8 @@
 import { mapCustomMessageToToolCall } from "../custom-message.js";
+import {
+  materializeProviderImage,
+  renderProviderImageOutputAsAssistantMarkdown,
+} from "../provider-image-output.js";
 import type { AgentStreamEvent, AgentTimelineItem, ToolCallDetail } from "../../agent-sdk-types.js";
 import {
   createPiExtensionHost,
@@ -11,6 +15,7 @@ import {
   mapToolDetail,
   parseToolArgs,
   parseToolResult,
+  splitPiToolResultImages,
   type PiToolResult,
   type PiTrackedToolCall,
 } from "./tool-call-mapper.js";
@@ -213,7 +218,9 @@ export class PiHistoryMapper {
     const tracked =
       this.pendingToolCalls.get(message.toolCallId) ?? parseToolArgs(message.toolName, null);
     this.pendingToolCalls.delete(message.toolCallId);
-    const result = parseToolResult({ content: message.content, details: message.details });
+    const { images, result } = splitPiToolResultImages(
+      parseToolResult({ content: message.content, details: message.details }),
+    );
     const mapping = this.extensionHost.mapToolCall({
       callId: message.toolCallId,
       toolName: tracked.toolName,
@@ -224,6 +231,13 @@ export class PiHistoryMapper {
     const detail = this.mapToolDetail(message.toolCallId, tracked, result, mapping?.detail);
     if (!detail) {
       return [];
+    }
+    const imageEvents: AgentStreamEvent[] = [];
+    for (const image of images) {
+      const item = renderProviderImageOutputAsAssistantMarkdown(image, {
+        materialize: materializeProviderImage,
+      });
+      if (item) imageEvents.push({ type: "timeline", provider: this.provider, item });
     }
     return [
       {
@@ -237,6 +251,7 @@ export class PiHistoryMapper {
           errorText: extractTextFromToolResult(result) ?? "Tool call failed",
         }),
       },
+      ...imageEvents,
       ...this.extensionEvents(mapping),
     ];
   }

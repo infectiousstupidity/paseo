@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { readPiTranscript, type PiTranscript } from "./transcript.js";
 import { createExternalProcessEnv } from "../../../paseo-env.js";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { Logger } from "pino";
@@ -78,7 +80,7 @@ export class PiCliRuntime implements PiRuntime {
       await process.close(input.signal.reason);
       input.signal.throwIfAborted();
     }
-    return new PiCliRuntimeSession(process, this.commandsRpcName, launch.env);
+    return new PiCliRuntimeSession(process, this.commandsRpcName, launch.env, input.session === undefined);
   }
 }
 
@@ -89,6 +91,7 @@ class PiCliRuntimeSession implements PiRuntimeSession {
     private readonly process: JsonlRpcProcess,
     private readonly commandsRpcName: string,
     private readonly launchEnvironment: Record<string, string>,
+    private readonly newSession: boolean,
   ) {
     process.onMessage((message) => {
       this.emit(message as PiRuntimeEvent);
@@ -165,6 +168,24 @@ class PiCliRuntimeSession implements PiRuntimeSession {
   async getMessages(): Promise<PiAgentMessage[]> {
     const data = (await this.request({ type: "get_messages" })) as { messages?: PiAgentMessage[] };
     return data.messages ?? [];
+  }
+
+  async getHistory(): Promise<PiTranscript> {
+    const state = await this.getState();
+    if (!state.sessionFile) throw new Error("Pi history requires a persisted session file");
+    try {
+      return readPiTranscript(await readFile(state.sessionFile, "utf8"));
+    } catch (error) {
+      // Pi has not written the first message in a newly created session yet.
+      if (
+        this.newSession &&
+        state.messageCount === 0 &&
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) return { messages: [], userEntries: [] };
+      throw error;
+    }
   }
 
   async getAvailableModels(timeoutMs?: number | null): Promise<PiModel[]> {

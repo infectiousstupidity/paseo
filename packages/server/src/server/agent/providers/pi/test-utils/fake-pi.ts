@@ -140,6 +140,8 @@ export class FakePiSession implements PiRuntimeSession {
   subagentSubscriptionError: Error | null = null;
   setSessionNameError: Error | null = null;
   compactError: Error | null = null;
+  private compactCompletion: Promise<void> = Promise.resolve();
+  private releaseCompaction: (() => void) | null = null;
   emitCompactEnd = true;
   getStateError: Error | null = null;
   getSessionStatsError: Error | null = null;
@@ -238,9 +240,22 @@ export class FakePiSession implements PiRuntimeSession {
     }
   }
 
+  holdCompaction(): () => void {
+    if (this.releaseCompaction) throw new Error("Compaction already held");
+    this.compactCompletion = new Promise<void>((resolve) => {
+      this.releaseCompaction = resolve;
+    });
+    return () => {
+      this.releaseCompaction?.();
+      this.releaseCompaction = null;
+      this.compactCompletion = Promise.resolve();
+    };
+  }
+
   async compact(customInstructions?: string): Promise<void> {
     this.compactRequests.push(customInstructions === undefined ? {} : { customInstructions });
     this.emit({ type: "compaction_start", reason: "manual" });
+    await this.compactCompletion;
     if (this.emitCompactEnd) {
       this.emit({ type: "compaction_end", reason: "manual" });
     }
@@ -271,6 +286,13 @@ export class FakePiSession implements PiRuntimeSession {
 
   async getMessages(): Promise<PiAgentMessage[]> {
     return this.messages;
+  }
+
+  async getHistory() {
+    return {
+      messages: this.messages,
+      userEntries: this.contextUserEntries.map(({ id, text }) => ({ id, text })),
+    };
   }
 
   async getAvailableModels(_timeoutMs?: number | null): Promise<PiModel[]> {
