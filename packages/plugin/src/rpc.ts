@@ -112,24 +112,58 @@ export function subscribePluginRpc<InputSchema extends ZodType, EventSchema exte
   // The plugin parses the input into the schema's output, so it receives the input as given.
   contract.input.parse(input);
   let closed = false;
-  function close(error?: Error) {
+  let handle: PluginSubscriptionHandle | null = null;
+  let releasePending = false;
+  let releasePromise: Promise<void> | null = null;
+  let abortListener: (() => void) | null = null;
+
+  function detachAbort(): void {
+    if (abortListener && options.signal) {
+      options.signal.removeEventListener("abort", abortListener);
+      abortListener = null;
+    }
+  }
+
+  function release(): Promise<void> {
+    closed = true;
+    detachAbort();
+    if (!handle) {
+      releasePending = true;
+      return Promise.resolve();
+    }
+    return (releasePromise ??= handle.release());
+  }
+
+  function close(error?: Error): void {
     if (closed) return;
     closed = true;
+    detachAbort();
     options.onClosed?.(error ? { error } : {});
   }
-  const handle = subscribe(contract.name, input, {
+
+  const started = subscribe(contract.name, input, {
     event(event) {
       if (closed) return;
       const parsed = contract.event.safeParse(event);
       if (parsed.success) return onEvent(parsed.data);
-      handle();
       close(new Error(`Plugin subscription ${contract.name} sent an invalid event`));
+      // A buffered event can arrive synchronously before subscribe() returns its handle.
+      void release().catch(() => undefined);
     },
     closed: close,
   });
-  if (options.signal) {
-    if (options.signal.aborted) handle();
-    else options.signal.addEventListener("abort", () => handle(), { once: true });
+  handle = started;
+  if (releasePending) void release().catch(() => undefined);
+  if (options.signal && !closed) {
+    const abort = () => void release().catch(() => undefined);
+    if (options.signal.aborted) abort();
+    else {
+      abortListener = abort;
+      options.signal.addEventListener("abort", abort, { once: true });
+    }
   }
-  return handle;
+  return Object.assign(() => void release().catch(() => undefined), {
+    ready: started.ready,
+    release,
+  });
 }

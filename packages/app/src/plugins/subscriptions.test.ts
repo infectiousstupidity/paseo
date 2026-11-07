@@ -4,7 +4,7 @@ import { subscribePluginRpc } from "@getpaseo/plugin/client/host";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import type { SubscriptionObserver } from "@getpaseo/client";
 import type { SessionOutboundMessage } from "@getpaseo/protocol/messages";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createPluginSubscribe } from "./subscriptions";
 
@@ -186,4 +186,49 @@ it("releases on its signal, on its remover, and when the installation stops", as
   expect(byLifetime.received).toEqual(["path:a.ts"]);
   lifetime.abort();
   await byLifetime.host.released;
+});
+
+it("releases an invalid event delivered synchronously before the subscription handle exists", async () => {
+  let releases = 0;
+  const closed: PluginSubscriptionClosed[] = [];
+  const handle = subscribePluginRpc(
+    changes,
+    (_method, _input, observer) => {
+      observer.event({ path: 42 });
+      return Object.assign(() => { releases += 1; }, {
+        ready: Promise.resolve(),
+        release: async () => { releases += 1; },
+      });
+    },
+    { ref: "main" },
+    () => { throw new Error("Invalid events must not reach the listener"); },
+    { onClosed: (state) => closed.push(state) },
+  );
+  await handle.ready;
+  expect(releases).toBe(1);
+  expect(closed).toEqual([
+    { error: new Error("Plugin subscription diff.watch sent an invalid event") },
+  ]);
+  await handle.release();
+  expect(releases).toBe(1);
+});
+
+it("detaches an abort listener when a subscription is explicitly released", async () => {
+  const signal = new AbortController();
+  const remove = vi.spyOn(signal.signal, "removeEventListener");
+  let releases = 0;
+  const handle = subscribePluginRpc(
+    changes,
+    () => Object.assign(() => { releases += 1; }, {
+      ready: Promise.resolve(),
+      release: async () => { releases += 1; },
+    }),
+    { ref: "main" },
+    () => undefined,
+    { signal: signal.signal },
+  );
+  await handle.release();
+  signal.abort();
+  expect(releases).toBe(1);
+  expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
 });
