@@ -12200,6 +12200,41 @@ test("suspends an open chat only after the full quiet interval and preserves res
   });
 });
 
+test("live background commands protect an otherwise idle agent from automatic suspension", async () => {
+  const { manager, agent, sessions, advance } = await idleSuspensionFixture();
+  sessions[0]!.pushEvent({
+    type: "background_work",
+    provider: "codex",
+    items: [
+      { id: "first", kind: "shell", description: "sleep 180", canStop: true },
+      { id: "second", kind: "shell", description: "sleep 181", canStop: true },
+    ],
+  });
+  await vi.waitFor(() => expect(manager.getAgentBackgroundWorkSummary(agent.id)).toEqual({ count: 2 }));
+  advance(200);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(0);
+  expect(manager.getAgent(agent.id)?.lifecycle).toBe("idle");
+
+  // One sibling finishing must not release the runtime while the other still owns a command.
+  sessions[0]!.pushEvent({
+    type: "background_work",
+    provider: "codex",
+    items: [{ id: "second", kind: "shell", description: "sleep 181", canStop: true }],
+  });
+  await vi.waitFor(() => expect(manager.getAgentBackgroundWorkSummary(agent.id)).toEqual({ count: 1 }));
+  advance(200);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(0);
+
+  sessions[0]!.pushEvent({ type: "background_work", provider: "codex", items: [] });
+  await vi.waitFor(() => expect(manager.getAgentBackgroundWorkSummary(agent.id)).toEqual({ count: 0 }));
+  advance(100);
+  await manager.suspendAgentIfIdle(agent.id);
+  expect(sessions[0]!.attempts).toBe(1);
+  expect(manager.getAgent(agent.id)).toBeNull();
+});
+
 test("repeated suspension/resume preserves the handle and a primed empty timeline", async () => {
   const { manager, storage, agent, advance, resumedHandles } = await idleSuspensionFixture();
   const before = manager.fetchTimeline(agent.id);
