@@ -149,7 +149,14 @@ export interface SeedDaemonClient {
     timeout?: number,
   ): Promise<{ status: string }>;
   cancelAgent(agentId: string): Promise<void>;
-  sendAgentMessage(agentId: string, text: string): Promise<void>;
+  sendAgentMessage(
+    agentId: string,
+    text: string,
+    options?: { sourceAgentId?: string; activeTurnBehavior?: "interrupt" | "steer" | "queue" },
+  ): Promise<void>;
+  listAgentBackgroundWork(
+    agentId: string,
+  ): Promise<import("@getpaseo/client").PaseoAgentBackgroundWorkItem[]>;
   waitForFinish(
     agentId: string,
     timeout?: number,

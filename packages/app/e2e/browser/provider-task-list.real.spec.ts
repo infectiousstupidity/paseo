@@ -114,3 +114,71 @@ test.describe("real provider composer task lists", () => {
     }
   });
 });
+
+/**
+ * Real provider smoke suite: two independent background commands, per-item stop, an additional
+ * foreground turn and a second browser client. Kept isolated from the mock task-list tests.
+ * Requires configured native provider credentials; never targets the production daemon.
+ */
+test.describe("real provider background work", () => {
+  test.setTimeout(300_000);
+
+  const scenarios = [
+    {
+      provider: "claude" as const,
+      prompt:
+        "Use Bash twice with run_in_background: run sleep 180 and sleep 181 as independent background commands. Do not wait or stop them. Reply BG_READY immediately.",
+    },
+    {
+      provider: "codex" as const,
+      prompt:
+        "Use exec_command twice: start sleep 180 and sleep 181 separately, with yield_time_ms 1000. Do not wait for either. Reply BG_READY immediately.",
+    },
+    {
+      provider: "opencode" as const,
+      prompt:
+        "Use the shell tool twice with background true: start sleep 180, then sleep 181. Do not wait or stop them. Reply BG_READY immediately.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    test(`${scenario.provider} stops just one shell, survives another turn and reconnects`, async ({ page }) => {
+      const cwd = realpathSync(mkdtempSync(path.join(tmpdir(), `paseo-two-background-${scenario.provider}-`)));
+      let handle: AgentHandle | undefined;
+      try {
+        handle = await launchAgent({ page, provider: scenario.provider, cwd, mode: "full-access" });
+        await sendMessage(handle, scenario.prompt);
+
+        const twoTasks = page.getByRole("button", { name: "2 background tasks" });
+        await expect(twoTasks).toBeVisible({ timeout: 60_000 });
+        await twoTasks.click();
+        const panel = page.getByTestId("background-work-panel");
+        await expect(panel).toContainText("sleep 180");
+        await expect(panel).toContainText("sleep 181");
+        await panel.getByRole("button", { name: /Stop .*sleep 180/ }).click();
+
+        await expect(panel).not.toContainText("sleep 180", { timeout: 40_000 });
+        await expect(panel).toContainText("sleep 181");
+        await page.keyboard.press("Escape");
+        await sendMessage(handle, "Reply exactly NEXT_TURN without stopping the remaining background command.");
+        await expect(page.getByRole("button", { name: "1 background task" })).toBeVisible();
+
+        // A fresh browser client must receive the inventory snapshot, not only later push events.
+        const second = await page.context().newPage();
+        try {
+          await second.goto(page.url());
+          const pill = second.getByRole("button", { name: "1 background task" });
+          await expect(pill).toBeVisible({ timeout: 30_000 });
+          await pill.click();
+          const reconnected = second.getByTestId("background-work-panel");
+          await expect(reconnected).toContainText("sleep 181");
+          await expect(reconnected).not.toContainText("sleep 180");
+        } finally {
+          await second.close();
+        }
+      } finally {
+        await cleanupRewindFlow({ handle, cwd });
+      }
+    });
+  }
+});
