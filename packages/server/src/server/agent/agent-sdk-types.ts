@@ -743,7 +743,8 @@ export interface AgentSession {
    */
   suspendIfIdle?(input: { idleForMs: number }): Promise<ProviderSuspensionResult>;
   listCommands?(): Promise<AgentSlashCommand[]>;
-  setModel?(modelId: string | null): Promise<void>;
+  /** Return the provider's effective selection when it differs from the request. */
+  setModel?(modelId: string | null): Promise<void | { model: string | null }>;
   setThinkingOption?(thinkingOptionId: string | null): Promise<void | AgentProviderNotice>;
   setFeature?(featureId: string, value: unknown): Promise<void>;
   revertConversation?(input: { messageId: string }): Promise<void>;
