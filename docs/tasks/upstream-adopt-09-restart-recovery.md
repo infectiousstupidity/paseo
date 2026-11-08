@@ -29,3 +29,11 @@ An isolated restart preserves terminal process/history; default-off does not res
 Isolated daemon restart/terminal and default-off/opt-in agent recovery tests.
 
 Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/provider evidence. Record the commit, exact results, unresolved differences and blockers in this doc. Do not restart the live daemon or run full local test suites. Update the relevant owning product docs if behavior changes.
+
+## Partial implementation — launch environment preservation (2026-11-08)
+
+The existing create flow passed explicit per-agent environment overrides to the provider, but session refresh and disk-backed reopening discarded them. This change stores the original overrides in the agent record and reuses them for saved-session reopen (with or without a provider handle) and refresh. The regression exercises Codex and OpenCode, including the explicit empty-string value, caller mutation, and absence from client snapshots. It does not persist daemon-injected launch variables.
+
+**Still missing:** Terminal process survival across daemon restarts; opt-in interrupted-agent continuation and its safeguards; isolated restart/terminal tests and real-provider/browser acceptance. This is only a bounded part of #22, not task completion.
+
+**Verification status:** Regression test added, not executed. This environment has Node 22 but the repo requires Node >=26.12.1, with no network access for dependencies or checkout. Run the focused Vitest file, `npm run typecheck`, `npm run lint`, `npm run format`, and `npm run format:check` in a supported checkout before merging. Production daemon untouched.
