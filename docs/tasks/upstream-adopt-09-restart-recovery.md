@@ -1,7 +1,7 @@
 # Upstream adoption 09 — Terminal continuity and opt-in agent recovery
 
 **Priority:** P2  
-**Status:** Planned  
+**Status:** Partial implementation proposed in draft PR #28; acceptance pending  
 **Tracker:** https://github.com/infectiousstupidity/paseo/issues/13
 
 ## Outcome
@@ -31,6 +31,8 @@ Isolated daemon restart/terminal and default-off/opt-in agent recovery tests.
 Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/provider evidence. Record the commit, exact results, unresolved differences and blockers in this doc. Do not restart the live daemon or run full local test suites. Update the relevant owning product docs if behavior changes.
 
 ## Partial implementation — launch environment preservation (2026-11-08)
+
+**Delivery:** [Draft PR #28](https://github.com/infectiousstupidity/paseo/pull/28), commits [`de351d5b`](https://github.com/infectiousstupidity/paseo/commit/de351d5bf1826cd9fc82f5582eedd7edf3e725da) and [`d3e1d44d`](https://github.com/infectiousstupidity/paseo/commit/d3e1d44d4ae10f436cfd980b818ced27981ea19a). Not merged or accepted.
 
 The existing create flow passed explicit per-agent environment overrides to the provider, but session refresh and disk-backed reopening discarded them. This change stores the original overrides in the agent record and reuses them for saved-session reopen (with or without a provider handle) and refresh. The regression exercises Codex and OpenCode, including the explicit empty-string value, caller mutation, and absence from client snapshots. It does not persist daemon-injected launch variables. Agent records are now written mode `0600` on POSIX, with a targeted persistence/permission regression.
 
