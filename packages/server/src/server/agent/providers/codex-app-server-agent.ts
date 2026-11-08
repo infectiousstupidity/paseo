@@ -5134,10 +5134,6 @@ export class CodexAppServerAgentSession implements AgentSession {
       };
     }
 
-  stopBackgroundWork(id: string): Promise<void> {
-    return this.background.stopItem(id);
-  }
-
     if (!this.goalsEnabled || parsed.commandName !== "goal") return null;
 
     const subcommand = parseGoalSubcommand(parsed.args);
@@ -5151,6 +5147,10 @@ export class CodexAppServerAgentSession implements AgentSession {
         });
       },
     };
+  }
+
+  stopBackgroundWork(id: string): Promise<void> {
+    return this.background.stopItem(id);
   }
 
   private async executeCompactCommand(): Promise<string | null> {
