@@ -96,6 +96,12 @@ import {
 } from "./codex/app-server-transport.js";
 import { type CodexUserMessageTurnIndex, revertCodexConversation } from "./codex/rewind.js";
 import {
+  type CodexHistoryRow,
+  CodexThreadHistoryTooLargeError,
+  readCodexThreadHistory,
+} from "./codex/thread-history.js";
+import { limitAgentTimelineItemContent } from "../agent-timeline-content.js";
+import {
   materializeProviderImage,
   renderProviderImageOutputAsAssistantMarkdown,
   type ProviderImageOutput,
@@ -1835,26 +1841,16 @@ function readCodexHistoryTimestamp(item: unknown): string | null {
   );
 }
 
-function readCodexTurnHistoryTimestamp(
-  turn: unknown,
+/** Falls back to the row's start time for a user message and its end time otherwise. */
+function readCodexHistoryRowTimestamp(
+  row: CodexHistoryRow,
   timelineItem: AgentTimelineItem,
 ): string | null {
-  const record = toObjectRecord(turn);
-  if (!record) {
-    return null;
-  }
-
-  const startedAt =
-    normalizeProviderReplayTimestamp(record.startedAt) ??
-    normalizeProviderReplayTimestamp(record.started_at);
-  const completedAt =
-    normalizeProviderReplayTimestamp(record.completedAt) ??
-    normalizeProviderReplayTimestamp(record.completed_at);
-
-  if (timelineItem.type === "user_message") {
-    return startedAt ?? completedAt;
-  }
-  return completedAt ?? startedAt;
+  const startedAt = normalizeProviderReplayTimestamp(row.startedAt);
+  const completedAt = normalizeProviderReplayTimestamp(row.completedAt);
+  return timelineItem.type === "user_message"
+    ? startedAt ?? completedAt
+    : completedAt ?? startedAt;
 }
 
 interface CodexSubAgentActivity {
@@ -2093,46 +2089,16 @@ function threadItemToTimelineEntries(
   return [timelineItem, ...mcpToolResultImagesToTimeline(item)];
 }
 
-const CodexThreadReadResponseSchema = z
-  .object({
-    thread: z
-      .object({
-        turns: z
-          .array(
-            z
-              .object({
-                items: z.array(z.unknown()).default([]),
-              })
-              .passthrough(),
-          )
-          .default([]),
-      })
-      .passthrough()
-      .default({ turns: [] }),
-  })
-  .passthrough();
-
-type CodexThreadReadResponse = z.infer<typeof CodexThreadReadResponseSchema>;
-type CodexThreadReadRequest = (threadId: string) => Promise<unknown>;
-
-async function requestCodexThreadHistory(
-  requestThread: CodexThreadReadRequest,
-  threadId: string,
-): Promise<CodexThreadReadResponse> {
-  const response = await requestThread(threadId);
-  return CodexThreadReadResponseSchema.parse(response);
-}
-
 async function loadCodexThreadHistoryTimeline(params: {
+  client: CodexAppServerClientLike;
   threadId: string;
   cwd: string | null;
-  requestThread: CodexThreadReadRequest;
 }): Promise<CodexThreadHistoryProjection> {
-  const response = await requestCodexThreadHistory(params.requestThread, params.threadId);
   const timeline: PersistedTimelineEntry[] = [];
   const subAgentTimelineIndexByThreadId = new Map<string, number>();
-  for (const turn of response.thread.turns) {
-    for (const item of turn.items) {
+  try {
+    for await (const row of readCodexThreadHistory(params.client, params.threadId)) {
+      const { item } = row;
       const historicalSubAgentActivity = readCodexSubAgentActivity(item);
       if (historicalSubAgentActivity) {
         const existingIndex = subAgentTimelineIndexByThreadId.get(
@@ -2154,16 +2120,16 @@ async function loadCodexThreadHistoryTimeline(params: {
       }
       for (const timelineItem of threadItemToTimelineEntries(item, { cwd: params.cwd })) {
         const timestamp =
-          readCodexHistoryTimestamp(item) ?? readCodexTurnHistoryTimestamp(turn, timelineItem);
+          readCodexHistoryTimestamp(item) ?? readCodexHistoryRowTimestamp(row, timelineItem);
         const settledTimelineItem =
           historicalSubAgentActivity && timelineItem.type === "tool_call"
             ? settleHistoricalSubAgentActivity(timelineItem, historicalSubAgentActivity.kind)
             : timelineItem;
         timeline.push({
-          item: settledTimelineItem,
+          item: limitAgentTimelineItemContent(settledTimelineItem),
           timestamp: timestamp ?? undefined,
-          ...(timelineItem.type === "user_message" && typeof turn.id === "string"
-            ? { providerTurnId: turn.id }
+          ...(timelineItem.type === "user_message" && row.turnId !== undefined
+            ? { providerTurnId: row.turnId }
             : {}),
         });
         for (const childThreadId of readCodexHistoricalSubAgentThreadIds(item)) {
@@ -2171,6 +2137,9 @@ async function loadCodexThreadHistoryTimeline(params: {
         }
       }
     }
+  } catch (error) {
+    if (!(error instanceof CodexThreadHistoryTooLargeError)) throw error;
+    timeline.push({ item: { type: "notification", level: "warning", message: error.message } });
   }
   const subAgentRoutes = Array.from(subAgentTimelineIndexByThreadId.entries()).flatMap(
     ([childThreadId, timelineIndex]): PersistedSubAgentRoute[] => {
@@ -2181,13 +2150,6 @@ async function loadCodexThreadHistoryTimeline(params: {
     },
   );
   return { timeline, subAgentRoutes };
-}
-
-function readCodexThread(client: CodexAppServerClientLike, threadId: string): Promise<unknown> {
-  return client.request("thread/read", {
-    threadId,
-    includeTurns: true,
-  });
 }
 
 export async function forkCodexThread(
