@@ -104,6 +104,7 @@ function createManagedAgent(overrides: ManagedAgentOverrides = {}): ManagedAgent
     cwd: core.cwd,
     workspaceId: overrides.workspaceId,
     session: core.session,
+    launchEnv: overrides.launchEnv,
     capabilities: overrides.capabilities ?? buildDefaultCapabilities(),
     config: core.config,
     lifecycle: core.lifecycle,
@@ -193,6 +194,21 @@ describe("AgentStorage", () => {
     const [persisted] = await reloaded.list();
     expect(persisted.cwd).toBe("/tmp/project");
     expect(persisted.config?.providerOptions).toEqual({ allowedTools: ["Read"] });
+  });
+
+  test("agent records containing launch overrides are private", async () => {
+    const launchEnv = { API_TOKEN: "fixture-secret", CUSTOM_EMPTY: "" };
+    await storage.applySnapshot(
+      createManagedAgent({ id: "launch-env", cwd: "/tmp/project", launchEnv }),
+    );
+    const reloaded = new AgentStorage(storagePath, logger);
+    expect((await reloaded.get("launch-env"))?.launchEnv).toEqual(launchEnv);
+
+    if (process.platform !== "win32") {
+      const [projectDir] = await fs.readdir(storagePath);
+      const recordPath = path.join(storagePath, projectDir, "launch-env.json");
+      expect((await fs.stat(recordPath)).mode & 0o777).toBe(0o600);
+    }
   });
 
   test("applySnapshot stores and reloads featureValues when present", async () => {

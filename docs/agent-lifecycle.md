@@ -228,6 +228,8 @@ Once the daemon reports the agent active, its tab follows normal archive propaga
 An empty active list cannot cancel an explicit History selection. Agent-detail loading does
 not own selection or release the explicit open.
 
+Explicit per-agent launch environment overrides survive saved-session reopen and provider refresh. Only the explicit overrides are persisted; daemon-injected variables are rebuilt for every launch. They are excluded from client snapshots.
+
 Persisted resume, native restore, and both live and stored-only archive enter the same per-agent
 lifecycle queue. Resume chooses its history or interactive purpose from the durable record after
 entering that queue. Shutdown must finish before the manager releases runtime ownership; a failed
