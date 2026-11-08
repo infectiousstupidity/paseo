@@ -5,9 +5,41 @@ import {
   createCodexAppServerChildProcess,
   createFakeCodexAppServer,
 } from "./test-utils/fake-app-server.js";
-import { CodexAppServerClient } from "./app-server-transport.js";
+import {
+  CodexAppServerClient,
+  CodexAppServerResponseTooLargeError,
+} from "./app-server-transport.js";
 
 describe("Codex app-server transport", () => {
+  test("drops an oversized JSON-RPC response without dropping other requests", async () => {
+    const child = createCodexAppServerChildProcess();
+    const client = new CodexAppServerClient(child, createTestLogger(), () => ({}), 96);
+
+    const oversized = client.request("thread/read", { threadId: "long" });
+    const normal = client.request("model/list", {});
+    child.stdout.write('{"id":1,"result":{"text":"');
+    child.stdout.write("x".repeat(120));
+    child.stdout.write('"}}\n{"id":2,"result":{"data":[]}}\n');
+
+    await expect(oversized).rejects.toBeInstanceOf(CodexAppServerResponseTooLargeError);
+    await expect(normal).resolves.toEqual({ data: [] });
+    const next = client.request("initialize");
+    child.stdout.write('{"id":3,"result":{"ready":true}}\n');
+    await expect(next).resolves.toEqual({ ready: true });
+    await client.dispose();
+  });
+
+  test("rejects a session if an oversized notification cannot be attributed", async () => {
+    const child = createCodexAppServerChildProcess();
+    const client = new CodexAppServerClient(child, createTestLogger(), () => ({}), 96);
+    const pending = client.request("thread/read", {});
+    child.stdout.write('{"method":"thread/updated","params":{"data":"');
+    child.stdout.write("x".repeat(120));
+    child.stdout.write('"}}\n');
+    await expect(pending).rejects.toThrow("stdout line exceeds the size limit");
+    await client.dispose();
+  });
+
   test("ignores non-JSON stdout lines without dropping pending requests", async () => {
     const child = createCodexAppServerChildProcess();
     const client = new CodexAppServerClient(child, createTestLogger());
