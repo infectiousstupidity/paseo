@@ -87,6 +87,7 @@ describe("Codex executable discovery", () => {
 import { CodexAppServerClient } from "./codex/app-server-transport.js";
 import {
   createFakeCodexAppServer,
+  fakeCodexThreadHistory,
   type FakeCodexAppServer,
   waitForNextPermission,
   waitForNextTimelineItem,
@@ -2269,8 +2270,9 @@ describe("Codex app-server provider", () => {
 
   test("rewinds a paginated conversation through the public session capability", async () => {
     const appServer = createFakeCodexAppServer({
-      "thread/read": () => ({
-        thread: { id: "thread-1", historyMode: "paginated", turns: [] },
+      ...fakeCodexThreadHistory({
+        "thread-1": { historyMode: "paginated", turns: [] },
+        "forked-thread": { historyMode: "paginated", turns: [] },
       }),
       "thread/rollback": () => {
         throw new Error("paginated threads do not support thread/rollback");
@@ -2328,11 +2330,10 @@ describe("Codex app-server provider", () => {
     async (historyMode) => {
       const appServer = createFakeCodexAppServer(
         historyMode === "paginated"
-          ? {
-              "thread/read": () => ({
-                thread: { id: "thread-1", historyMode: "paginated", turns: [] },
-              }),
-            }
+          ? fakeCodexThreadHistory({
+              "thread-1": { historyMode: "paginated", turns: [] },
+              "forked-thread": { historyMode: "paginated", turns: [] },
+            })
           : undefined,
       );
       const customCodexConfig = {
