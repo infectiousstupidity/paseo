@@ -192,6 +192,7 @@ function createNewlineLineReader(
   input: NodeJS.ReadableStream,
   onLine: (line: string) => void,
   onOversized: (head: string) => void,
+  limitBytes: number,
 ): { close(): void } {
   const decoder = new StringDecoder("utf8");
   let parts: string[] = [];
@@ -208,7 +209,7 @@ function createNewlineLineReader(
     if (!fragment || skipping) return;
     head = (head + fragment.slice(0, 64)).slice(0, 64);
     const length = Buffer.byteLength(fragment, "utf8");
-    if (length > CODEX_STDOUT_LINE_LIMIT_BYTES - bytes) {
+    if (length > limitBytes - bytes) {
       parts = [];
       bytes = 0;
       skipping = true;
@@ -253,6 +254,7 @@ export class CodexAppServerClient {
     private readonly child: ChildProcessWithoutNullStreams,
     private readonly logger: Logger,
     private readonly getTraceContext: () => CodexAppServerTraceContext = () => ({}),
+    private readonly stdoutLineLimitBytes: number = CODEX_STDOUT_LINE_LIMIT_BYTES,
   ) {
     this.stdoutLineReader = createNewlineLineReader(
       child.stdout,
@@ -262,6 +264,7 @@ export class CodexAppServerClient {
         });
       },
       (head) => this.handleOversizedLine(head),
+      this.stdoutLineLimitBytes,
     );
 
     child.stderr.on("data", (chunk) => {
@@ -365,7 +368,7 @@ export class CodexAppServerClient {
     if (pending) {
       clearTimeout(pending.timer);
       this.pending.delete(Number(id));
-      pending.reject(new CodexAppServerResponseTooLargeError(pending.method, CODEX_STDOUT_LINE_LIMIT_BYTES));
+      pending.reject(new CodexAppServerResponseTooLargeError(pending.method, this.stdoutLineLimitBytes));
       return;
     }
     // Missing the identity of a notification or server request is not recoverable.
