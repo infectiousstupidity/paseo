@@ -7379,3 +7379,54 @@ describe("Codex interactive resume startup", () => {
     },
   );
 });
+
+describe("legacy Codex multi-file patch preview", () => {
+  test.each([true, false])("keeps later file labels and contents with running=%s", (running) => {
+    const item = mapCodexPatchNotificationToToolCall({
+      callId: "multi-file",
+      cwd: "/repo",
+      running,
+      success: true,
+      changes: [
+        {
+          path: "/repo/alpha.txt",
+          kind: "modify",
+          unified_diff: "@@ -1 +1 @@\n-old\n+" + "x".repeat(14000),
+        },
+        {
+          path: "/repo/beta.txt",
+          kind: "modify",
+          unified_diff: "@@ -1 +1 @@\n-small\n+large\n",
+        },
+      ],
+    });
+    if (item?.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/beta.txt b/beta.txt");
+    expect(item.detail.unifiedDiff).toContain("+large");
+    expect(item.detail.unifiedDiff!.length).toBeLessThanOrEqual(12000);
+  });
+
+  test("retains nested move destinations alongside another file", () => {
+    const item = mapCodexPatchNotificationToToolCall({
+      callId: "legacy-move",
+      cwd: "/repo",
+      running: false,
+      success: true,
+      changes: {
+        "/repo/old.txt": {
+          type: "update",
+          move_path: "/repo/new.txt",
+          unified_diff: "@@ -1 +1 @@\n-old\n+new\n",
+        },
+        "/repo/second.txt": {
+          type: "update",
+          unified_diff: "@@ -1 +1 @@\n-before\n+after\n",
+        },
+      },
+    });
+    if (item?.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/old.txt b/new.txt");
+    expect(item.detail.unifiedDiff).toContain("+++ b/new.txt");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/second.txt b/second.txt");
+  });
+});
