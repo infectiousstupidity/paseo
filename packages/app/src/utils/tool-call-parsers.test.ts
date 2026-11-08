@@ -21,6 +21,34 @@ describe("tool-call-parsers", () => {
     expect(parsed.find((entry) => entry.type === "add")?.content).toBe("+new");
   });
 
+  it("preserves file boundaries in a multi-file unified diff", () => {
+    const diff = [
+      "diff --git a/alpha.txt b/alpha.txt",
+      "--- a/alpha.txt",
+      "+++ b/alpha.txt",
+      "@@ -1 +1 @@",
+      "-old",
+      "+new",
+      "diff --git a/beta.txt b/beta.txt",
+      "--- a/beta.txt",
+      "+++ b/beta.txt",
+      "@@ -1 +1 @@",
+      "-before",
+      "+after",
+    ].join("\n");
+    const parsed = parseUnifiedDiff(diff);
+    expect(parsed.filter((line) => line.type === "header").map((line) => line.content)).toEqual([
+      "diff --git a/alpha.txt b/alpha.txt",
+      "@@ -1 +1 @@",
+      "diff --git a/beta.txt b/beta.txt",
+      "@@ -1 +1 @@",
+    ]);
+    expect(parsed.filter((line) => line.type === "add").map((line) => line.content)).toEqual([
+      "+new",
+      "+after",
+    ]);
+  });
+
   it("extracts TodoWrite task entries", () => {
     const tasks = extractTaskEntriesFromToolCall("TodoWrite", {
       todos: [

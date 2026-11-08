@@ -56,11 +56,13 @@ import { renderPromptAttachmentAsText } from "../prompt-attachments.js";
 import { composeSystemPromptParts } from "../system-prompt.js";
 import { CodexAsyncQuestions, codexAsyncQuestionToTimeline } from "./codex/async-questions.js";
 import {
+  fileChangesToPreview,
   mapCodexToolCallEnvelope,
   mapCodexToolCallFromThreadItem,
   normalizeCommandExecutionCommand,
   splitCodexMcpToolResultImages,
 } from "./codex/tool-call-mapper.js";
+import { normalizeCodexFilePath } from "./codex/tool-call-detail-parser.js";
 import {
   checkProviderLaunchAvailable,
   createProviderEnv,
@@ -93,6 +95,12 @@ import {
   type CodexAppServerTraceContext,
 } from "./codex/app-server-transport.js";
 import { type CodexUserMessageTurnIndex, revertCodexConversation } from "./codex/rewind.js";
+import {
+  type CodexHistoryRow,
+  CodexThreadHistoryTooLargeError,
+  readCodexThreadHistory,
+} from "./codex/thread-history.js";
+import { limitAgentTimelineItemContent } from "../agent-timeline-content.js";
 import {
   materializeProviderImage,
   renderProviderImageOutputAsAssistantMarkdown,
@@ -500,6 +508,11 @@ interface PersistedTimelineEntry {
 interface PersistedSubAgentRoute {
   childThreadId: string;
   toolCall: ToolCallTimelineItem;
+}
+
+interface CodexThreadHistory {
+  timeline: PersistedTimelineEntry[];
+  providerSubagentEvents: AgentStreamEvent[];
 }
 
 interface CodexThreadHistoryProjection {
@@ -1373,6 +1386,15 @@ interface CodexPatchFileChange {
   path: string;
   kind?: string;
   content?: string;
+  movePath?: string;
+}
+
+function codexPatchMovePath(value: unknown): string | undefined {
+  const record = toObjectRecord(value);
+  if (!record) return undefined;
+  const kind = toObjectRecord(record.kind);
+  const destination = record.move_path ?? kind?.move_path;
+  return typeof destination === "string" ? destination : undefined;
 }
 
 function extractPatchLikeText(value: unknown): string | undefined {
@@ -1505,6 +1527,7 @@ function parseCodexPatchChanges(changes: unknown): CodexPatchFileChange[] {
             (typeof record.type === "string" && record.type) ||
             undefined,
           content: extractPatchLikeText(record),
+          movePath: codexPatchMovePath(record),
         };
       })
       .filter((entry): entry is CodexPatchFileChange => entry !== null);
@@ -1524,6 +1547,7 @@ function parseCodexPatchChanges(changes: unknown): CodexPatchFileChange[] {
           (typeof recordChanges.type === "string" && recordChanges.type) ||
           undefined,
         content: extractPatchLikeText(recordChanges),
+        movePath: codexPatchMovePath(recordChanges),
       },
     ];
   }
@@ -1543,6 +1567,7 @@ function parseCodexPatchChanges(changes: unknown): CodexPatchFileChange[] {
             ? ((value as { type?: string }).type ?? undefined)
             : undefined,
         content: extractPatchLikeText(value),
+        movePath: codexPatchMovePath(value),
       };
     })
     .filter((entry): entry is CodexPatchFileChange => entry !== null);
@@ -1651,6 +1676,31 @@ function mapCodexExecNotificationToToolCall(params: {
   return params.running ? toRunningToolCall(mapped) : mapped;
 }
 
+function codexPatchPreview(
+  files: CodexPatchFileChange[],
+  cwd?: string | null,
+): {
+  filePath: string | undefined;
+  patchText: string | undefined;
+} {
+  const preview =
+    files.length > 1
+      ? fileChangesToPreview(
+          files.map((file) => ({
+            path: normalizeCodexFilePath(file.path, cwd) ?? file.path,
+            kind: file.kind,
+            diff: file.content,
+            movePath: file.movePath ? normalizeCodexFilePath(file.movePath, cwd) : undefined,
+          })),
+        )
+      : undefined;
+  const firstPath = preview?.filePath ?? files[0]?.path;
+  const firstPatchText = files
+    .map((file) => file.content?.trim())
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+  return { filePath: firstPath, patchText: preview?.unifiedDiff ?? firstPatchText };
+}
+
 export function mapCodexPatchNotificationToToolCall(params: {
   callId?: string | null;
   changes: unknown;
@@ -1661,11 +1711,7 @@ export function mapCodexPatchNotificationToToolCall(params: {
   running: boolean;
 }): ToolCallTimelineItem | null {
   const files = parseCodexPatchChanges(params.changes);
-  const firstPath = files[0]?.path;
-  const firstPatchText = files
-    .map((file) => file.content?.trim())
-    .find((value): value is string => typeof value === "string" && value.length > 0);
-  const patchText = firstPatchText;
+  const { filePath: firstPath, patchText } = codexPatchPreview(files, params.cwd);
   const patchFields = codexPatchTextFields(patchText);
   const mapped = mapCodexToolCallEnvelope({
     callId: params.callId ?? null,
@@ -1800,26 +1846,16 @@ function readCodexHistoryTimestamp(item: unknown): string | null {
   );
 }
 
-function readCodexTurnHistoryTimestamp(
-  turn: unknown,
+/** Falls back to the row's start time for a user message and its end time otherwise. */
+function readCodexHistoryRowTimestamp(
+  row: CodexHistoryRow,
   timelineItem: AgentTimelineItem,
 ): string | null {
-  const record = toObjectRecord(turn);
-  if (!record) {
-    return null;
-  }
-
-  const startedAt =
-    normalizeProviderReplayTimestamp(record.startedAt) ??
-    normalizeProviderReplayTimestamp(record.started_at);
-  const completedAt =
-    normalizeProviderReplayTimestamp(record.completedAt) ??
-    normalizeProviderReplayTimestamp(record.completed_at);
-
-  if (timelineItem.type === "user_message") {
-    return startedAt ?? completedAt;
-  }
-  return completedAt ?? startedAt;
+  const startedAt = normalizeProviderReplayTimestamp(row.startedAt);
+  const completedAt = normalizeProviderReplayTimestamp(row.completedAt);
+  return timelineItem.type === "user_message"
+    ? startedAt ?? completedAt
+    : completedAt ?? startedAt;
 }
 
 interface CodexSubAgentActivity {
@@ -2058,46 +2094,16 @@ function threadItemToTimelineEntries(
   return [timelineItem, ...mcpToolResultImagesToTimeline(item)];
 }
 
-const CodexThreadReadResponseSchema = z
-  .object({
-    thread: z
-      .object({
-        turns: z
-          .array(
-            z
-              .object({
-                items: z.array(z.unknown()).default([]),
-              })
-              .passthrough(),
-          )
-          .default([]),
-      })
-      .passthrough()
-      .default({ turns: [] }),
-  })
-  .passthrough();
-
-type CodexThreadReadResponse = z.infer<typeof CodexThreadReadResponseSchema>;
-type CodexThreadReadRequest = (threadId: string) => Promise<unknown>;
-
-async function requestCodexThreadHistory(
-  requestThread: CodexThreadReadRequest,
-  threadId: string,
-): Promise<CodexThreadReadResponse> {
-  const response = await requestThread(threadId);
-  return CodexThreadReadResponseSchema.parse(response);
-}
-
 async function loadCodexThreadHistoryTimeline(params: {
+  client: CodexAppServerClientLike;
   threadId: string;
   cwd: string | null;
-  requestThread: CodexThreadReadRequest;
 }): Promise<CodexThreadHistoryProjection> {
-  const response = await requestCodexThreadHistory(params.requestThread, params.threadId);
   const timeline: PersistedTimelineEntry[] = [];
   const subAgentTimelineIndexByThreadId = new Map<string, number>();
-  for (const turn of response.thread.turns) {
-    for (const item of turn.items) {
+  try {
+    for await (const row of readCodexThreadHistory(params.client, params.threadId)) {
+      const { item } = row;
       const historicalSubAgentActivity = readCodexSubAgentActivity(item);
       if (historicalSubAgentActivity) {
         const existingIndex = subAgentTimelineIndexByThreadId.get(
@@ -2119,16 +2125,16 @@ async function loadCodexThreadHistoryTimeline(params: {
       }
       for (const timelineItem of threadItemToTimelineEntries(item, { cwd: params.cwd })) {
         const timestamp =
-          readCodexHistoryTimestamp(item) ?? readCodexTurnHistoryTimestamp(turn, timelineItem);
+          readCodexHistoryTimestamp(item) ?? readCodexHistoryRowTimestamp(row, timelineItem);
         const settledTimelineItem =
           historicalSubAgentActivity && timelineItem.type === "tool_call"
             ? settleHistoricalSubAgentActivity(timelineItem, historicalSubAgentActivity.kind)
             : timelineItem;
         timeline.push({
-          item: settledTimelineItem,
+          item: limitAgentTimelineItemContent(settledTimelineItem),
           timestamp: timestamp ?? undefined,
-          ...(timelineItem.type === "user_message" && typeof turn.id === "string"
-            ? { providerTurnId: turn.id }
+          ...(timelineItem.type === "user_message" && row.turnId !== undefined
+            ? { providerTurnId: row.turnId }
             : {}),
         });
         for (const childThreadId of readCodexHistoricalSubAgentThreadIds(item)) {
@@ -2136,6 +2142,9 @@ async function loadCodexThreadHistoryTimeline(params: {
         }
       }
     }
+  } catch (error) {
+    if (!(error instanceof CodexThreadHistoryTooLargeError)) throw error;
+    timeline.push({ item: { type: "notification", level: "warning", message: error.message } });
   }
   const subAgentRoutes = Array.from(subAgentTimelineIndexByThreadId.entries()).flatMap(
     ([childThreadId, timelineIndex]): PersistedSubAgentRoute[] => {
@@ -2146,13 +2155,6 @@ async function loadCodexThreadHistoryTimeline(params: {
     },
   );
   return { timeline, subAgentRoutes };
-}
-
-function readCodexThread(client: CodexAppServerClientLike, threadId: string): Promise<unknown> {
-  return client.request("thread/read", {
-    threadId,
-    includeTurns: true,
-  });
 }
 
 export async function forkCodexThread(
@@ -3461,10 +3463,11 @@ export class CodexAppServerAgentSession implements AgentSession {
   private serviceTier: string | null = null;
   private speedModels: CodexModel[] = [];
   private planModeEnabled = false;
-  private historyPending = false;
-  private persistedHistory: PersistedTimelineEntry[] = [];
-  private loadingPersistedHistory = false;
-  private persistedProviderSubagentEvents: AgentStreamEvent[] = [];
+  // Only an archived load or rewind stages history until streamHistory consumes it.
+  private stagedHistory: CodexThreadHistory | null = null;
+  private historySubagentEvents: AgentStreamEvent[] | null = null;
+  // Reopened sessions reuse Paseo's timeline without fetching native history.
+  private historyIndexed = true;
   private pendingPermissions = new Map<string, AgentPermissionRequest>();
   private mcpElicitationPermissionIds = new Map<number, string>();
   private pendingPermissionHandlers = new Map<string, CodexPendingPermissionHandler>();
@@ -3574,7 +3577,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
     if (this.resumeHandle?.sessionId) {
       this.currentThreadId = this.resumeHandle.sessionId;
-      this.historyPending = true;
+      this.historyIndexed = false;
       // Resuming can start a goal before the caller receives the session.
       if (this.initialResumePurpose === "interactive") this.startupEvents = [];
     }
@@ -3622,7 +3625,7 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private async establishConnection(): Promise<void> {
     if (this.initialResumePurpose === "history") {
-      await this.readArchivedHistory();
+      this.stagedHistory = await this.readArchivedHistory();
       this.connectionState = "history-ready";
       return;
     }
@@ -3655,7 +3658,6 @@ export class CodexAppServerAgentSession implements AgentSession {
 
       if (this.currentThreadId) {
         await this.ensureThreadLoaded();
-        await this.loadPersistedHistory(this.client);
         await this.applyDefaultModelAndThinking();
       }
 
@@ -3972,39 +3974,38 @@ export class CodexAppServerAgentSession implements AgentSession {
     );
   }
 
-  private async readArchivedHistory(): Promise<void> {
+  private async readArchivedHistory(): Promise<CodexThreadHistory> {
     const child = await this.spawnAppServer();
     const client = new CodexAppServerClient(child, this.logger, () => this.traceContext());
     try {
       await client.request("initialize", buildCodexAppServerInitializeParams());
       client.notify("initialized", {});
-      await this.loadPersistedHistory(client);
+      return await this.readThreadHistory(client);
     } finally {
       await client.dispose();
     }
   }
 
-  private async loadPersistedHistory(client: CodexAppServerClientLike | null): Promise<void> {
-    if (!client || !this.currentThreadId) return;
-    const threadId = this.currentThreadId;
-
-    const history = await loadCodexThreadHistoryTimeline({
-      threadId,
+  // Build the native turn index and sub-agent routes, without retaining a second
+  // timeline in this session. The caller owns the returned history.
+  private async readThreadHistory(client: CodexAppServerClientLike | null): Promise<CodexThreadHistory> {
+    if (!client || !this.currentThreadId) {
+      return { timeline: [], providerSubagentEvents: [] };
+    }
+    const { timeline, subAgentRoutes } = await loadCodexThreadHistoryTimeline({
+      client,
+      threadId: this.currentThreadId,
       cwd: this.config.cwd ?? null,
-      requestThread: (threadIdToRead) => {
-        return readCodexThread(client, threadIdToRead);
-      },
     });
-    const { timeline, subAgentRoutes } = history;
     this.subAgentCallsByCallId.clear();
     this.subAgentCallIdByChildThreadId.clear();
     this.pendingSubAgentNotificationsByThreadId.clear();
-    this.persistedProviderSubagentEvents = [];
-    this.loadingPersistedHistory = true;
+    const providerSubagentEvents: AgentStreamEvent[] = [];
+    this.historySubagentEvents = providerSubagentEvents;
     try {
       await this.loadPersistedSubAgentHistories(client, subAgentRoutes);
     } finally {
-      this.loadingPersistedHistory = false;
+      this.historySubagentEvents = null;
     }
     this.resetCodexUserMessageTurns();
     for (const entry of timeline) {
@@ -4015,8 +4016,13 @@ export class CodexAppServerAgentSession implements AgentSession {
         this.rememberCodexUserMessageTurn(entry.item.messageId, entry.providerTurnId);
       }
     }
-    this.persistedHistory = timeline;
-    this.historyPending = timeline.length > 0;
+    this.historyIndexed = true;
+    return { timeline, providerSubagentEvents };
+  }
+
+  private async ensureHistoryIndexed(): Promise<void> {
+    if (this.historyIndexed) return;
+    await this.readThreadHistory(this.client);
   }
 
   private async loadPersistedSubAgentHistories(
@@ -4043,9 +4049,9 @@ export class CodexAppServerAgentSession implements AgentSession {
       });
       try {
         const childHistory = await loadCodexThreadHistoryTimeline({
+          client,
           threadId: next.route.childThreadId,
           cwd: this.config.cwd ?? null,
-          requestThread: (childThreadId) => readCodexThread(client, childThreadId),
         });
         for (const entry of childHistory.timeline) {
           this.emitProviderSubagentTimeline(next.route.childThreadId, entry.item, entry.timestamp);
@@ -4068,7 +4074,8 @@ export class CodexAppServerAgentSession implements AgentSession {
 
   private async ensureThreadLoaded(): Promise<void> {
     if (!this.client || !this.currentThreadId) return;
-    const params: Record<string, unknown> = { threadId: this.currentThreadId };
+    // Resume requests metadata only; explicit replay owns native history reads.
+    const params: Record<string, unknown> = { threadId: this.currentThreadId, excludeTurns: true };
     const developerInstructions = composeSystemPromptParts(
       this.config.systemPrompt,
       this.config.daemonAppendSystemPrompt,
@@ -4390,6 +4397,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       } else {
         await this.ensureThread();
       }
+      await this.ensureHistoryIndexed();
 
       const turnStart = await this.buildTurnStartParams(effectivePrompt, options);
       const turnId = this.createTurnId();
@@ -4562,21 +4570,10 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   async *streamHistory(): AsyncGenerator<AgentStreamEvent> {
-    if (
-      (!this.historyPending || this.persistedHistory.length === 0) &&
-      this.persistedProviderSubagentEvents.length === 0
-    ) {
-      return;
-    }
-    const history = this.persistedHistory;
-    const providerSubagents = this.persistedProviderSubagentEvents;
-    this.persistedHistory = [];
-    this.persistedProviderSubagentEvents = [];
-    this.historyPending = false;
-    for (const event of providerSubagents) {
-      yield event;
-    }
-    for (const entry of history) {
+    const history = this.stagedHistory ?? (await this.readThreadHistory(this.client));
+    this.stagedHistory = null;
+    for (const event of history.providerSubagentEvents) yield event;
+    for (const entry of history.timeline) {
       yield {
         type: "timeline",
         provider: CODEX_PROVIDER,
@@ -4959,6 +4956,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     } else {
       await this.ensureThread();
     }
+    await this.ensureHistoryIndexed();
 
     await revertCodexConversation({
       client: this.client,
@@ -4973,10 +4971,8 @@ export class CodexAppServerAgentSession implements AgentSession {
       setThreadId: async (threadId) => {
         this.currentThreadId = threadId;
         this.cachedRuntimeInfo = null;
-        this.persistedHistory = [];
-        this.historyPending = false;
-        await this.loadPersistedHistory(this.client);
-        this.reconcileAsyncQuestionsAfterRewind();
+        this.stagedHistory = await this.readThreadHistory(this.client);
+        this.reconcileAsyncQuestionsAfterRewind(this.stagedHistory.timeline);
       },
     });
   }
@@ -5138,10 +5134,6 @@ export class CodexAppServerAgentSession implements AgentSession {
       };
     }
 
-  stopBackgroundWork(id: string): Promise<void> {
-    return this.background.stopItem(id);
-  }
-
     if (!this.goalsEnabled || parsed.commandName !== "goal") return null;
 
     const subcommand = parseGoalSubcommand(parsed.args);
@@ -5155,6 +5147,10 @@ export class CodexAppServerAgentSession implements AgentSession {
         });
       },
     };
+  }
+
+  stopBackgroundWork(id: string): Promise<void> {
+    return this.background.stopItem(id);
   }
 
   private async executeCompactCommand(): Promise<string | null> {
@@ -5192,6 +5188,7 @@ export class CodexAppServerAgentSession implements AgentSession {
       await this.connect();
       if (this.currentThreadId) {
         await this.ensureThreadLoaded();
+        await this.ensureHistoryIndexed();
       } else {
         await this.ensureThread();
       }
@@ -5297,6 +5294,7 @@ export class CodexAppServerAgentSession implements AgentSession {
     this.config.model = model;
     this.reconcileServiceTier();
     this.config.thinkingOptionId = thinkingOptionId;
+    this.refreshResolvedCollaborationMode();
     return model;
   }
 
@@ -5385,8 +5383,8 @@ export class CodexAppServerAgentSession implements AgentSession {
   }
 
   private emitEvent(event: AgentStreamEvent): void {
-    if (this.loadingPersistedHistory && event.type === "provider_subagent") {
-      this.persistedProviderSubagentEvents.push(event);
+    if (this.historySubagentEvents && event.type === "provider_subagent") {
+      this.historySubagentEvents.push(event);
       return;
     }
     this.notifySubscribers(event);
@@ -6525,9 +6523,9 @@ export class CodexAppServerAgentSession implements AgentSession {
     }
   }
 
-  private reconcileAsyncQuestionsAfterRewind(): void {
+  private reconcileAsyncQuestionsAfterRewind(timeline: readonly PersistedTimelineEntry[]): void {
     const retainedIds = new Set(
-      this.persistedHistory.flatMap(({ item }) =>
+      timeline.flatMap(({ item }) =>
         item.type === "tool_call" && item.name === "request_user_input_async" ? [item.callId] : [],
       ),
     );

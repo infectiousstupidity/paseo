@@ -1274,8 +1274,9 @@ class PluginAgentSession implements AgentSession {
     }));
   }
 
-  async setModel(modelId: string | null): Promise<void> {
+  async setModel(modelId: string | null): Promise<{ model: string | null }> {
     await this.bridge.configure({ model: modelId });
+    return { model: this.bridge.config.model ?? null };
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {

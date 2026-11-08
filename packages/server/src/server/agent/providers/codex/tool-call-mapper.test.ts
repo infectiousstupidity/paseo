@@ -8,6 +8,84 @@ function expectMapped<T>(item: T | null): T {
 }
 
 describe("codex tool-call mapper", () => {
+  it.each(["inProgress", "completed"])("keeps every file in %s Codex patches", (status) => {
+    const item = expectMapped(
+      mapCodexToolCallFromThreadItem(
+        {
+          type: "fileChange",
+          id: "two-files",
+          status,
+          changes: [
+            {
+              path: "/repo/alpha.txt",
+              kind: { type: "update", move_path: null },
+              diff: "@@ -1 +1 @@\n-old\n+new\n",
+            },
+            {
+              path: "/repo/beta.txt",
+              kind: { type: "update", move_path: null },
+              diff: "@@ -1 +1 @@\n-before\n+after\n",
+            },
+          ],
+        },
+        { cwd: "/repo" },
+      ),
+    );
+    if (item.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.filePath).toBe("alpha.txt");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/alpha.txt b/alpha.txt");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/beta.txt b/beta.txt");
+    expect(item.detail.unifiedDiff).toContain("-before\n+after");
+  });
+
+  it("retains rename destinations and empty additions in a mixed patch", () => {
+    const item = expectMapped(
+      mapCodexToolCallFromThreadItem(
+        {
+          type: "fileChange",
+          id: "rename-and-add",
+          status: "completed",
+          changes: [
+            {
+              path: "/repo/old.txt",
+              kind: { type: "update", move_path: "/repo/new.txt" },
+              diff: "\n\nMoved to: /repo/new.txt",
+            },
+            { path: "/repo/empty.txt", kind: { type: "add" }, diff: "" },
+          ],
+        },
+        { cwd: "/repo" },
+      ),
+    );
+    if (item.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("rename from old.txt\nrename to new.txt");
+    expect(item.detail.unifiedDiff).toContain(
+      "diff --git a/empty.txt b/empty.txt\n--- /dev/null\n+++ b/empty.txt",
+    );
+    expect(item.detail.unifiedDiff).not.toContain("+Moved to:");
+  });
+
+  it("shares the diff budget so a large first file cannot hide later files", () => {
+    const item = expectMapped(
+      mapCodexToolCallFromThreadItem(
+        {
+          type: "fileChange",
+          id: "large-patch",
+          status: "completed",
+          changes: [
+            { path: "/repo/alpha.txt", kind: "modify", diff: "@@ -1 +1 @@\n-old\n+" + "x".repeat(14000) },
+            { path: "/repo/beta.txt", kind: "modify", diff: "@@ -1 +1 @@\n-old\n+new\n" },
+          ],
+        },
+        { cwd: "/repo" },
+      ),
+    );
+    if (item.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/beta.txt b/beta.txt");
+    expect(item.detail.unifiedDiff).toContain("+new");
+    expect(item.detail.unifiedDiff!.length).toBeLessThanOrEqual(12000);
+  });
+
   it("maps commandExecution start into running canonical call", () => {
     const item = expectMapped(
       mapCodexToolCallFromThreadItem({

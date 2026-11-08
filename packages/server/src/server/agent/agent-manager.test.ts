@@ -4300,6 +4300,52 @@ test("resumeAgentFromPersistence keeps metadata config, applies overrides, and p
   });
 });
 
+test("importProviderSession retains a native model instead of a new-session default", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-import-model-"));
+  onTestFinished(() => rmSync(workdir, { recursive: true, force: true }));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const nativeModel = "native-selected-model";
+
+  class ImportClient extends TestAgentClient {
+    importConfig: AgentSessionConfig | undefined;
+
+    async importSession(input: ImportProviderSessionInput, context: ImportProviderSessionContext) {
+      this.importConfig = context.config;
+      // A native resumable provider retains its selection unless an override is provided.
+      const session = new TestAgentSession({
+        ...context.config,
+        model: context.config.model ?? nativeModel,
+      });
+      return {
+        session,
+        config: context.storedConfig,
+        persistence: { provider: this.provider, sessionId: input.providerHandleId },
+        timeline: [],
+      };
+    }
+  }
+
+  const client = new ImportClient();
+  const manager = new AgentManager({ clients: { codex: client }, registry: storage, logger });
+  const imported = await manager.importProviderSession({
+    provider: "codex",
+    providerHandleId: "native-session",
+    cwd: workdir,
+    workspaceId: "import-model",
+  });
+  await manager.flush();
+
+  expect(imported.runtimeInfo?.model).toBe(nativeModel);
+  expect(imported.config.model).toBe(nativeModel);
+  expect(client.importConfig?.model).toBeUndefined();
+  expect((await storage.get(imported.id))?.config.model).toBe(nativeModel);
+
+  await manager.reloadAgentSession(imported.id);
+  expect(client.resumeOverrides.at(-1)?.model).toBe(nativeModel);
+  await manager.closeAgent(imported.id);
+  await manager.flush();
+});
+
 test("importProviderSession imports the selected session without listing and publishes ready state", async () => {
   const workdir = mkdtempSync(join(tmpdir(), "agent-manager-import-session-"));
   const storagePath = join(workdir, "agents");
@@ -5050,6 +5096,62 @@ test("later explicit config mutations win over events emitted by earlier mutatio
   await manager.flush();
 
   expect(manager.getAgent(snapshot.id)?.config.thinkingOptionId).toBe("high");
+});
+
+test.each([
+  { requested: "unavailable", effective: "source" },
+  { requested: "alias", effective: "canonical" },
+  { requested: null, effective: null },
+])("setAgentModel saves the provider's effective selection for $requested", async ({ requested, effective }) => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-effective-model-"));
+  class SelectingSession extends TestAgentSession {
+    private model: string | null = "source";
+
+    async setModel(model: string | null) {
+      if (model && model !== "unavailable") {
+        this.model = model === "alias" ? "canonical" : model;
+      }
+      return { model: this.model };
+    }
+
+    override async getRuntimeInfo() {
+      return { ...(await super.getRuntimeInfo()), model: this.model };
+    }
+  }
+  class SelectingClient extends TestAgentClient {
+    override async createSession(config: AgentSessionConfig): Promise<AgentSession> {
+      return new SelectingSession(config);
+    }
+  }
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const manager = new AgentManager({
+    clients: { codex: new SelectingClient() },
+    registry: storage,
+    logger,
+  });
+  try {
+    const agent = await manager.createAgent(
+      { provider: "codex", cwd: workdir, model: "source" },
+      undefined,
+      { workspaceId: undefined },
+    );
+    await manager.setAgentModel(agent.id, requested);
+    await manager.flush();
+
+    expect(manager.getAgent(agent.id)?.config.model).toBe(effective ?? undefined);
+    expect(manager.getAgent(agent.id)?.runtimeInfo?.model).toBe(effective);
+    const stored = await storage.get(agent.id);
+    expect(stored?.config?.model).toBe(effective ?? undefined);
+    expect(stored?.runtimeInfo?.model).toBe(effective);
+
+    await manager.setAgentModel(agent.id, "target");
+    expect(manager.getAgent(agent.id)?.config.model).toBe("target");
+    expect(manager.getAgent(agent.id)?.runtimeInfo?.model).toBe("target");
+  } finally {
+    for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
+    await manager.flush();
+    rmSync(workdir, { recursive: true, force: true });
+  }
 });
 
 test("setAgentThinkingOption adopts the session's effective clamped level", async () => {

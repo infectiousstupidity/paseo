@@ -349,6 +349,7 @@ export class OpenCodeV2Session implements AgentSession {
         thinkingOptionId: variant ?? null,
       },
     });
+    return { model: `${selected.providerID}/${selected.id}` };
   }
 
   async setThinkingOption(variant: string | null) {

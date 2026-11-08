@@ -87,6 +87,7 @@ describe("Codex executable discovery", () => {
 import { CodexAppServerClient } from "./codex/app-server-transport.js";
 import {
   createFakeCodexAppServer,
+  fakeCodexThreadHistory,
   type FakeCodexAppServer,
   waitForNextPermission,
   waitForNextTimelineItem,
@@ -114,7 +115,6 @@ interface CodexSessionTestAccess {
   ensureThreadLoaded(): Promise<void>;
   handleToolApprovalRequest(params: unknown): Promise<unknown>;
   handleNotification(method: string, params: unknown): void;
-  loadPersistedHistory(client: CodexClientLike | null): Promise<void>;
   refreshResolvedCollaborationMode(): void;
   serviceTier: "fast" | null;
   planModeEnabled: boolean;
@@ -1186,6 +1186,41 @@ describe("Codex app-server provider", () => {
     }
   });
 
+  test.each([undefined, "configured-model"])(
+    "import resolves model %s before its first collaboration turn",
+    async (configuredModel) => {
+      const appServer = createFakeCodexAppServer({
+        "config/read": () => ({
+          config: { model: configuredModel, model_reasoning_effort: "low" },
+        }),
+        "collaborationMode/list": () => ({
+          data: [{ name: "Code", mode: "default", model: null, reasoning_effort: null }],
+        }),
+      });
+      const provider = createProviderWithFakeAppServer(appServer);
+      const config = createConfig({ model: undefined, thinkingOptionId: undefined });
+      const imported = await provider.importSession(
+        { providerHandleId: "native-thread", cwd: config.cwd! },
+        { config, storedConfig: config },
+      );
+      try {
+        await imported.session.startTurn("first follow-up after import");
+        await expect(appServer.waitForTurnStart()).resolves.toMatchObject({
+          threadId: "native-thread",
+          model: configuredModel ?? "gpt-5.4",
+          effort: "low",
+          collaborationMode: {
+            mode: "default",
+            settings: { model: configuredModel ?? "gpt-5.4", reasoning_effort: "low" },
+          },
+        });
+        appServer.assertNoErrors();
+      } finally {
+        await imported.session.close();
+      }
+    },
+  );
+
   test("provider persistence leaves options owned by the stored agent config", async () => {
     const appServer = createFakeCodexAppServer();
     const provider = createProviderWithFakeAppServer(appServer);
@@ -1858,7 +1893,7 @@ describe("Codex app-server provider", () => {
       purpose: "history",
     });
 
-    expect(threadRequests).toEqual(["thread/read"]);
+    expect(threadRequests).toEqual(["thread/read", "thread/read"]);
     await session.close();
     appServer.assertNoErrors();
   });
@@ -1897,7 +1932,6 @@ describe("Codex app-server provider", () => {
       "thread/resume",
       "thread/unarchive",
       "thread/resume",
-      "thread/read",
     ]);
     await session.close();
     appServer.assertNoErrors();
@@ -2151,7 +2185,7 @@ describe("Codex app-server provider", () => {
         cwd: "/workspace/project",
         model: "gpt-5.4",
         serviceTier: null,
-        excludeTurns: false,
+        excludeTurns: true,
         persistExtendedHistory: true,
       },
     ]);
@@ -2236,8 +2270,9 @@ describe("Codex app-server provider", () => {
 
   test("rewinds a paginated conversation through the public session capability", async () => {
     const appServer = createFakeCodexAppServer({
-      "thread/read": () => ({
-        thread: { id: "thread-1", historyMode: "paginated", turns: [] },
+      ...fakeCodexThreadHistory({
+        "thread-1": { historyMode: "paginated", turns: [] },
+        "forked-thread": { historyMode: "paginated", turns: [] },
       }),
       "thread/rollback": () => {
         throw new Error("paginated threads do not support thread/rollback");
@@ -2278,7 +2313,7 @@ describe("Codex app-server provider", () => {
         cwd: "/workspace/project",
         model: "gpt-5.4",
         serviceTier: null,
-        excludeTurns: false,
+        excludeTurns: true,
         persistExtendedHistory: true,
       },
     ]);
@@ -2295,11 +2330,10 @@ describe("Codex app-server provider", () => {
     async (historyMode) => {
       const appServer = createFakeCodexAppServer(
         historyMode === "paginated"
-          ? {
-              "thread/read": () => ({
-                thread: { id: "thread-1", historyMode: "paginated", turns: [] },
-              }),
-            }
+          ? fakeCodexThreadHistory({
+              "thread-1": { historyMode: "paginated", turns: [] },
+              "forked-thread": { historyMode: "paginated", turns: [] },
+            })
           : undefined,
       );
       const customCodexConfig = {
@@ -4761,14 +4795,13 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
     }
 
     expect(requests.map((request) => [request.method, request.params])).toEqual([
+      ["thread/read", { threadId: "test-thread", includeTurns: false }],
       ["thread/read", { threadId: "test-thread", includeTurns: true }],
     ]);
     expect(history).toEqual([
@@ -4815,7 +4848,7 @@ describe("Codex app-server provider", () => {
       })),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
+    await Array.fromAsync(session.streamHistory());
 
     expect(asInternals(session).codexUserMessageTurns().resolve("message-history")).toEqual({
       index: 0,
@@ -4883,8 +4916,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5046,8 +5077,6 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
@@ -5110,8 +5139,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5285,8 +5312,6 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
@@ -5345,8 +5370,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5639,7 +5662,7 @@ describe("Codex app-server provider", () => {
     expect(session.currentThreadId).toBe("archived-thread-id");
     expect(requests).toEqual([
       { method: "thread/loaded/list", params: {} },
-      { method: "thread/resume", params: { threadId: "archived-thread-id" } },
+      { method: "thread/resume", params: { threadId: "archived-thread-id", excludeTurns: true } },
     ]);
   });
 
@@ -6472,8 +6495,6 @@ describe("Codex app-server provider", () => {
         },
       })),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -7343,4 +7364,55 @@ describe("Codex interactive resume startup", () => {
       }
     },
   );
+});
+
+describe("legacy Codex multi-file patch preview", () => {
+  test.each([true, false])("keeps later file labels and contents with running=%s", (running) => {
+    const item = mapCodexPatchNotificationToToolCall({
+      callId: "multi-file",
+      cwd: "/repo",
+      running,
+      success: true,
+      changes: [
+        {
+          path: "/repo/alpha.txt",
+          kind: "modify",
+          unified_diff: "@@ -1 +1 @@\n-old\n+" + "x".repeat(14000),
+        },
+        {
+          path: "/repo/beta.txt",
+          kind: "modify",
+          unified_diff: "@@ -1 +1 @@\n-small\n+large\n",
+        },
+      ],
+    });
+    if (item?.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/beta.txt b/beta.txt");
+    expect(item.detail.unifiedDiff).toContain("+large");
+    expect(item.detail.unifiedDiff!.length).toBeLessThanOrEqual(12000);
+  });
+
+  test("retains nested move destinations alongside another file", () => {
+    const item = mapCodexPatchNotificationToToolCall({
+      callId: "legacy-move",
+      cwd: "/repo",
+      running: false,
+      success: true,
+      changes: {
+        "/repo/old.txt": {
+          type: "update",
+          move_path: "/repo/new.txt",
+          unified_diff: "@@ -1 +1 @@\n-old\n+new\n",
+        },
+        "/repo/second.txt": {
+          type: "update",
+          unified_diff: "@@ -1 +1 @@\n-before\n+after\n",
+        },
+      },
+    });
+    if (item?.detail.type !== "edit") throw new Error("Expected edit detail");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/old.txt b/new.txt");
+    expect(item.detail.unifiedDiff).toContain("+++ b/new.txt");
+    expect(item.detail.unifiedDiff).toContain("diff --git a/second.txt b/second.txt");
+  });
 });

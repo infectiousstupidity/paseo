@@ -697,3 +697,58 @@ export function waitForProviderSubagent(
 ): Promise<ProviderSubagentEvent> {
   return waitForNextEvent(session, "provider_subagent", (event) => event.event.id === id);
 }
+
+export interface FakeCodexHistoryTurn {
+  id: string;
+  startedAt?: number;
+  completedAt?: number;
+  items: JsonObject[];
+}
+
+export interface FakeCodexHistoryThread {
+  historyMode?: "legacy" | "paginated";
+  turns: FakeCodexHistoryTurn[];
+}
+
+/** Simulates Codex's legacy and paginated persisted thread history APIs. */
+export function fakeCodexThreadHistory(
+  threads: Record<string, FakeCodexHistoryThread>,
+): Record<string, FakeCodexAppServerHandler> {
+  function readThread(params: unknown) {
+    const id = String(toJsonObject(params).threadId);
+    const thread = threads[id];
+    if (!thread) throw new Error(`thread not found: ${id}`);
+    return { id, thread };
+  }
+  return {
+    "thread/read": (params) => {
+      const { id, thread } = readThread(params);
+      if (!toJsonObject(params).includeTurns) {
+        return { thread: { id, ...(thread.historyMode ? { historyMode: thread.historyMode } : {}) } };
+      }
+      if (thread.historyMode === "paginated") {
+        throw new Error("paginated threads do not support thread/read(includeTurns=true)");
+      }
+      return { thread: { id, turns: thread.turns } };
+    },
+    "thread/items/list": (params) => {
+      const { thread } = readThread(params);
+      if (thread.historyMode !== "paginated") throw new Error("Not a paginated thread");
+      const request = toJsonObject(params);
+      const rows = thread.turns.flatMap((turn) =>
+        turn.items.map((item) => ({
+          turnId: turn.id,
+          item,
+          startedAtMs: turn.startedAt === undefined ? null : turn.startedAt * 1000,
+          completedAtMs: turn.completedAt === undefined ? null : turn.completedAt * 1000,
+        })),
+      );
+      const limit = Math.min(typeof request.limit === "number" ? request.limit : 25, 100);
+      const start = typeof request.cursor === "string"
+        ? Number(request.cursor.slice("cursor-".length))
+        : 0;
+      const end = Math.min(rows.length, start + limit);
+      return { data: rows.slice(start, end), nextCursor: end < rows.length ? `cursor-${end}` : null };
+    },
+  };
+}

@@ -140,6 +140,14 @@ Draft metadata lookups should avoid creating provider sessions when the upstream
 
 Provider session import has its own contract. The picker calls `listImportableSessions` and receives rows only: provider handle, cwd, title, prompt previews, and last activity. Import calls `importSession({ providerHandleId, cwd })` for the selected row and must not call listing again. The provider returns the resumed session, storage config, persistence handle, and hydrated timeline for that one native session; `AgentManager.importProviderSession` seeds the daemon timeline and publishes the Paseo agent only after it is ready.
 
+Codex history is read only when the daemon needs to rebuild its timeline, not just to reopen an
+agent whose timeline is already cached. Paginated native threads use `thread/items/list` in
+ascending 100-item pages; older legacy threads use `thread/read` because Codex offers no legacy
+paging. Resuming excludes turns from `thread/resume`; turns and subagent routes are indexed on
+first use when necessary. An oversized legacy history shows a migration hint rather than dropping
+the agent. This is Codex-specific: Pi history uses its native `getHistory()` and saved ancestry
+replay, not the Codex history API.
+
 ## Provider Helper Processes
 
 Provider-owned helper processes that can outlive an individual agent session must be recorded in the daemon's managed-process registry. Store provider/kind metadata, the PID, launch command/args, and process identity captured from the platform process table. Remove the record on normal exit or shutdown.
@@ -178,7 +186,10 @@ Selector opening may read a loading or stale query, but does not force provider 
 
 Saved provider/model choices are user intent. Catalogue failure must not erase them or substitute
 another model. Creation reads the caller's host and directory directly; an earlier global snapshot
-must not settle a project form's initial selection.
+must not settle a project form's initial selection. Importing an existing provider session must not
+apply a new-session default: the native session owns its model until the user changes it. A completed
+model switch reports the provider's effective selection, including an unchanged model when the
+provider ignores an unavailable request. Resetting an explicit preference still clears that preference.
 
 The server's provider keys never cross the wire. Clients advertising `provider_snapshot_references`
 receive directory-to-hash announcements; an unknown hash uses the existing snapshot request.
