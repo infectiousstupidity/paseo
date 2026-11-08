@@ -193,7 +193,8 @@ export class AgentStorage {
     const nextPath = this.buildRecordPath(record);
     const previousPath = this.pathById.get(agentId);
 
-    await writeJsonFileAtomic(nextPath, record);
+    // Explicit launch overrides can contain credentials. Restrict permissions before rename.
+    await writeJsonFileAtomic(nextPath, record, 0o600);
     this.addIndexedPath(agentId, nextPath);
 
     if (previousPath && previousPath !== nextPath) {

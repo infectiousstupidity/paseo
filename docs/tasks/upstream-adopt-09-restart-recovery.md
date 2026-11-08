@@ -32,7 +32,7 @@ Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/
 
 ## Partial implementation — launch environment preservation (2026-11-08)
 
-The existing create flow passed explicit per-agent environment overrides to the provider, but session refresh and disk-backed reopening discarded them. This change stores the original overrides in the agent record and reuses them for saved-session reopen (with or without a provider handle) and refresh. The regression exercises Codex and OpenCode, including the explicit empty-string value, caller mutation, and absence from client snapshots. It does not persist daemon-injected launch variables.
+The existing create flow passed explicit per-agent environment overrides to the provider, but session refresh and disk-backed reopening discarded them. This change stores the original overrides in the agent record and reuses them for saved-session reopen (with or without a provider handle) and refresh. The regression exercises Codex and OpenCode, including the explicit empty-string value, caller mutation, and absence from client snapshots. It does not persist daemon-injected launch variables. Agent records are now written mode `0600` on POSIX, with a targeted persistence/permission regression.
 
 **Still missing:** Terminal process survival across daemon restarts; opt-in interrupted-agent continuation and its safeguards; isolated restart/terminal tests and real-provider/browser acceptance. This is only a bounded part of #22, not task completion.
 

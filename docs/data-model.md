@@ -78,7 +78,7 @@ The `agents/{sanitized-cwd}/` directory name is derived from the agent's `cwd` b
 
 **Path:** `$PASEO_HOME/agents/{project-dir}/{agentId}.json`
 
-Each agent is stored as a separate JSON file, grouped by project directory.
+Each agent is stored as a separate JSON file, grouped by project directory. Agent records are written with mode `0600` on POSIX because explicit launch environment overrides may contain credentials. The `launchEnv` field stores only those user/plugin-supplied overrides, not daemon-injected variables; it is never sent in agent snapshots.
 
 | Field                | Type                                     | Description                                                                                                                                                                                                                                                                                                                                                                         |
 | -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
