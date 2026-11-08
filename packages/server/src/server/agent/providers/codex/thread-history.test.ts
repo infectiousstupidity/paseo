@@ -72,6 +72,25 @@ describe("Codex paginated history", () => {
     appServer.assertNoErrors();
   });
 
+  test("indexes old turns only when a reopened session starts new work", async () => {
+    const { session, appServer } = await open({
+      historyMode: "paginated",
+      turns: [{ id: "turn-1", items: [user("u1", "First"), assistant("a1", "Done")] }],
+    });
+    try {
+      expect(readRequests(appServer)).toEqual([]);
+      await session.startTurn("Continue");
+      await appServer.waitForTurnStart();
+      expect(readRequests(appServer).map((r) => r.method)).toEqual([
+        "thread/read", "thread/items/list",
+      ]);
+      appServer.completeTurn({ threadId: "saved-thread" });
+    } finally {
+      await session.close();
+    }
+    appServer.assertNoErrors();
+  });
+
   test("reads over 100 items in ascending paginated pages with native turn IDs", async () => {
     const answers = Array.from({ length: 151 }, (_, i) => assistant(`a${i}`, `Answer ${i}`));
     const { session, appServer } = await open({
