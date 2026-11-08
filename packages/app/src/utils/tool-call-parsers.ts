@@ -210,6 +210,7 @@ export function parseUnifiedDiff(diffText?: string): DiffLine[] {
   }
 
   const lines = splitIntoLines(diffText);
+  const hasMultipleFiles = lines.filter((line) => line.startsWith("diff --git ")).length > 1;
   const diff: DiffLine[] = [];
 
   for (const line of lines) {
@@ -218,7 +219,7 @@ export function parseUnifiedDiff(diffText?: string): DiffLine[] {
       continue;
     }
 
-    if (line.startsWith("@@")) {
+    if (line.startsWith("@@") || (hasMultipleFiles && line.startsWith("diff --git "))) {
       diff.push({ type: "header", content: line });
       continue;
     }
