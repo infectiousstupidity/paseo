@@ -114,7 +114,6 @@ interface CodexSessionTestAccess {
   ensureThreadLoaded(): Promise<void>;
   handleToolApprovalRequest(params: unknown): Promise<unknown>;
   handleNotification(method: string, params: unknown): void;
-  loadPersistedHistory(client: CodexClientLike | null): Promise<void>;
   refreshResolvedCollaborationMode(): void;
   serviceTier: "fast" | null;
   planModeEnabled: boolean;
@@ -1893,7 +1892,7 @@ describe("Codex app-server provider", () => {
       purpose: "history",
     });
 
-    expect(threadRequests).toEqual(["thread/read"]);
+    expect(threadRequests).toEqual(["thread/read", "thread/read"]);
     await session.close();
     appServer.assertNoErrors();
   });
@@ -1932,7 +1931,6 @@ describe("Codex app-server provider", () => {
       "thread/resume",
       "thread/unarchive",
       "thread/resume",
-      "thread/read",
     ]);
     await session.close();
     appServer.assertNoErrors();
@@ -2186,7 +2184,7 @@ describe("Codex app-server provider", () => {
         cwd: "/workspace/project",
         model: "gpt-5.4",
         serviceTier: null,
-        excludeTurns: false,
+        excludeTurns: true,
         persistExtendedHistory: true,
       },
     ]);
@@ -2313,7 +2311,7 @@ describe("Codex app-server provider", () => {
         cwd: "/workspace/project",
         model: "gpt-5.4",
         serviceTier: null,
-        excludeTurns: false,
+        excludeTurns: true,
         persistExtendedHistory: true,
       },
     ]);
@@ -4796,14 +4794,13 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
     }
 
     expect(requests.map((request) => [request.method, request.params])).toEqual([
+      ["thread/read", { threadId: "test-thread", includeTurns: false }],
       ["thread/read", { threadId: "test-thread", includeTurns: true }],
     ]);
     expect(history).toEqual([
@@ -4850,7 +4847,7 @@ describe("Codex app-server provider", () => {
       })),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
+    await Array.fromAsync(session.streamHistory());
 
     expect(asInternals(session).codexUserMessageTurns().resolve("message-history")).toEqual({
       index: 0,
@@ -4918,8 +4915,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5081,8 +5076,6 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
@@ -5145,8 +5138,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5320,8 +5311,6 @@ describe("Codex app-server provider", () => {
       }),
     };
 
-    await asInternals(session).loadPersistedHistory(session.client);
-
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
       history.push(event);
@@ -5380,8 +5369,6 @@ describe("Codex app-server provider", () => {
         };
       }),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
@@ -5674,7 +5661,7 @@ describe("Codex app-server provider", () => {
     expect(session.currentThreadId).toBe("archived-thread-id");
     expect(requests).toEqual([
       { method: "thread/loaded/list", params: {} },
-      { method: "thread/resume", params: { threadId: "archived-thread-id" } },
+      { method: "thread/resume", params: { threadId: "archived-thread-id", excludeTurns: true } },
     ]);
   });
 
@@ -6507,8 +6494,6 @@ describe("Codex app-server provider", () => {
         },
       })),
     };
-
-    await asInternals(session).loadPersistedHistory(session.client);
 
     const history: AgentStreamEvent[] = [];
     for await (const event of session.streamHistory()) {
