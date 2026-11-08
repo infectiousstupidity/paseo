@@ -1,7 +1,7 @@
 # Upstream adoption 09 — Terminal continuity and opt-in agent recovery
 
 **Priority:** P2  
-**Status:** Partial implementation proposed in draft PR #28; acceptance pending  
+**Status:** Partial implementation on `main` in PR #28; acceptance pending  
 **Tracker:** https://github.com/infectiousstupidity/paseo/issues/13
 
 ## Outcome
@@ -32,10 +32,10 @@ Follow AGENTS.md for targeted tests, typecheck/lint/format and required real UI/
 
 ## Partial implementation — launch environment preservation (2026-11-08)
 
-**Delivery:** [Draft PR #28](https://github.com/infectiousstupidity/paseo/pull/28), commits [`de351d5b`](https://github.com/infectiousstupidity/paseo/commit/de351d5bf1826cd9fc82f5582eedd7edf3e725da) and [`d3e1d44d`](https://github.com/infectiousstupidity/paseo/commit/d3e1d44d4ae10f436cfd980b818ced27981ea19a). Not merged or accepted.
+**Delivery:** [PR #28](https://github.com/infectiousstupidity/paseo/pull/28) merged into `main` at [`d3065e48`](https://github.com/infectiousstupidity/paseo/commit/d3065e4859d7f07545e8fea236c26fb9996232f1). Source merged at user request; not acceptance-verified.
 
 The existing create flow passed explicit per-agent environment overrides to the provider, but session refresh and disk-backed reopening discarded them. This change stores the original overrides in the agent record and reuses them for saved-session reopen (with or without a provider handle) and refresh. The regression exercises Codex and OpenCode, including the explicit empty-string value, caller mutation, and absence from client snapshots. It does not persist daemon-injected launch variables. Agent records are now written mode `0600` on POSIX, with a targeted persistence/permission regression.
 
 **Still missing:** Terminal process survival across daemon restarts; opt-in interrupted-agent continuation and its safeguards; isolated restart/terminal tests and real-provider/browser acceptance. This is only a bounded part of #22, not task completion.
 
-**Verification status:** Regression test added, not executed. This environment has Node 22 but the repo requires Node >=26.12.1, with no network access for dependencies or checkout. Run the focused Vitest file, `npm run typecheck`, `npm run lint`, `npm run format`, and `npm run format:check` in a supported checkout before merging. Production daemon untouched.
+**Verification status:** Regression test added, not executed. This environment has Node 22 but the repo requires Node >=26.12.1, with no network access for dependencies or checkout. Run the focused Vitest file, `npm run typecheck`, `npm run lint`, `npm run format`, and `npm run format:check` in a supported checkout before declaring acceptance. Production daemon untouched.
