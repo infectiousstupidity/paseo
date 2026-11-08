@@ -13,6 +13,9 @@ const DEFAULT_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 const APP_SERVER_GRACEFUL_SHUTDOWN_TIMEOUT_MS = 2_000;
 const APP_SERVER_FORCE_SHUTDOWN_TIMEOUT_MS = 1_000;
 const STDERR_BUFFER_LIMIT = 8192;
+// Bound Codex provider stdout without buffering an unbounded JSON-RPC response.
+const CODEX_STDOUT_LINE_LIMIT_BYTES = 128 * 1024 * 1024;
+const OVERSIZED_RESPONSE_HEAD = /^\{"id":(\d+),"result":/;
 
 interface JsonRpcRequest {
   id: number;
@@ -32,9 +35,18 @@ interface JsonRpcNotification {
 }
 
 interface PendingRequest {
+  method: string;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
+}
+
+/** Only the oversized response fails when its JSON-RPC request id is identifiable. */
+export class CodexAppServerResponseTooLargeError extends Error {
+  constructor(readonly method: string, readonly limitBytes: number) {
+    super(`Codex app-server response to ${method} exceeds ${limitBytes} bytes`);
+    this.name = "CodexAppServerResponseTooLargeError";
+  }
 }
 
 export class CodexAppServerRpcError extends Error {
@@ -179,26 +191,48 @@ function readProviderTurnId(params: unknown): string | undefined {
 function createNewlineLineReader(
   input: NodeJS.ReadableStream,
   onLine: (line: string) => void,
+  onOversized: (head: string) => void,
 ): { close(): void } {
   const decoder = new StringDecoder("utf8");
-  // Text after the last "\n", kept as parts and joined once its line ends, so a large line
-  // arriving in many chunks is scanned and copied once instead of once per chunk.
-  let unterminated: string[] = [];
+  let parts: string[] = [];
+  let bytes = 0;
+  let head = "";
+  let skipping = false;
+  const reset = () => {
+    parts = [];
+    bytes = 0;
+    head = "";
+    skipping = false;
+  };
+  const append = (fragment: string) => {
+    if (!fragment || skipping) return;
+    head = (head + fragment.slice(0, 64)).slice(0, 64);
+    const length = Buffer.byteLength(fragment, "utf8");
+    if (length > CODEX_STDOUT_LINE_LIMIT_BYTES - bytes) {
+      parts = [];
+      bytes = 0;
+      skipping = true;
+      onOversized(head);
+      return;
+    }
+    parts.push(fragment);
+    bytes += length;
+  };
   const onData = (chunk: Buffer | string): void => {
     const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
-    let lineStart = 0;
-    let index = text.indexOf("\n");
-    while (index !== -1) {
-      unterminated.push(text.slice(lineStart, index));
-      const line = unterminated.join("");
-      unterminated = [];
-      onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
-      lineStart = index + 1;
-      index = text.indexOf("\n", lineStart);
+    let start = 0;
+    let newline = text.indexOf("\n");
+    while (newline !== -1) {
+      append(text.slice(start, newline));
+      if (!skipping) {
+        const line = parts.join("");
+        onLine(line.endsWith("\r") ? line.slice(0, -1) : line);
+      }
+      reset();
+      start = newline + 1;
+      newline = text.indexOf("\n", start);
     }
-    if (lineStart < text.length) {
-      unterminated.push(text.slice(lineStart));
-    }
+    if (start < text.length) append(text.slice(start));
   };
   input.on("data", onData);
   return { close: () => void input.off("data", onData) };
@@ -220,11 +254,15 @@ export class CodexAppServerClient {
     private readonly logger: Logger,
     private readonly getTraceContext: () => CodexAppServerTraceContext = () => ({}),
   ) {
-    this.stdoutLineReader = createNewlineLineReader(child.stdout, (line) => {
-      void this.handleLine(line).catch((error) => {
-        this.logger.warn({ error, line }, "Failed to handle Codex app-server stdout line");
-      });
-    });
+    this.stdoutLineReader = createNewlineLineReader(
+      child.stdout,
+      (line) => {
+        void this.handleLine(line).catch((error) => {
+          this.logger.warn({ error, line }, "Failed to handle Codex app-server stdout line");
+        });
+      },
+      (head) => this.handleOversizedLine(head),
+    );
 
     child.stderr.on("data", (chunk) => {
       this.stderrBuffer += chunk.toString();
@@ -273,7 +311,7 @@ export class CodexAppServerClient {
         this.pending.delete(id);
         reject(new Error(`Codex app-server request timed out for ${method}`));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { method, resolve, reject, timer });
     });
   }
 
@@ -319,6 +357,21 @@ export class CodexAppServerClient {
     if (result === "kill-timeout") {
       throw new Error("Codex app-server did not report exit after SIGKILL");
     }
+  }
+
+  private handleOversizedLine(head: string): void {
+    const id = OVERSIZED_RESPONSE_HEAD.exec(head)?.[1];
+    const pending = id === undefined ? undefined : this.pending.get(Number(id));
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pending.delete(Number(id));
+      pending.reject(new CodexAppServerResponseTooLargeError(pending.method, CODEX_STDOUT_LINE_LIMIT_BYTES));
+      return;
+    }
+    // Missing the identity of a notification or server request is not recoverable.
+    this.stdoutLineReader.close();
+    this.handleUnexpectedTermination(new Error("Codex app-server stdout line exceeds the size limit"));
+    void this.dispose().catch((err) => this.logger.warn({ err }, "Failed to stop oversized Codex app-server"));
   }
 
   private handleUnexpectedTermination(error: Error): void {
